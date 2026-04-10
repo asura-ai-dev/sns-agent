@@ -11,6 +11,10 @@
     "test": "echo \"No tests yet\""
   },
   "devDependencies": {
+    "@types/node": "^22.15.0",
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
   }
 }
