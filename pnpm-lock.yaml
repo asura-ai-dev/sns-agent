@@ -47,6 +47,9 @@ importers:
       '@sns-agent/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@sns-agent/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
       '@sns-agent/provider-instagram':
         specifier: workspace:*
         version: link:../../packages/provider-instagram
@@ -56,6 +59,9 @@ importers:
       '@sns-agent/provider-x':
         specifier: workspace:*
         version: link:../../packages/provider-x
+      '@sns-agent/skills':
+        specifier: workspace:*
+        version: link:../../packages/skills
       hono:
         specifier: ^4.7.6
         version: 4.12.12
@@ -81,6 +87,12 @@ importers:
       '@phosphor-icons/react':
         specifier: ^2.1.10
         version: 2.1.10(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@sns-agent/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@sns-agent/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@tailwindcss/postcss':
         specifier: ^4.2.2
         version: 4.2.2
@@ -288,10 +300,23 @@ importers:
         version: 5.9.3
 
   packages/skills:
+    dependencies:
+      '@sns-agent/config':
+        specifier: workspace:*
+        version: link:../config
+      '@sns-agent/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.19.17
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.4(@types/node@22.19.17)(vite@8.0.8(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0))
 
   packages/ui:
     devDependencies:
