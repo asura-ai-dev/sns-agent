@@ -16,6 +16,9 @@
 
 import { Command } from "commander";
 import { registerAccountsCommand } from "./commands/accounts.js";
+import { registerUsageCommand } from "./commands/usage.js";
+import { registerLlmCommand } from "./commands/llm.js";
+import { registerSkillsCommand } from "./commands/skills.js";
 
 const program = new Command();
 
@@ -31,6 +34,9 @@ program
 
 // ---- サブコマンド登録 ----
 registerAccountsCommand(program);
+registerUsageCommand(program);
+registerLlmCommand(program);
+registerSkillsCommand(program);
 
 // ---- エラー時に終了コード 1 を保証 ----
 program.exitOverride((err) => {
