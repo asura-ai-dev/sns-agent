@@ -135,17 +135,45 @@ export function BudgetConsumptionRows({ statuses }: BudgetConsumptionRowsProps) 
               </div>
             </div>
 
-            {/* Bar */}
-            <div className={`mt-2.5 h-2 w-full overflow-hidden rounded-[2px] ${t.trackClass}`}>
-              <div
-                className={`h-full ${t.fillClass} transition-[width] duration-500 ease-out`}
-                style={{ width }}
-                role="progressbar"
-                aria-valuenow={Math.round(s.percentage * 100)}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label={`${describeScope(s)} ${(s.percentage * 100).toFixed(1)}%`}
+            {/* Bar with 80% / 100% tick marks */}
+            <div className="relative mt-[22px] h-2 w-full">
+              <div className={`absolute inset-0 overflow-hidden rounded-[2px] ${t.trackClass}`}>
+                <div
+                  className={`h-full ${t.fillClass} transition-[width] duration-500 ease-out`}
+                  style={{ width }}
+                  role="progressbar"
+                  aria-valuenow={Math.round(s.percentage * 100)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`${describeScope(s)} ${(s.percentage * 100).toFixed(1)}%`}
+                />
+              </div>
+              <span
+                aria-hidden
+                className="pointer-events-none absolute -top-[4px] -bottom-[4px] w-[2px] bg-base-content/70"
+                style={{ left: "calc(80% - 1px)" }}
+                title="80% threshold"
               />
+              <span
+                aria-hidden
+                className="pointer-events-none absolute -top-[4px] -bottom-[4px] w-[2px] bg-base-content"
+                style={{ left: "calc(100% - 1px)" }}
+                title="100% threshold"
+              />
+              <span
+                aria-hidden
+                className="pointer-events-none absolute -top-[10px] font-mono text-[8px] font-semibold uppercase tracking-[0.12em] text-base-content/60"
+                style={{ left: "calc(80% - 6px)" }}
+              >
+                80
+              </span>
+              <span
+                aria-hidden
+                className="pointer-events-none absolute -top-[10px] font-mono text-[8px] font-semibold uppercase tracking-[0.12em] text-base-content/85"
+                style={{ left: "calc(100% - 8px)" }}
+              >
+                100
+              </span>
             </div>
 
             {/* Footer line */}

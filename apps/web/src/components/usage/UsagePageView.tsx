@@ -99,7 +99,7 @@ export function UsagePageView({ viewModel, budgetStatuses, budgetIsFallback }: U
   return (
     <section className="space-y-6">
       {/* ─────────────── Filters ─────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-y border-base-content/25 py-3">
+      <div className="flex flex-col gap-3 border-y border-base-content/25 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
         {/* Period tabs */}
         <div
           role="tablist"
@@ -137,7 +137,7 @@ export function UsagePageView({ viewModel, budgetStatuses, budgetIsFallback }: U
         </div>
 
         {/* Platform filter chips */}
-        <div className="flex items-center gap-1.5">
+        <div className="-mx-2 flex items-center gap-1.5 overflow-x-auto px-2 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
           <Funnel size={12} weight="bold" className="text-base-content/40" aria-hidden />
           <span className="mr-1 font-mono text-[9px] uppercase tracking-[0.18em] text-base-content/45">
             wires
@@ -150,7 +150,7 @@ export function UsagePageView({ viewModel, budgetStatuses, budgetIsFallback }: U
                 onClick={() => setPlatformFilter(f)}
                 aria-pressed={active}
                 className={
-                  "group inline-flex items-center gap-1.5 rounded-[2px] border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.15em] transition-colors " +
+                  "group inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[2px] border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.15em] transition-colors " +
                   (active
                     ? "border-base-content bg-base-content text-base-100"
                     : "border-base-content/25 text-base-content/55 hover:border-base-content/55 hover:text-base-content")

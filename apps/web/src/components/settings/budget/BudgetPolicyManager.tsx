@@ -363,21 +363,21 @@ export function BudgetPolicyManager({
                   key={p.id}
                   className="border-b border-dashed border-base-content/15 transition-colors hover:bg-accent/[0.03]"
                 >
-                  <td className="px-4 py-3">
+                  <td className="whitespace-nowrap px-4 py-3 align-top" style={{ minWidth: 170 }}>
                     <div
-                      className="font-display text-base font-medium text-base-content"
+                      className="whitespace-nowrap font-display text-base font-medium text-base-content"
                       style={{ fontFamily: "'Fraunces', serif" }}
                     >
                       {describeScope(p)}
                     </div>
-                    <div className="font-mono text-[9px] uppercase tracking-[0.15em] text-base-content/45">
-                      id · {p.id.slice(0, 8)}
+                    <div className="mt-0.5 whitespace-nowrap font-mono text-[9px] uppercase tracking-[0.15em] text-base-content/45">
+                      id · {p.id.slice(0, 10)}
                     </div>
                   </td>
-                  <td className="px-4 py-3 font-mono text-[11px] uppercase tracking-[0.15em] text-base-content/70">
+                  <td className="whitespace-nowrap px-4 py-3 align-middle font-mono text-[11px] uppercase tracking-[0.15em] text-base-content/70">
                     {p.period}
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="whitespace-nowrap px-4 py-3 text-right align-middle">
                     <span
                       className="font-display text-base font-semibold tabular-nums text-base-content"
                       style={{ fontFamily: "'Fraunces', serif" }}
@@ -385,7 +385,7 @@ export function BudgetPolicyManager({
                       ${p.limitAmountUsd.toFixed(2)}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-mono text-[11px] uppercase tracking-[0.15em] text-base-content/70">
+                  <td className="whitespace-nowrap px-4 py-3 align-middle font-mono text-[11px] uppercase tracking-[0.15em] text-base-content/70">
                     {p.actionOnExceed}
                   </td>
                   <td className="px-4 py-3" style={{ minWidth: 180 }}>

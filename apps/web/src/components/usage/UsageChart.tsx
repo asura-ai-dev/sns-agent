@@ -218,11 +218,12 @@ export function UsageChart({ viewModel, platformFilter }: UsageChartProps) {
   return (
     <div className="h-80 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={rows} margin={{ top: 14, right: 16, left: 0, bottom: 6 }}>
+        <ComposedChart data={rows} margin={{ top: 18, right: 18, left: 4, bottom: 28 }}>
           <CartesianGrid
+            yAxisId="left"
             stroke="#1F2937"
-            strokeOpacity={0.08}
-            strokeDasharray="2 4"
+            strokeOpacity={0.18}
+            strokeDasharray="1 3"
             vertical={false}
           />
           <XAxis
@@ -264,17 +265,19 @@ export function UsageChart({ viewModel, platformFilter }: UsageChartProps) {
             wrapperStyle={{ outline: "none" }}
           />
           <Legend
-            verticalAlign="top"
-            height={26}
-            iconType="square"
-            iconSize={9}
+            verticalAlign="bottom"
+            align="center"
+            height={28}
+            iconType="rect"
+            iconSize={10}
             wrapperStyle={{
               fontFamily: "'JetBrains Mono', 'DM Mono', ui-monospace, monospace",
-              fontSize: 10,
-              letterSpacing: "0.12em",
+              fontSize: 9.5,
+              letterSpacing: "0.14em",
               textTransform: "uppercase",
-              color: "#6B7280",
-              paddingBottom: 4,
+              color: "#4B5563",
+              bottom: -2,
+              lineHeight: "1.4",
             }}
           />
           {PLATFORM_KEYS.map((k) => (
@@ -294,11 +297,12 @@ export function UsageChart({ viewModel, platformFilter }: UsageChartProps) {
             yAxisId="right"
             type="monotone"
             dataKey="totalCost"
-            name="USD"
-            stroke="#1F2937"
-            strokeWidth={1.5}
-            dot={{ r: 2.5, stroke: "#1F2937", fill: "#FFFDF8", strokeWidth: 1 }}
-            activeDot={{ r: 4 }}
+            name="SPEND"
+            stroke="#B5451F"
+            strokeWidth={1.75}
+            strokeDasharray="0"
+            dot={{ r: 2.75, stroke: "#B5451F", fill: "#FFFDF8", strokeWidth: 1.25 }}
+            activeDot={{ r: 4.5, stroke: "#B5451F", fill: "#FFFDF8", strokeWidth: 1.5 }}
             isAnimationActive={false}
           />
         </ComposedChart>
