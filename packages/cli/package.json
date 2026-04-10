@@ -5,12 +5,23 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "sns": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/index.js",
     "lint": "echo \"Lint via root\"",
     "test": "echo \"No tests yet\""
   },
+  "dependencies": {
+    "@sns-agent/sdk": "workspace:*",
+    "commander": "^12.1.0"
+  },
   "devDependencies": {
+    "@types/node": "^22.15.0",
     "typescript": "^5.8.3"
   }
 }
