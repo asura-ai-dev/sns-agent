@@ -16,6 +16,8 @@
     "@sns-agent/core": "workspace:*",
     "@sns-agent/db": "workspace:*",
     "@sns-agent/provider-x": "workspace:*",
+    "@sns-agent/provider-instagram": "workspace:*",
+    "@sns-agent/provider-line": "workspace:*",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
