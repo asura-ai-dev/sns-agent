@@ -16,6 +16,28 @@ export type {
   ManifestValidationResult,
 } from "./manifest/types.js";
 
+// Manifest parser & version compat (Task 5003)
+export {
+  parseManifest,
+  validateManifest,
+  checkVersionCompatibility,
+  SKILL_MANIFEST_RUNTIME_VERSION,
+} from "./manifest/parser.js";
+export type { VersionCompatibilityResult } from "./manifest/parser.js";
+
+// Builder (Task 5003)
+export {
+  generateSkillPackage,
+  buildSkillPackageName,
+  SKILL_PACKAGE_DEFAULT_VERSION,
+  BUILTIN_ACTION_TEMPLATES,
+} from "./builder/index.js";
+export type {
+  GenerateSkillPackageInput,
+  SkillPackageBuilderDeps,
+  SkillActionTemplate,
+} from "./builder/index.js";
+
 // Runtime
 export {
   validateSkillAction,

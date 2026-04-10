@@ -205,6 +205,21 @@ export type {
 } from "./usecases/audit.js";
 
 export {
+  listSkillPackages,
+  generateSkillPackage,
+  enableSkillPackage,
+  disableSkillPackage,
+  getSkillManifest,
+  getActiveSkills,
+} from "./usecases/skills.js";
+export type {
+  SkillsUsecaseDeps,
+  SkillManifestBuilder,
+  SkillManifestLike,
+  GenerateSkillPackageUsecaseInput,
+} from "./usecases/skills.js";
+
+export {
   handleChatMessage,
   executeAgentAction,
   buildSystemPrompt,
