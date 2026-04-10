@@ -7,7 +7,13 @@
 import { Hono } from "hono";
 import { getDb } from "@sns-agent/db";
 import type { DbClient } from "@sns-agent/db";
-import { requestId, errorHandler, createCorsMiddleware } from "./middleware/index.js";
+import {
+  requestId,
+  errorHandler,
+  createCorsMiddleware,
+  authMiddleware,
+} from "./middleware/index.js";
+import type { Actor } from "@sns-agent/core";
 import {
   accounts,
   posts,
@@ -29,6 +35,7 @@ import {
 type AppVariables = {
   requestId: string;
   db: DbClient;
+  actor: Actor;
 };
 
 const app = new Hono<{ Variables: AppVariables }>();
@@ -47,6 +54,18 @@ app.use("*", async (c, next) => {
   c.set("db", db);
   await next();
 });
+
+// 認証ミドルウェア（/api/health と /api/webhooks を除く全ルートに適用）
+app.use("/api/accounts/*", authMiddleware);
+app.use("/api/posts/*", authMiddleware);
+app.use("/api/schedules/*", authMiddleware);
+app.use("/api/usage/*", authMiddleware);
+app.use("/api/budget/*", authMiddleware);
+app.use("/api/llm/*", authMiddleware);
+app.use("/api/skills/*", authMiddleware);
+app.use("/api/agent/*", authMiddleware);
+app.use("/api/audit/*", authMiddleware);
+app.use("/api/approvals/*", authMiddleware);
 
 // エラーハンドラ
 app.onError(errorHandler);

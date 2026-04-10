@@ -8,3 +8,7 @@ export { DrizzleUsageRepository } from "./usage-repository.js";
 export { DrizzleBudgetPolicyRepository } from "./budget-policy-repository.js";
 export { DrizzleLlmRouteRepository } from "./llm-route-repository.js";
 export { DrizzleAuditLogRepository } from "./audit-log-repository.js";
+export { DrizzleUserRepository } from "./user-repository.js";
+export type { UserRepository } from "./user-repository.js";
+export { DrizzleAgentIdentityRepository } from "./agent-identity-repository.js";
+export type { AgentIdentityRepository } from "./agent-identity-repository.js";

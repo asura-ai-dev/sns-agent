@@ -70,6 +70,10 @@ export type {
 export { PERMISSIONS, rolePermissions, checkPermission } from "./policies/index.js";
 export type { Permission } from "./policies/index.js";
 
+// Usecases
+export { resolveActorByApiKey, resolveActorByUserId } from "./usecases/auth.js";
+export type { Actor, AuthUserRepository, AuthAgentIdentityRepository } from "./usecases/auth.js";
+
 // Errors
 export {
   DomainError,

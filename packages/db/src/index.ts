@@ -21,4 +21,7 @@ export {
   DrizzleBudgetPolicyRepository,
   DrizzleLlmRouteRepository,
   DrizzleAuditLogRepository,
+  DrizzleUserRepository,
+  DrizzleAgentIdentityRepository,
 } from "./repositories/index.js";
+export type { UserRepository, AgentIdentityRepository } from "./repositories/index.js";
