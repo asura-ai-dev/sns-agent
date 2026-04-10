@@ -11,10 +11,15 @@
   },
   "dependencies": {
     "hono": "^4.7.6",
-    "@hono/node-server": "^1.14.1"
+    "@hono/node-server": "^1.14.1",
+    "@sns-agent/config": "workspace:*",
+    "@sns-agent/core": "workspace:*",
+    "@sns-agent/db": "workspace:*",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "@types/uuid": "^10.0.0",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"
   }
