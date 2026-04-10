@@ -50,11 +50,10 @@ const SETTINGS_NAV: NavItem[] = [
     slug: "audit",
   },
   {
-    href: "#",
+    href: "/settings/llm",
     label: "LLM ルーティング",
-    description: "Phase 5 で追加",
+    description: "Dispatch Roster",
     icon: Brain,
-    disabled: true,
     slug: "llm",
   },
   {

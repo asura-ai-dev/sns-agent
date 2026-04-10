@@ -204,6 +204,98 @@ export function fetchBudgetStatusSafe(): Promise<FetchResult<BudgetStatusDto[]>>
 }
 
 // ───────────────────────────────────────────
+// LLM routes (Task 5005)
+// ───────────────────────────────────────────
+
+/**
+ * Wire-format shape of a row in `GET /api/llm/routes` — mirrors the Hono
+ * serializer in `apps/api/src/routes/llm.ts`. Kept local because the SDK
+ * client does not yet expose an `llm` resource (see Task 5005 handoff).
+ */
+export interface LlmRouteDto {
+  id: string;
+  workspaceId: string;
+  platform: string | null;
+  action: string | null;
+  provider: string;
+  model: string;
+  temperature: number | null;
+  maxTokens: number | null;
+  fallbackProvider: string | null;
+  fallbackModel: string | null;
+  priority: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Raw fetch against the Hono API for `GET /api/llm/routes`.
+ *
+ * Uses the server-side `SNS_AGENT_API_URL` / `SNS_AGENT_API_KEY` so it can be
+ * called from a React Server Component. Returns an empty array on any failure
+ * (API offline, 4xx, 5xx, malformed body) so the dashboard can render a
+ * degraded "wire offline" state instead of crashing.
+ */
+export function fetchLlmRoutesSafe(): Promise<FetchResult<LlmRouteDto[]>> {
+  return guard<LlmRouteDto[]>(async () => {
+    const baseUrl = resolveBaseUrl();
+    const apiKey = resolveApiKey();
+    const res = await fetch(`${baseUrl}/api/llm/routes`, {
+      method: "GET",
+      headers: {
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new Error(`llm routes fetch failed: HTTP ${res.status}`);
+    }
+    const body = (await res.json()) as { data?: LlmRouteDto[] };
+    return body.data ?? [];
+  }, []);
+}
+
+// ───────────────────────────────────────────
+// Skills (Task 5005)
+// ───────────────────────────────────────────
+
+export interface SkillPackageDto {
+  id: string;
+  workspaceId: string;
+  name: string;
+  version: string;
+  platform: string;
+  llmProvider: string;
+  enabled: boolean;
+  actionCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Raw fetch against `GET /api/skills`. See `fetchLlmRoutesSafe` for rationale
+ * on why this bypasses the SDK client.
+ */
+export function fetchSkillPackagesSafe(): Promise<FetchResult<SkillPackageDto[]>> {
+  return guard<SkillPackageDto[]>(async () => {
+    const baseUrl = resolveBaseUrl();
+    const apiKey = resolveApiKey();
+    const res = await fetch(`${baseUrl}/api/skills`, {
+      method: "GET",
+      headers: {
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new Error(`skills fetch failed: HTTP ${res.status}`);
+    }
+    const body = (await res.json()) as { data?: SkillPackageDto[] };
+    return body.data ?? [];
+  }, []);
+}
+
+// ───────────────────────────────────────────
 // Mutation helpers (used from server actions)
 // ───────────────────────────────────────────
 
