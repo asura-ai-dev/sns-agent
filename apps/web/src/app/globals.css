@@ -1,0 +1,107 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&display=swap");
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes:
+    light --default,
+    dark --prefersdark,
+    sns-agent;
+}
+@plugin "daisyui/theme" {
+  name: "sns-agent";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  /* Core palette */
+  --color-primary: oklch(72.45% 0.205 148.63);
+  --color-primary-content: oklch(99% 0.01 148.63);
+  --color-secondary: oklch(17.76% 0 89.88);
+  --color-secondary-content: oklch(96% 0.005 89.88);
+  --color-accent: oklch(72.9% 0.17 35.11);
+  --color-accent-content: oklch(99% 0.01 35.11);
+  --color-neutral: oklch(27.81% 0.03 256.85);
+  --color-neutral-content: oklch(95% 0.005 256.85);
+
+  /* Surfaces */
+  --color-base-100: oklch(99.42% 0.007 88.64);
+  --color-base-200: oklch(95.68% 0.012 79.78);
+  --color-base-300: oklch(91.73% 0.013 82.4);
+  --color-base-content: oklch(27.81% 0.03 256.85);
+
+  /* Semantic */
+  --color-info: oklch(60.93% 0.182 257.29);
+  --color-info-content: oklch(97% 0.01 257.29);
+  --color-success: oklch(59.6% 0.127 163.23);
+  --color-success-content: oklch(97% 0.01 163.23);
+  --color-warning: oklch(81.58% 0.147 80.2);
+  --color-warning-content: oklch(30% 0.05 80.2);
+  --color-error: oklch(62.56% 0.193 23.03);
+  --color-error-content: oklch(97% 0.01 23.03);
+
+  /* Shape */
+  --radius-selector: 0.5rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.75rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* -- Fonts (imported at top of file) -------------------------------- */
+@theme {
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+}
+
+/* -- Sidebar transition --------------------------------------------- */
+.sidebar-nav-item {
+  position: relative;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.sidebar-nav-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) scaleY(0);
+  width: 3px;
+  height: 60%;
+  border-radius: 0 2px 2px 0;
+  background: oklch(72.45% 0.205 148.63);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.sidebar-nav-item[data-active="true"]::before {
+  transform: translateY(-50%) scaleY(1);
+}
+
+.sidebar-nav-item[data-active="true"] {
+  color: oklch(72.45% 0.205 148.63);
+  background: oklch(72.45% 0.205 148.63 / 0.08);
+}
+
+/* -- Drawer animation ----------------------------------------------- */
+.drawer-side {
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* -- Paper grain texture on surfaces -------------------------------- */
+.surface-grain {
+  position: relative;
+}
+
+.surface-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-size: 128px 128px;
+  pointer-events: none;
+  z-index: 1;
+}

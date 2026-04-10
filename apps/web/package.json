@@ -9,9 +9,14 @@
     "test": "echo \"No tests yet\""
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "@tailwindcss/postcss": "^4.2.2",
+    "daisyui": "^5.5.19",
     "next": "^15.3.1",
+    "postcss": "^8.5.9",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "tailwindcss": "^4.2.2"
   },
   "devDependencies": {
     "@types/react": "^19.1.0",
