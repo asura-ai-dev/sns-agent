@@ -921,10 +921,17 @@ export default function UsersSettingsPage() {
       description="ワークスペースのメンバーとエージェント ID を管理します。ロール変更・招待・API キー発行は admin / owner のみ実行できます。"
       actions={
         <>
-          <div className="rounded-sm border border-base-300 bg-base-100 px-3 py-2 text-right font-mono text-[11px] leading-tight">
-            <div className="text-base-content/50">USERS / AGENTS</div>
-            <div className="text-lg font-bold text-base-content">
-              {userCount} <span className="text-base-content/40">/</span> {agentCount}
+          <div className="rounded-sm border border-base-300 bg-base-100 px-4 py-2.5 text-right leading-tight">
+            <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-base-content/50">
+              users / agents
+            </div>
+            <div
+              className="mt-0.5 font-display text-2xl font-semibold tabular-nums text-base-content"
+              style={{ fontFamily: "'Fraunces', serif" }}
+            >
+              {userCount}
+              <span className="mx-1 text-base-content/30">/</span>
+              {agentCount}
             </div>
           </div>
           <button

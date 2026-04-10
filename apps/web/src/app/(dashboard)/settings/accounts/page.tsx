@@ -410,9 +410,14 @@ export default function AccountsSettingsPage() {
       description="SNS アカウントの接続状態と OAuth トークンの有効期限を管理します。期限切れの接続には再認証が必要です。"
       actions={
         <>
-          <div className="rounded-sm border border-base-300 bg-base-100 px-3 py-2 text-right font-mono text-[11px] leading-tight">
-            <div className="text-base-content/50">TOTAL</div>
-            <div className="text-lg font-bold text-base-content">
+          <div className="rounded-sm border border-base-300 bg-base-100 px-4 py-2.5 text-right leading-tight">
+            <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-base-content/50">
+              total
+            </div>
+            <div
+              className="mt-0.5 font-display text-2xl font-semibold tabular-nums text-base-content"
+              style={{ fontFamily: "'Fraunces', serif" }}
+            >
               {accounts?.length?.toString() ?? "—"}
             </div>
           </div>

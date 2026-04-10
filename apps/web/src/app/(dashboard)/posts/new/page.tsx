@@ -19,7 +19,10 @@ export default function NewPostPage() {
           <ArrowLeft size={12} weight="bold" />
           投稿一覧へ戻る
         </Link>
-        <h1 className="mt-2 font-display text-3xl font-semibold leading-tight tracking-tight text-base-content">
+        <p className="mt-3 font-mono text-[0.65rem] font-medium uppercase tracking-[0.22em] text-base-content/50">
+          composition desk · 新規起稿
+        </p>
+        <h1 className="mt-1 font-display text-3xl font-semibold leading-tight tracking-tight text-base-content">
           新しい投稿を作成
         </h1>
         <p className="mt-1 text-sm text-base-content/60">

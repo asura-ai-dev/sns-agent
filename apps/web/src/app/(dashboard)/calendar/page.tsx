@@ -327,8 +327,13 @@ export default function CalendarPage() {
 
       {/* ── Error banner ─────────────────────────── */}
       {error ? (
-        <div className="rounded-field border border-warning/40 bg-warning/10 px-4 py-2.5 text-xs text-warning-content">
-          {error} ・ API オフラインの場合は予約一覧は空のまま表示されます
+        <div className="rounded-field border border-warning/40 bg-warning/5 px-4 py-3 text-xs text-base-content/75">
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-warning">
+            almanac wire offline · using local fallback
+          </p>
+          <p className="mt-1 text-xs text-base-content/70">
+            {error} <span className="text-base-content/45">・ API オフラインの場合は予約一覧は空のまま表示されます</span>
+          </p>
         </div>
       ) : null}
 

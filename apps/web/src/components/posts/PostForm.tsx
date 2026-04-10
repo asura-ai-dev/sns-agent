@@ -409,8 +409,13 @@ function AccountSelect({
 
   if (error) {
     return (
-      <div className="rounded-field border border-error/30 bg-error/5 px-4 py-3 text-xs text-error">
-        アカウント一覧を取得できませんでした: {error}
+      <div className="rounded-field border border-warning/40 bg-warning/5 px-4 py-3 text-xs text-base-content/75">
+        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-warning">
+          desk wire offline · using local fallback
+        </p>
+        <p className="mt-1 text-xs text-base-content/70">
+          アカウント一覧を取得できませんでした <span className="font-mono text-[10px] text-base-content/50">· {error}</span>
+        </p>
       </div>
     );
   }

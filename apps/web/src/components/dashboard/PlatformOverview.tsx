@@ -91,7 +91,7 @@ const VISUALS: Record<Platform, PlatformVisual> = {
 // ───────────────────────────────────────────
 
 function formatRelative(iso: string | null): string {
-  if (!iso) return "no dispatches yet";
+  if (!iso) return "no filings yet";
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "—";
   const now = Date.now();
@@ -265,13 +265,13 @@ function PlatformCard({ stat, index }: { stat: PlatformStats; index: number }) {
             latest dispatch
           </div>
           <div
-            className="mt-1 truncate font-display text-base font-medium leading-tight text-base-content"
+            className="mt-1 font-display text-base font-medium leading-snug text-base-content"
             style={{ fontFamily: "'Fraunces', serif" }}
             title={formatAbsolute(stat.latestPostAt)}
           >
             {formatRelative(stat.latestPostAt)}
           </div>
-          <div className="mt-1 truncate font-mono text-[9px] uppercase tracking-[0.15em] text-base-content/40">
+          <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.15em] text-base-content/40">
             {stat.latestPostAt ? formatAbsolute(stat.latestPostAt) : "awaiting first post"}
           </div>
         </div>

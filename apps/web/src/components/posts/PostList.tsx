@@ -63,12 +63,21 @@ export function PostList({ posts, loading, error, onPublish, onDelete, pendingId
 
   if (error) {
     return (
-      <div className="rounded-box border border-error/30 bg-error/5 p-6 text-sm text-error">
-        <p className="font-semibold">投稿一覧を取得できませんでした</p>
-        <p className="mt-1 text-xs opacity-80">{error}</p>
-        <p className="mt-3 text-xs text-error/70">
-          API サーバーが起動していない場合は、まだ投稿が 0
-          件として表示されます。ページを再読み込みすると再試行できます。
+      <div
+        role="status"
+        className="rounded-box border border-warning/40 bg-warning/5 px-5 py-4 text-sm text-base-content/80"
+      >
+        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-warning">
+          post wire offline · using local fallback
+        </p>
+        <p className="mt-2 font-display text-base font-medium leading-snug text-base-content" style={{ fontFamily: "'Fraunces', serif" }}>
+          投稿一覧を取得できませんでした
+        </p>
+        <p className="mt-1 font-mono text-[10px] text-base-content/55">
+          · {error}
+        </p>
+        <p className="mt-2 text-xs text-base-content/55">
+          API サーバー未起動時は 0 件として表示されます。再読み込みで再試行できます。
         </p>
       </div>
     );
