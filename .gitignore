@@ -34,3 +34,7 @@ pnpm-debug.log*
 .cache/
 .tmp/
 tmp/
+
+# Database
+*.db
+*.db-journal

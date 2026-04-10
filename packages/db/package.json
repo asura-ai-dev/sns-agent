@@ -1,0 +1,19 @@
+{
+  "name": "@sns-agent/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "echo \"Lint via root\"",
+    "test": "echo \"No tests yet\""
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.44.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
