@@ -87,6 +87,22 @@ export {
 } from "./usecases/account.js";
 export type { AccountSummary, AccountUsecaseDeps, OAuthStatePayload } from "./usecases/account.js";
 
+export {
+  createPost,
+  updatePost,
+  publishPost,
+  deletePost,
+  listPosts,
+  getPost,
+} from "./usecases/post.js";
+export type {
+  PostUsecaseDeps,
+  CreatePostInput,
+  UpdatePostInput,
+  ListPostsFilters,
+  ListPostsResult,
+} from "./usecases/post.js";
+
 export { recordAudit, listAuditLogs, exportAuditLogs } from "./usecases/audit.js";
 export type {
   RecordAuditInput,

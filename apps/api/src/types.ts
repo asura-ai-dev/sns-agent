@@ -15,4 +15,6 @@ export type AppVariables = {
   requestId: string;
   db: DbClient;
   actor: Actor;
+  /** X-Idempotency-Key ヘッダ値（idempotency ミドルウェアがセット） */
+  idempotencyKey?: string;
 };
