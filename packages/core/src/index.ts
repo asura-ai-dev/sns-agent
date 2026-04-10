@@ -44,6 +44,7 @@ export type {
   UsageAggregation,
   BudgetPolicyRepository,
   LlmRouteRepository,
+  SkillPackageRepository,
   AuditLogRepository,
   AuditLogFilterOptions,
   ApprovalRepository,
@@ -202,6 +203,28 @@ export type {
   ListAuditLogsResult,
   ExportAuditLogsInput,
 } from "./usecases/audit.js";
+
+export {
+  handleChatMessage,
+  executeAgentAction,
+  buildSystemPrompt,
+} from "./usecases/agent-gateway.js";
+export type {
+  AgentGatewayDeps,
+  AgentActor,
+  AgentExecutionMode,
+  AgentSkillIntent,
+  AgentLlmDecision,
+  AgentLlmInvoker,
+  AgentDryRunInvoker,
+  AgentExecuteInvoker,
+  AgentDryRunPreview,
+  AgentExecutionOutcome,
+  HandleChatMessageInput,
+  HandleChatMessageResult,
+  ExecuteAgentActionInput,
+  ExecuteAgentActionResult,
+} from "./usecases/agent-gateway.js";
 
 export {
   createApprovalRequest,

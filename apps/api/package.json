@@ -18,6 +18,8 @@
     "@sns-agent/provider-x": "workspace:*",
     "@sns-agent/provider-instagram": "workspace:*",
     "@sns-agent/provider-line": "workspace:*",
+    "@sns-agent/llm": "workspace:*",
+    "@sns-agent/skills": "workspace:*",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

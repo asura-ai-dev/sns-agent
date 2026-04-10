@@ -17,6 +17,7 @@ import type {
   ConversationThread,
   Message,
   ThreadStatus,
+  SkillPackage,
 } from "../domain/entities.js";
 import type { Platform } from "@sns-agent/config";
 
@@ -137,6 +138,26 @@ export interface BudgetPolicyRepository {
   findByWorkspace(workspaceId: string): Promise<BudgetPolicy[]>;
   create(policy: Omit<BudgetPolicy, "id" | "createdAt" | "updatedAt">): Promise<BudgetPolicy>;
   update(id: string, data: Partial<BudgetPolicy>): Promise<BudgetPolicy>;
+  delete(id: string): Promise<void>;
+}
+
+// ───────────────────────────────────────────
+// SkillPackageRepository
+// ───────────────────────────────────────────
+/**
+ * skill_packages テーブル向けの Repository (Task 5002)。
+ * Agent Gateway が system prompt 構築時に「有効化済みの skill package」を読み出す。
+ */
+export interface SkillPackageRepository {
+  findById(id: string): Promise<SkillPackage | null>;
+  /**
+   * ワークスペースの skill package を返す。
+   * onlyEnabled=true の場合 enabled=true の行だけを返す。
+   */
+  findByWorkspace(workspaceId: string, onlyEnabled?: boolean): Promise<SkillPackage[]>;
+  findByName(workspaceId: string, name: string): Promise<SkillPackage | null>;
+  create(pkg: Omit<SkillPackage, "id" | "createdAt" | "updatedAt">): Promise<SkillPackage>;
+  update(id: string, data: Partial<SkillPackage>): Promise<SkillPackage>;
   delete(id: string): Promise<void>;
 }
 
