@@ -25,6 +25,10 @@ import {
   handleChatMessage,
   executeAgentAction,
   listAuditLogs,
+  listAccounts,
+  listPosts,
+  createPost,
+  schedulePost,
   type AgentActor,
   type AgentDryRunPreview,
   type AgentExecutionMode,
@@ -35,15 +39,24 @@ import {
   type Actor,
   type SkillPackage,
   type Permission,
+  type AccountUsecaseDeps,
+  type PostUsecaseDeps,
+  type ScheduleUsecaseDeps,
+  type ListPostsFilters,
+  type Post,
 } from "@sns-agent/core";
-import type { Role } from "@sns-agent/config";
+import type { Platform, Role } from "@sns-agent/config";
 import {
+  DrizzleAccountRepository,
   DrizzleAuditLogRepository,
   DrizzleLlmRouteRepository,
+  DrizzlePostRepository,
+  DrizzleScheduledJobRepository,
   DrizzleSkillPackageRepository,
   DrizzleUsageRepository,
 } from "@sns-agent/db";
 import type { DbClient } from "@sns-agent/db";
+import { getProviderRegistry } from "../providers.js";
 import {
   buildDefaultAdapters,
   executeLlmCall,
@@ -173,23 +186,264 @@ function toSkillMode(mode: AgentExecutionMode): SkillExecutionMode {
 // skill invoker (dry-run / execute)
 // ───────────────────────────────────────────
 
+// ───────────────────────────────────────────
+// 実 invoker (Task 5006)
+// ───────────────────────────────────────────
+
 /**
- * v1 時点では skill action 実行の具体的なマッピングはこのルート内で行う。
- * 実装済みの core use case (post 系) にマップしたいが、結合強度を下げるため、
- * invoker は action 名 → 「この時点ではエコーバック」の最小実装とし、
- * 実装の拡張ポイントとして残す。
+ * Skill action 実行コンテキストから core use case 用の依存を組み立てる。
  *
- * Task 5003+ で actual invoker (createPost / publishPost 等へのルーティング) を実装する。
+ * - accountRepo / postRepo / scheduledJobRepo / usageRepo は Drizzle 実装を直接生成
+ * - providers は ProviderRegistry から取得
+ * - encryptionKey は ENCRYPTION_KEY env (開発デフォルトあり)
+ *
+ * skill action は "approval-required" 経路で来るため、執筆系 use case
+ * (createPost / schedulePost) に必要な最低限の deps だけを提供する。
+ * budgetPolicyRepo / approvalRepo は v1 では skill 経路から require-approval
+ * を発火させない方針で、createPost(publishNow=true) は publishPostChecked を
+ * 経由しても budgetPolicyRepo 未設定 → 予算チェックをスキップで動作する。
  */
-const placeholderInvoker: SkillActionInvoker = async (params) => {
-  return {
-    status: "deferred",
-    message:
-      "Skill action mapping is not yet implemented in v1 runtime. The action was validated and authorized successfully.",
-    actionName: params.actionName,
-    args: params.args,
+function buildSkillUsecaseDeps(db: DbClient): {
+  accountDeps: AccountUsecaseDeps;
+  postDeps: PostUsecaseDeps;
+  scheduleDeps: ScheduleUsecaseDeps;
+} {
+  const encryptionKey =
+    process.env.ENCRYPTION_KEY ||
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  const callbackBaseUrl = `${process.env.WEB_URL || "http://localhost:3001"}/api/accounts/callback`;
+
+  const accountRepo = new DrizzleAccountRepository(db);
+  const postRepo = new DrizzlePostRepository(db);
+  const scheduledJobRepo = new DrizzleScheduledJobRepository(db);
+  const usageRepo = new DrizzleUsageRepository(db);
+  const providers = getProviderRegistry().getAll();
+
+  const postDeps: PostUsecaseDeps = {
+    postRepo,
+    accountRepo,
+    providers,
+    encryptionKey,
+    usageRepo,
+    scheduledJobRepo,
   };
-};
+
+  const accountDeps: AccountUsecaseDeps = {
+    accountRepo,
+    providers,
+    encryptionKey,
+    callbackBaseUrl,
+  };
+
+  const scheduleDeps: ScheduleUsecaseDeps = {
+    scheduledJobRepo,
+    postRepo,
+    postUsecaseDeps: postDeps,
+  };
+
+  return { accountDeps, postDeps, scheduleDeps };
+}
+
+/**
+ * args に含まれる accountName を SocialAccount.id に解決する。
+ *
+ * - まず id 一致を試す
+ * - 次に displayName 完全一致を試す
+ * - それでも見つからない場合は ValidationError
+ *
+ * platform が args に含まれる場合はその platform に絞り込む。
+ */
+async function resolveSocialAccountId(
+  deps: PostUsecaseDeps,
+  workspaceId: string,
+  args: Record<string, unknown>,
+): Promise<string> {
+  const accountName = typeof args.accountName === "string" ? args.accountName : null;
+  const explicitId = typeof args.socialAccountId === "string" ? args.socialAccountId : null;
+
+  if (explicitId) return explicitId;
+  if (!accountName) {
+    throw new ValidationError("accountName or socialAccountId is required");
+  }
+
+  const accounts = await deps.accountRepo.findByWorkspace(workspaceId);
+  const platformFilter = typeof args.platform === "string" ? (args.platform as Platform) : null;
+  const candidates = platformFilter
+    ? accounts.filter((a) => a.platform === platformFilter)
+    : accounts;
+
+  // ID 一致
+  const byId = candidates.find((a) => a.id === accountName);
+  if (byId) return byId.id;
+
+  // displayName 完全一致
+  const byName = candidates.find((a) => a.displayName === accountName);
+  if (byName) return byName.id;
+
+  throw new ValidationError(
+    `SocialAccount not found for accountName="${accountName}"${
+      platformFilter ? ` (platform=${platformFilter})` : ""
+    }`,
+  );
+}
+
+/**
+ * skill action args を ListPostsFilters にマップする。
+ *
+ * 受け付けるキー:
+ * - status: 単一ステータス (Post["status"])
+ * - limit:  最大取得件数
+ * - platform: 単一プラットフォーム
+ */
+function mapListPostsFilters(args: Record<string, unknown>): ListPostsFilters {
+  const filters: ListPostsFilters = {};
+  if (typeof args.status === "string") {
+    filters.status = args.status as Post["status"];
+  }
+  if (typeof args.limit === "number" && Number.isFinite(args.limit) && args.limit > 0) {
+    filters.limit = args.limit;
+  }
+  if (typeof args.platform === "string") {
+    filters.platform = args.platform as Platform;
+  }
+  return filters;
+}
+
+/**
+ * Post を invoker レスポンスに整形する。
+ */
+function summarizePost(post: Post): Record<string, unknown> {
+  return {
+    id: post.id,
+    status: post.status,
+    platform: post.platform,
+    socialAccountId: post.socialAccountId,
+    contentText: post.contentText,
+    publishedAt: post.publishedAt ? post.publishedAt.toISOString() : null,
+    createdAt: post.createdAt.toISOString(),
+  };
+}
+
+/**
+ * action 名から core use case を呼び出す invoker を生成する。
+ *
+ * 対応 action:
+ *  - list_accounts  → listAccounts(accountDeps, workspaceId)
+ *  - list_posts     → listPosts(postDeps, workspaceId, filters)
+ *  - create_post    → createPost(postDeps, { ... })
+ *  - schedule_post  → createPost(draft) → schedulePost(scheduleDeps, ...)
+ *  - 未知の action  → { status: "unsupported_action", actionName }
+ *
+ * 戻り値は監査ログ / API レスポンスに載る Record<string, unknown>。
+ */
+function buildSkillActionInvoker(db: DbClient): SkillActionInvoker {
+  const { accountDeps, postDeps, scheduleDeps } = buildSkillUsecaseDeps(db);
+
+  return async ({ workspaceId, actor, actionName, args }) => {
+    switch (actionName) {
+      case "list_accounts": {
+        const data = await listAccounts(accountDeps, workspaceId);
+        return {
+          status: "ok",
+          actionName,
+          count: data.length,
+          accounts: data.map((a) => ({
+            id: a.id,
+            platform: a.platform,
+            displayName: a.displayName,
+            status: a.status,
+            tokenExpiryWarning: a.tokenExpiryWarning,
+          })),
+        };
+      }
+
+      case "list_posts": {
+        const filters = mapListPostsFilters(args);
+        const result = await listPosts(postDeps, workspaceId, filters);
+        return {
+          status: "ok",
+          actionName,
+          total: result.meta.total,
+          page: result.meta.page,
+          limit: result.meta.limit,
+          posts: result.data.map(summarizePost),
+        };
+      }
+
+      case "create_post": {
+        const text = typeof args.text === "string" ? args.text : null;
+        if (!text) {
+          throw new ValidationError("text is required for create_post");
+        }
+        const publishNow = args.publishNow === true;
+        const socialAccountId = await resolveSocialAccountId(postDeps, workspaceId, args);
+
+        const created = await createPost(postDeps, {
+          workspaceId,
+          socialAccountId,
+          contentText: text,
+          publishNow,
+          createdBy: actor.id,
+        });
+
+        return {
+          status: publishNow ? created.status : "draft_created",
+          actionName,
+          id: created.id,
+          post: summarizePost(created),
+        };
+      }
+
+      case "schedule_post": {
+        const text = typeof args.text === "string" ? args.text : null;
+        if (!text) {
+          throw new ValidationError("text is required for schedule_post");
+        }
+        const scheduledAtRaw = typeof args.scheduledAt === "string" ? args.scheduledAt : null;
+        if (!scheduledAtRaw) {
+          throw new ValidationError("scheduledAt is required (ISO 8601 string)");
+        }
+        const scheduledAt = new Date(scheduledAtRaw);
+        if (Number.isNaN(scheduledAt.getTime())) {
+          throw new ValidationError(`Invalid scheduledAt: ${scheduledAtRaw}`);
+        }
+
+        const socialAccountId = await resolveSocialAccountId(postDeps, workspaceId, args);
+
+        // 1. draft を作成
+        const draft = await createPost(postDeps, {
+          workspaceId,
+          socialAccountId,
+          contentText: text,
+          publishNow: false,
+          createdBy: actor.id,
+        });
+
+        // 2. schedulePost で予約ジョブを生成
+        const job = await schedulePost(scheduleDeps, {
+          workspaceId,
+          postId: draft.id,
+          scheduledAt,
+        });
+
+        return {
+          status: "scheduled",
+          actionName,
+          id: job.id,
+          postId: draft.id,
+          scheduledAt: job.scheduledAt.toISOString(),
+          jobStatus: job.status,
+        };
+      }
+
+      default:
+        return {
+          status: "unsupported_action",
+          actionName,
+        };
+    }
+  };
+}
 
 function makeSkillContext(params: {
   workspaceId: string;
@@ -220,6 +474,7 @@ function buildGatewayDeps(db: DbClient, actor: Actor): AgentGatewayDeps {
   const llmRouteRepo = new DrizzleLlmRouteRepository(db);
   const usageRepo = new DrizzleUsageRepository(db);
   const auditRepo = new DrizzleAuditLogRepository(db);
+  const skillInvoker = buildSkillActionInvoker(db);
 
   const adapters = buildDefaultAdapters({
     openAiApiKey: process.env.OPENAI_API_KEY,
@@ -290,7 +545,7 @@ function buildGatewayDeps(db: DbClient, actor: Actor): AgentGatewayDeps {
         actor: a,
         mode,
       });
-      const result = await executeSkillAction({ invoker: placeholderInvoker }, ctx);
+      const result = await executeSkillAction({ invoker: skillInvoker }, ctx);
       const outcome: AgentExecutionOutcome = {
         actionName: result.actionName,
         packageName: intent.packageName,
