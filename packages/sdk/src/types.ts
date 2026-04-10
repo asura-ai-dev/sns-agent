@@ -105,16 +105,104 @@ export interface UpdateScheduleInput {
 // Usage
 // ───────────────────────────────────────────
 
+export type UsagePeriod = "daily" | "weekly" | "monthly";
+
 export interface UsageReportParams {
   platform?: string;
-  period?: "daily" | "weekly" | "monthly";
+  period?: UsagePeriod;
   from?: string; // ISO 8601 date
   to?: string; // ISO 8601 date
 }
 
+/** /api/usage report row (server-aggregated bucket per period × platform). */
+export interface UsageReportEntry {
+  /** Bucket key — `YYYY-MM-DD` (daily), `YYYY-Www` (weekly), or `YYYY-MM` (monthly). */
+  period: string;
+  platform: string;
+  requestCount: number;
+  successCount: number;
+  failureCount: number;
+  successRate: number;
+  estimatedCost: number;
+}
+
+export interface UsageReportMeta {
+  period: UsagePeriod;
+  from: string;
+  to: string;
+}
+
+/**
+ * Legacy / dashboard summary type kept for backwards compatibility with the
+ * Task 3005 dashboard fetcher. New code should prefer `UsageSummaryReport`.
+ */
 export interface UsageSummary {
   totalRequests: number;
   totalSuccesses: number;
   totalFailures: number;
   estimatedCostUsd: number;
+}
+
+/** /api/usage/summary response — month-to-date aggregate split by platform. */
+export interface UsageSummaryReport {
+  totalCost: number;
+  totalRequests: number;
+  successRate: number;
+  byPlatform: Record<
+    string,
+    {
+      totalRequests: number;
+      successCount: number;
+      failureCount: number;
+      totalCostUsd: number;
+    }
+  >;
+  range: { from: string; to: string };
+}
+
+// ───────────────────────────────────────────
+// Budget
+// ───────────────────────────────────────────
+
+export type BudgetScopeType = "workspace" | "platform" | "endpoint";
+export type BudgetPeriodType = "daily" | "weekly" | "monthly";
+export type BudgetActionOnExceed = "warn" | "require-approval" | "block";
+
+export interface BudgetPolicyDto {
+  id: string;
+  workspaceId: string;
+  scopeType: BudgetScopeType;
+  scopeValue: string | null;
+  period: BudgetPeriodType;
+  limitAmountUsd: number;
+  actionOnExceed: BudgetActionOnExceed;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BudgetStatusDto {
+  policy: BudgetPolicyDto;
+  consumed: number;
+  limit: number;
+  percentage: number;
+  warning: boolean;
+  exceeded: boolean;
+  periodStart: string;
+  periodEnd: string;
+}
+
+export interface CreateBudgetPolicyDto {
+  scopeType: BudgetScopeType;
+  scopeValue?: string | null;
+  period: BudgetPeriodType;
+  limitAmountUsd: number;
+  actionOnExceed: BudgetActionOnExceed;
+}
+
+export interface UpdateBudgetPolicyDto {
+  scopeType?: BudgetScopeType;
+  scopeValue?: string | null;
+  period?: BudgetPeriodType;
+  limitAmountUsd?: number;
+  actionOnExceed?: BudgetActionOnExceed;
 }

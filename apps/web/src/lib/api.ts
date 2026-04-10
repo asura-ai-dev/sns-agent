@@ -17,7 +17,21 @@
  */
 
 import { SnsAgentClient, SdkError } from "@sns-agent/sdk";
-import type { ApiResponse, SocialAccount, Post, ScheduledJob, UsageSummary } from "@sns-agent/sdk";
+import type {
+  ApiResponse,
+  BudgetPolicyDto,
+  BudgetStatusDto,
+  CreateBudgetPolicyDto,
+  Post,
+  ScheduledJob,
+  SocialAccount,
+  UpdateBudgetPolicyDto,
+  UsagePeriod,
+  UsageReportEntry,
+  UsageReportMeta,
+  UsageSummary,
+  UsageSummaryReport,
+} from "@sns-agent/sdk";
 
 // ───────────────────────────────────────────
 // Configuration
@@ -133,7 +147,99 @@ export function fetchUsageSummarySafe(): Promise<FetchResult<UsageSummary>> {
 }
 
 // ───────────────────────────────────────────
+// Usage detail / Budget fetchers (Task 4005)
+// ───────────────────────────────────────────
+
+export interface UsageReportSafeResult {
+  entries: UsageReportEntry[];
+  meta: UsageReportMeta | null;
+}
+
+/** Period-aggregated usage report for the dedicated `/usage` page. */
+export function fetchUsageReportSafe(params: {
+  period?: UsagePeriod;
+  platform?: string;
+  from?: string;
+  to?: string;
+}): Promise<FetchResult<UsageReportSafeResult>> {
+  const fallback: UsageReportSafeResult = { entries: [], meta: null };
+  return guard(async () => {
+    const res = await getApiClient().usage.reportAggregated(params);
+    return {
+      entries: res.data ?? [],
+      meta: (res.meta as UsageReportMeta | undefined) ?? null,
+    };
+  }, fallback);
+}
+
+/** Month-to-date usage summary in the by-platform breakdown shape. */
+export function fetchUsageSummaryReportSafe(): Promise<FetchResult<UsageSummaryReport>> {
+  const fallback: UsageSummaryReport = {
+    totalCost: 0,
+    totalRequests: 0,
+    successRate: 0,
+    byPlatform: {},
+    range: { from: new Date().toISOString(), to: new Date().toISOString() },
+  };
+  return guard(async () => {
+    const res: ApiResponse<UsageSummaryReport> = await getApiClient().usage.summaryReport();
+    return res.data ?? fallback;
+  }, fallback);
+}
+
+/** List configured budget policies. */
+export function fetchBudgetPoliciesSafe(): Promise<FetchResult<BudgetPolicyDto[]>> {
+  return guard(async () => {
+    const res: ApiResponse<BudgetPolicyDto[]> = await getApiClient().budget.listPolicies();
+    return res.data ?? [];
+  }, [] as BudgetPolicyDto[]);
+}
+
+/** Current consumption status for each active policy. */
+export function fetchBudgetStatusSafe(): Promise<FetchResult<BudgetStatusDto[]>> {
+  return guard(async () => {
+    const res: ApiResponse<BudgetStatusDto[]> = await getApiClient().budget.status();
+    return res.data ?? [];
+  }, [] as BudgetStatusDto[]);
+}
+
+// ───────────────────────────────────────────
+// Mutation helpers (used from server actions)
+// ───────────────────────────────────────────
+
+export async function createBudgetPolicy(input: CreateBudgetPolicyDto): Promise<BudgetPolicyDto> {
+  const res = await getApiClient().budget.createPolicy(input);
+  return res.data;
+}
+
+export async function updateBudgetPolicy(
+  id: string,
+  input: UpdateBudgetPolicyDto,
+): Promise<BudgetPolicyDto> {
+  const res = await getApiClient().budget.updatePolicy(id, input);
+  return res.data;
+}
+
+export async function deleteBudgetPolicy(id: string): Promise<{ id: string; deleted: boolean }> {
+  const res = await getApiClient().budget.deletePolicy(id);
+  return res.data;
+}
+
+// ───────────────────────────────────────────
 // Re-exports for convenience
 // ───────────────────────────────────────────
 
-export type { SocialAccount, Post, ScheduledJob, UsageSummary };
+export type {
+  SocialAccount,
+  Post,
+  ScheduledJob,
+  UsageSummary,
+  UsageSummaryReport,
+  UsageReportEntry,
+  UsageReportMeta,
+  UsagePeriod,
+  BudgetPolicyDto,
+  BudgetStatusDto,
+  CreateBudgetPolicyDto,
+  UpdateBudgetPolicyDto,
+};

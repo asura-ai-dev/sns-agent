@@ -58,11 +58,10 @@ const SETTINGS_NAV: NavItem[] = [
     slug: "llm",
   },
   {
-    href: "#",
+    href: "/settings/budget",
     label: "予算ポリシー",
-    description: "Phase 4 で追加",
+    description: "Allowances Register",
     icon: Coins,
-    disabled: true,
     slug: "budget",
   },
 ];

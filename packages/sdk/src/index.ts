@@ -13,6 +13,7 @@ export type {
   PostsResource,
   SchedulesResource,
   UsageResource,
+  BudgetResource,
 } from "./client.js";
 
 // Types
@@ -28,7 +29,18 @@ export type {
   CreateScheduleInput,
   UpdateScheduleInput,
   UsageReportParams,
+  UsagePeriod,
+  UsageReportEntry,
+  UsageReportMeta,
   UsageSummary,
+  UsageSummaryReport,
+  BudgetScopeType,
+  BudgetPeriodType,
+  BudgetActionOnExceed,
+  BudgetPolicyDto,
+  BudgetStatusDto,
+  CreateBudgetPolicyDto,
+  UpdateBudgetPolicyDto,
   SocialAccount,
   Post,
   ScheduledJob,

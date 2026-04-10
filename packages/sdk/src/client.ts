@@ -9,19 +9,26 @@
 import { SdkError } from "./errors.js";
 import type {
   ApiResponse,
+  BudgetPolicyDto,
+  BudgetStatusDto,
   ConnectAccountInput,
+  CreateBudgetPolicyDto,
   CreatePostInput,
   CreateScheduleInput,
   ListPostsParams,
   ListSchedulesParams,
-  UpdatePostInput,
-  UpdateScheduleInput,
-  UsageReportParams,
-  UsageSummary,
-  SocialAccount,
   Post,
   ScheduledJob,
+  SocialAccount,
+  UpdateBudgetPolicyDto,
+  UpdatePostInput,
+  UpdateScheduleInput,
   UsageRecord,
+  UsageReportEntry,
+  UsageReportMeta,
+  UsageReportParams,
+  UsageSummary,
+  UsageSummaryReport,
 } from "./types.js";
 
 // ───────────────────────────────────────────
@@ -92,8 +99,29 @@ export interface SchedulesResource {
 }
 
 export interface UsageResource {
+  /**
+   * Legacy report endpoint kept for SDK compatibility — returns raw `UsageRecord[]`
+   * for older callers that call it as a list. New callers should use `reportAggregated`.
+   */
   report(params?: UsageReportParams): Promise<ApiResponse<UsageRecord[]>>;
+  /**
+   * Period-aggregated report from `/api/usage`. Each entry is one bucket
+   * (day/week/month) × platform with totals and success rate.
+   */
+  reportAggregated(
+    params?: UsageReportParams,
+  ): Promise<ApiResponse<UsageReportEntry[]> & { meta?: UsageReportMeta }>;
   summary(): Promise<ApiResponse<UsageSummary>>;
+  /** New shape for `/api/usage/summary` matching the API wire format. */
+  summaryReport(): Promise<ApiResponse<UsageSummaryReport>>;
+}
+
+export interface BudgetResource {
+  listPolicies(): Promise<ApiResponse<BudgetPolicyDto[]>>;
+  createPolicy(input: CreateBudgetPolicyDto): Promise<ApiResponse<BudgetPolicyDto>>;
+  updatePolicy(id: string, input: UpdateBudgetPolicyDto): Promise<ApiResponse<BudgetPolicyDto>>;
+  deletePolicy(id: string): Promise<ApiResponse<{ id: string; deleted: boolean }>>;
+  status(): Promise<ApiResponse<BudgetStatusDto[]>>;
 }
 
 // ───────────────────────────────────────────
@@ -109,6 +137,7 @@ export class SnsAgentClient {
   public readonly posts: PostsResource;
   public readonly schedules: SchedulesResource;
   public readonly usage: UsageResource;
+  public readonly budget: BudgetResource;
 
   constructor(options: SnsAgentClientOptions) {
     // 末尾のスラッシュを除去
@@ -121,6 +150,7 @@ export class SnsAgentClient {
     this.posts = this._buildPosts();
     this.schedules = this._buildSchedules();
     this.usage = this._buildUsage();
+    this.budget = this._buildBudget();
   }
 
   // ───────────────────────────────────────
@@ -265,7 +295,26 @@ export class SnsAgentClient {
           "/api/usage",
           params as Record<string, string | number | boolean | undefined>,
         ),
+      reportAggregated: (params) =>
+        this.get<ApiResponse<UsageReportEntry[]> & { meta?: UsageReportMeta }>(
+          "/api/usage",
+          params as Record<string, string | number | boolean | undefined>,
+        ),
       summary: () => this.get<ApiResponse<UsageSummary>>("/api/usage/summary"),
+      summaryReport: () => this.get<ApiResponse<UsageSummaryReport>>("/api/usage/summary"),
+    };
+  }
+
+  private _buildBudget(): BudgetResource {
+    return {
+      listPolicies: () => this.get<ApiResponse<BudgetPolicyDto[]>>("/api/budget/policies"),
+      createPolicy: (input) =>
+        this.post<ApiResponse<BudgetPolicyDto>>("/api/budget/policies", input),
+      updatePolicy: (id, input) =>
+        this.patch<ApiResponse<BudgetPolicyDto>>(`/api/budget/policies/${id}`, input),
+      deletePolicy: (id) =>
+        this.delete<ApiResponse<{ id: string; deleted: boolean }>>(`/api/budget/policies/${id}`),
+      status: () => this.get<ApiResponse<BudgetStatusDto[]>>("/api/budget/status"),
     };
   }
 }
