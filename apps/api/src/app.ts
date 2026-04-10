@@ -71,5 +71,13 @@ app.route("/api/audit", audit);
 app.route("/api/approvals", approvals);
 app.route("/api/webhooks", webhooks);
 
+// --- 404 ハンドラ ---
+app.notFound((c) => {
+  return c.json(
+    { error: { code: "NOT_FOUND", message: `Route not found: ${c.req.method} ${c.req.path}` } },
+    404,
+  );
+});
+
 export { app };
 export type { AppVariables };
