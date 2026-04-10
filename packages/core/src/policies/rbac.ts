@@ -47,6 +47,10 @@ export const PERMISSIONS = [
   "chat:use",
   // 承認
   "approval:review",
+  "approval:manage",
+  // 受信トレイ (Inbox)
+  "inbox:read",
+  "inbox:reply",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -64,9 +68,17 @@ export type Permission = (typeof PERMISSIONS)[number];
  * 実際の agent の権限は skill manifest の scope で制限される。
  */
 export const rolePermissions: Record<Role, readonly Permission[]> = {
-  viewer: ["account:read", "post:read", "schedule:read", "usage:read"],
+  viewer: ["account:read", "post:read", "schedule:read", "usage:read", "inbox:read"],
 
-  operator: ["account:read", "post:read", "post:create", "schedule:read", "usage:read", "chat:use"],
+  operator: [
+    "account:read",
+    "post:read",
+    "post:create",
+    "schedule:read",
+    "usage:read",
+    "chat:use",
+    "inbox:read",
+  ],
 
   editor: [
     "account:read",
@@ -80,6 +92,8 @@ export const rolePermissions: Record<Role, readonly Permission[]> = {
     "schedule:delete",
     "usage:read",
     "chat:use",
+    "inbox:read",
+    "inbox:reply",
   ],
 
   admin: [
@@ -106,6 +120,9 @@ export const rolePermissions: Record<Role, readonly Permission[]> = {
     "audit:read",
     "chat:use",
     "approval:review",
+    "approval:manage",
+    "inbox:read",
+    "inbox:reply",
   ],
 
   owner: [
@@ -133,9 +150,12 @@ export const rolePermissions: Record<Role, readonly Permission[]> = {
     "audit:read",
     "chat:use",
     "approval:review",
+    "approval:manage",
+    "inbox:read",
+    "inbox:reply",
   ],
 
-  agent: ["account:read", "post:read", "post:create", "schedule:read", "usage:read"],
+  agent: ["account:read", "post:read", "post:create", "schedule:read", "usage:read", "inbox:read"],
 };
 
 // ───────────────────────────────────────────

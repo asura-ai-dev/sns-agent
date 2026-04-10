@@ -2,7 +2,7 @@
  * AccountRepository の Drizzle 実装
  * core/interfaces/repositories.ts の AccountRepository に準拠
  */
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { AccountRepository } from "@sns-agent/core";
 import type { SocialAccount } from "@sns-agent/core";
@@ -90,5 +90,29 @@ export class DrizzleAccountRepository implements AccountRepository {
 
   async delete(id: string): Promise<void> {
     await this.db.delete(socialAccounts).where(eq(socialAccounts.id, id));
+  }
+
+  /**
+   * (platform, externalAccountId) で social_account を検索する。
+   * Webhook 受信時にイベント宛先の自アカウントを特定するために使う。
+   * active を優先して返す (最大 1 件)。
+   */
+  async findByPlatformAndExternalId(
+    platform: SocialAccount["platform"],
+    externalAccountId: string,
+  ): Promise<SocialAccount | null> {
+    const rows = await this.db
+      .select()
+      .from(socialAccounts)
+      .where(
+        and(
+          eq(socialAccounts.platform, platform),
+          eq(socialAccounts.externalAccountId, externalAccountId),
+        ),
+      )
+      .limit(5);
+    if (rows.length === 0) return null;
+    const active = rows.find((r) => r.status === "active") ?? rows[0];
+    return rowToEntity(active);
   }
 }

@@ -13,6 +13,12 @@ export type {
   LlmRouteRepository,
   AuditLogRepository,
   AuditLogFilterOptions,
+  ApprovalRepository,
+  ApprovalFilterOptions,
+  ConversationRepository,
+  ConversationFilterOptions,
+  MessageRepository,
+  MessageFilterOptions,
 } from "./repositories.js";
 
 // SocialProvider

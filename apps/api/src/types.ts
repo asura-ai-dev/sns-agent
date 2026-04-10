@@ -4,7 +4,7 @@
  * Hono の Variables 型を定義する。
  * ルートファイルからインポートして型安全にコンテキストを参照する。
  */
-import type { Actor } from "@sns-agent/core";
+import type { Actor, UsageRepository } from "@sns-agent/core";
 import type { DbClient } from "@sns-agent/db";
 
 /**
@@ -17,4 +17,6 @@ export type AppVariables = {
   actor: Actor;
   /** X-Idempotency-Key ヘッダ値（idempotency ミドルウェアがセット） */
   idempotencyKey?: string;
+  /** Task 4003: 使用量記録ミドルウェアがセット */
+  usageRepo?: UsageRepository;
 };

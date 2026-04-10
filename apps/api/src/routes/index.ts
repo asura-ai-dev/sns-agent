@@ -12,3 +12,4 @@ export { agent } from "./agent.js";
 export { audit } from "./audit.js";
 export { approvals } from "./approvals.js";
 export { webhooks } from "./webhooks.js";
+export { inbox } from "./inbox.js";

@@ -23,5 +23,8 @@ export {
   DrizzleAuditLogRepository,
   DrizzleUserRepository,
   DrizzleAgentIdentityRepository,
+  DrizzleApprovalRepository,
+  DrizzleConversationRepository,
+  DrizzleMessageRepository,
 } from "./repositories/index.js";
 export type { UserRepository, AgentIdentityRepository } from "./repositories/index.js";

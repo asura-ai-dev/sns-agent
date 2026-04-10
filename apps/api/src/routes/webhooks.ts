@@ -1,30 +1,182 @@
 /**
  * Webhook 受信ルート
  * design.md セクション 4.2: /api/webhooks
+ * Task 6003: 受信したイベントを inbox usecase (processInboundMessage) に渡し、
+ * conversation_threads / messages に永続化する。
  *
- * - POST /api/webhooks/x         : X (未実装)
- * - POST /api/webhooks/line      : LINE Webhook 受信 (署名検証 + イベント解析)
- * - GET  /api/webhooks/instagram : Meta Webhook 検証 (hub.challenge エコー)
- * - POST /api/webhooks/instagram : Instagram Webhook 受信 (署名検証 + イベント解析)
+ * - POST /api/webhooks/x         : X mention/reply/DM (v1 は未接続だが受理して processInbound に渡す)
+ * - POST /api/webhooks/line      : LINE Webhook (署名検証 + イベント解析 + inbox 保存)
+ * - GET  /api/webhooks/instagram : Meta Webhook 購読検証 (hub.challenge エコー)
+ * - POST /api/webhooks/instagram : Instagram Webhook (署名検証 + イベント解析 + inbox 保存)
  */
 import { Hono } from "hono";
+import type { Platform } from "@sns-agent/config";
+import { processInboundMessage, type InboundMessageInput } from "@sns-agent/core";
+import {
+  DrizzleAccountRepository,
+  DrizzleConversationRepository,
+  DrizzleMessageRepository,
+} from "@sns-agent/db";
 import { getProviderRegistry } from "../providers.js";
+import type { AppVariables } from "../types.js";
 
-const webhooks = new Hono();
+const webhooks = new Hono<{ Variables: AppVariables }>();
 
-webhooks.post("/x", (c) => {
-  return c.json(
-    { error: { code: "NOT_IMPLEMENTED", message: "POST /api/webhooks/x is not yet implemented" } },
-    501,
-  );
-});
+// ───────────────────────────────────────────
+// ヘルパー: inbox usecase deps
+// ───────────────────────────────────────────
+
+function buildInboxDeps(db: AppVariables["db"]) {
+  const encryptionKey =
+    process.env.ENCRYPTION_KEY ||
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  return {
+    conversationRepo: new DrizzleConversationRepository(db),
+    messageRepo: new DrizzleMessageRepository(db),
+    accountRepo: new DrizzleAccountRepository(db),
+    providers: getProviderRegistry().getAll(),
+    encryptionKey,
+  };
+}
 
 /**
- * LINE Webhook 受信 (Task 4001)。
- * 署名検証のため raw body を取得し、provider-line の handleWebhook に渡す。
- * LINE の仕様: `x-line-signature` ヘッダの HMAC-SHA256(channelSecret, rawBody) を検証。
+ * (platform, externalAccountId) でアクティブな social_account を検索する。
+ * 複数ワークスペースに同じ external ID が存在する場合は active を優先して返す。
  */
+async function findAccountByExternal(
+  db: AppVariables["db"],
+  platform: Platform,
+  externalAccountId: string,
+): Promise<{ id: string; workspaceId: string } | null> {
+  const repo = new DrizzleAccountRepository(db);
+  const account = await repo.findByPlatformAndExternalId(platform, externalAccountId);
+  return account ? { id: account.id, workspaceId: account.workspaceId } : null;
+}
+
+// ───────────────────────────────────────────
+// ヘルパー: collectHeaders
+// ───────────────────────────────────────────
+function collectHeaders(req: Request): Record<string, string> {
+  const headers: Record<string, string> = {};
+  req.headers.forEach((value, key) => {
+    headers[key] = value;
+  });
+  return headers;
+}
+
+// ───────────────────────────────────────────
+// POST /api/webhooks/x
+// ───────────────────────────────────────────
+/**
+ * X (Twitter) の mention/reply/DM webhook 受信 (最小実装)。
+ * 署名検証は将来 (X 公式) 実装に委譲。
+ * v1 は body から最低限のフィールドを取り出し、processInboundMessage に渡す。
+ *
+ * 想定 body 形状 (内部擬似形式 or X Account Activity API):
+ *   {
+ *     for_user_id: "<our-x-user-id>",   // 自アカウントの外部 ID
+ *     tweet_create_events?: [           // mention / reply
+ *       { id_str, text, user: { id_str, name }, in_reply_to_user_id_str }
+ *     ],
+ *     direct_message_events?: [
+ *       { id, message_create: { sender_id, target: { recipient_id }, message_data: { text } } }
+ *     ]
+ *   }
+ */
+webhooks.post("/x", async (c) => {
+  const db = c.get("db");
+  const body = await c.req
+    .json<Record<string, unknown>>()
+    .catch(() => ({}) as Record<string, unknown>);
+
+  const forUserId = typeof body.for_user_id === "string" ? body.for_user_id : null;
+  if (!forUserId) {
+    return c.json(
+      {
+        error: {
+          code: "WEBHOOK_INVALID_PAYLOAD",
+          message: "X webhook requires for_user_id",
+        },
+      },
+      400,
+    );
+  }
+
+  const account = await findAccountByExternal(db, "x", forUserId);
+  if (!account) {
+    // 未接続アカウント宛のイベントは 202 で無視
+    return c.json({ received: 0, ignored: true }, 202);
+  }
+
+  const deps = buildInboxDeps(db);
+  const inboundList: InboundMessageInput[] = [];
+
+  // mention / reply
+  const tweetEvents = Array.isArray(body.tweet_create_events) ? body.tweet_create_events : [];
+  for (const raw of tweetEvents) {
+    if (!raw || typeof raw !== "object") continue;
+    const ev = raw as Record<string, unknown>;
+    const id = typeof ev.id_str === "string" ? ev.id_str : null;
+    const text = typeof ev.text === "string" ? ev.text : null;
+    const user = (ev.user as Record<string, unknown> | undefined) ?? {};
+    const senderId = typeof user.id_str === "string" ? user.id_str : null;
+    const senderName = typeof user.name === "string" ? user.name : null;
+    if (!senderId) continue;
+    inboundList.push({
+      workspaceId: account.workspaceId,
+      socialAccountId: account.id,
+      platform: "x",
+      externalThreadId: senderId,
+      participantName: senderName,
+      externalMessageId: id,
+      contentText: text,
+      sentAt: new Date(),
+    });
+  }
+
+  // direct_message_events
+  const dmEvents = Array.isArray(body.direct_message_events) ? body.direct_message_events : [];
+  for (const raw of dmEvents) {
+    if (!raw || typeof raw !== "object") continue;
+    const ev = raw as Record<string, unknown>;
+    const id = typeof ev.id === "string" ? ev.id : null;
+    const create = (ev.message_create as Record<string, unknown> | undefined) ?? {};
+    const senderId = typeof create.sender_id === "string" ? create.sender_id : null;
+    const data = (create.message_data as Record<string, unknown> | undefined) ?? {};
+    const text = typeof data.text === "string" ? data.text : null;
+    if (!senderId) continue;
+    inboundList.push({
+      workspaceId: account.workspaceId,
+      socialAccountId: account.id,
+      platform: "x",
+      externalThreadId: senderId,
+      participantName: null,
+      externalMessageId: id,
+      contentText: text,
+      sentAt: new Date(),
+    });
+  }
+
+  let stored = 0;
+  for (const input of inboundList) {
+    try {
+      await processInboundMessage(deps, input);
+      stored += 1;
+    } catch (err) {
+      // 個別失敗は握りつぶし、カウントだけ記録する
+      // eslint-disable-next-line no-console
+      console.warn("[webhooks/x] processInboundMessage failed", err);
+    }
+  }
+
+  return c.json({ received: stored }, 200);
+});
+
+// ───────────────────────────────────────────
+// LINE Webhook
+// ───────────────────────────────────────────
 webhooks.post("/line", async (c) => {
+  const db = c.get("db");
   const registry = getProviderRegistry();
   const provider = registry.get("line");
   if (!provider?.handleWebhook) {
@@ -40,10 +192,7 @@ webhooks.post("/line", async (c) => {
   }
 
   const rawBody = await c.req.text();
-  const headers: Record<string, string> = {};
-  c.req.raw.headers.forEach((value, key) => {
-    headers[key] = value;
-  });
+  const headers = collectHeaders(c.req.raw);
 
   const result = await provider.handleWebhook({ headers, body: rawBody });
   if (!result.verified) {
@@ -58,15 +207,74 @@ webhooks.post("/line", async (c) => {
     );
   }
 
-  // v1 はイベントの enqueue までは行わず、受理数のみ返す
-  return c.json({ received: result.events.length }, 200);
+  // LINE は payload.destination が bot の userId (= externalAccountId)
+  let destination: string | null = null;
+  try {
+    const parsed = JSON.parse(rawBody) as { destination?: unknown };
+    if (typeof parsed.destination === "string") destination = parsed.destination;
+  } catch {
+    destination = null;
+  }
+
+  if (!destination) {
+    // destination が取れない場合はイベント数だけ返して終了
+    return c.json({ received: 0, ignored: true }, 200);
+  }
+
+  const account = await findAccountByExternal(db, "line", destination);
+  if (!account) {
+    return c.json({ received: 0, ignored: true }, 202);
+  }
+
+  const deps = buildInboxDeps(db);
+  let stored = 0;
+
+  for (const ev of result.events) {
+    if (ev.type !== "message") continue;
+    if (!ev.externalThreadId) continue;
+    const raw = ev.data as Record<string, unknown> | null;
+    const message =
+      raw && typeof raw === "object"
+        ? (raw.message as Record<string, unknown> | undefined)
+        : undefined;
+    const text = message && typeof message.text === "string" ? message.text : null;
+    const source =
+      raw && typeof raw === "object" ? (raw.source as Record<string, unknown> | undefined) : {};
+    const participantName =
+      source && typeof (source as Record<string, unknown>).userId === "string"
+        ? ((source as Record<string, unknown>).userId as string)
+        : null;
+    const ts =
+      raw &&
+      typeof raw === "object" &&
+      typeof (raw as { timestamp?: unknown }).timestamp === "number"
+        ? new Date((raw as { timestamp: number }).timestamp)
+        : new Date();
+
+    try {
+      await processInboundMessage(deps, {
+        workspaceId: account.workspaceId,
+        socialAccountId: account.id,
+        platform: "line",
+        externalThreadId: ev.externalThreadId,
+        participantName,
+        externalMessageId: ev.externalMessageId,
+        contentText: text,
+        sentAt: ts,
+      });
+      stored += 1;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("[webhooks/line] processInboundMessage failed", err);
+    }
+  }
+
+  return c.json({ received: stored }, 200);
 });
 
-/**
- * Meta Webhook の購読検証エンドポイント。
- * GET /api/webhooks/instagram?hub.mode=subscribe&hub.verify_token=...&hub.challenge=...
- * INSTAGRAM_WEBHOOK_VERIFY_TOKEN 環境変数と一致したら hub.challenge をそのまま返す。
- */
+// ───────────────────────────────────────────
+// Instagram Webhook 購読検証 (GET)
+// ───────────────────────────────────────────
 webhooks.get("/instagram", (c) => {
   const mode = c.req.query("hub.mode");
   const verifyToken = c.req.query("hub.verify_token");
@@ -87,11 +295,11 @@ webhooks.get("/instagram", (c) => {
   );
 });
 
-/**
- * Instagram Webhook 受信。
- * 署名検証のため raw body 文字列を取得し、provider-instagram の handleWebhook に渡す。
- */
+// ───────────────────────────────────────────
+// Instagram Webhook 受信 (POST)
+// ───────────────────────────────────────────
 webhooks.post("/instagram", async (c) => {
+  const db = c.get("db");
   const registry = getProviderRegistry();
   const provider = registry.get("instagram");
   if (!provider?.handleWebhook) {
@@ -106,12 +314,8 @@ webhooks.post("/instagram", async (c) => {
     );
   }
 
-  // 署名検証には raw body が必要
   const rawBody = await c.req.text();
-  const headers: Record<string, string> = {};
-  c.req.raw.headers.forEach((value, key) => {
-    headers[key] = value;
-  });
+  const headers = collectHeaders(c.req.raw);
 
   const result = await provider.handleWebhook({ headers, body: rawBody });
   if (!result.verified) {
@@ -126,8 +330,100 @@ webhooks.post("/instagram", async (c) => {
     );
   }
 
-  // v1 はイベントの enqueue までは行わず、受理数のみ返す
-  return c.json({ received: result.events.length }, 200);
+  // entry[].id を取得するため raw payload を再 parse
+  let entries: Record<string, unknown>[] = [];
+  try {
+    const parsed = JSON.parse(rawBody) as { entry?: unknown };
+    if (Array.isArray(parsed.entry)) {
+      entries = parsed.entry.filter(
+        (e): e is Record<string, unknown> => !!e && typeof e === "object",
+      );
+    }
+  } catch {
+    entries = [];
+  }
+
+  const deps = buildInboxDeps(db);
+  let stored = 0;
+
+  for (const entry of entries) {
+    const igUserId = typeof entry.id === "string" ? entry.id : null;
+    if (!igUserId) continue;
+    const account = await findAccountByExternal(db, "instagram", igUserId);
+    if (!account) continue;
+
+    // messaging イベント (DM)
+    const messaging = Array.isArray(entry.messaging) ? entry.messaging : [];
+    for (const raw of messaging) {
+      if (!raw || typeof raw !== "object") continue;
+      const msg = raw as Record<string, unknown>;
+      const sender = (msg.sender as Record<string, unknown> | undefined) ?? {};
+      const recipient = (msg.recipient as Record<string, unknown> | undefined) ?? {};
+      const message = msg.message as Record<string, unknown> | undefined;
+      const senderId = typeof sender.id === "string" ? sender.id : null;
+      const recipientId = typeof recipient.id === "string" ? recipient.id : null;
+      if (!senderId) continue;
+      const threadId = senderId && recipientId ? `${recipientId}:${senderId}` : senderId;
+      const text = message && typeof message.text === "string" ? message.text : null;
+      const mid = message && typeof message.mid === "string" ? message.mid : null;
+      const tsRaw = typeof msg.timestamp === "number" ? msg.timestamp : null;
+
+      try {
+        await processInboundMessage(deps, {
+          workspaceId: account.workspaceId,
+          socialAccountId: account.id,
+          platform: "instagram",
+          externalThreadId: threadId,
+          participantName: senderId,
+          externalMessageId: mid,
+          contentText: text,
+          sentAt: tsRaw ? new Date(tsRaw) : new Date(),
+        });
+        stored += 1;
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[webhooks/instagram] processInboundMessage failed", err);
+      }
+    }
+
+    // changes (comments)
+    const changes = Array.isArray(entry.changes) ? entry.changes : [];
+    for (const raw of changes) {
+      if (!raw || typeof raw !== "object") continue;
+      const change = raw as Record<string, unknown>;
+      const field = typeof change.field === "string" ? change.field : null;
+      const value = change.value as Record<string, unknown> | undefined;
+      if (field !== "comments" || !value) continue;
+      const commentId = typeof value.id === "string" ? value.id : null;
+      const text = typeof value.text === "string" ? value.text : null;
+      const from = (value.from as Record<string, unknown> | undefined) ?? {};
+      const fromId = typeof from.id === "string" ? from.id : null;
+      const fromName = typeof from.username === "string" ? from.username : null;
+      const media = (value.media as Record<string, unknown> | undefined) ?? {};
+      const mediaId = typeof media.id === "string" ? media.id : null;
+      const threadId = mediaId ?? fromId;
+      if (!threadId) continue;
+
+      try {
+        await processInboundMessage(deps, {
+          workspaceId: account.workspaceId,
+          socialAccountId: account.id,
+          platform: "instagram",
+          externalThreadId: threadId,
+          participantName: fromName,
+          externalMessageId: commentId,
+          contentText: text,
+          sentAt: new Date(),
+        });
+        stored += 1;
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[webhooks/instagram] processInboundMessage failed (comment)", err);
+      }
+    }
+  }
+
+  return c.json({ received: stored }, 200);
 });
 
 export { webhooks };

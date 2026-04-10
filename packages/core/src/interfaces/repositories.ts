@@ -12,7 +12,13 @@ import type {
   BudgetPolicy,
   LlmRoute,
   AuditLog,
+  ApprovalRequest,
+  ApprovalStatus,
+  ConversationThread,
+  Message,
+  ThreadStatus,
 } from "../domain/entities.js";
+import type { Platform } from "@sns-agent/config";
 
 // ───────────────────────────────────────────
 // AccountRepository
@@ -131,4 +137,76 @@ export interface AuditLogRepository {
     workspaceId: string,
     options?: Omit<AuditLogFilterOptions, "limit" | "offset">,
   ): Promise<number>;
+}
+
+// ───────────────────────────────────────────
+// ApprovalRepository
+// ───────────────────────────────────────────
+
+export interface ApprovalFilterOptions {
+  status?: ApprovalStatus;
+  resourceType?: string;
+  requestedBy?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ApprovalRepository {
+  findById(id: string): Promise<ApprovalRequest | null>;
+  findByWorkspace(workspaceId: string, options?: ApprovalFilterOptions): Promise<ApprovalRequest[]>;
+  countByWorkspace(
+    workspaceId: string,
+    options?: Omit<ApprovalFilterOptions, "limit" | "offset">,
+  ): Promise<number>;
+  create(req: Omit<ApprovalRequest, "id">): Promise<ApprovalRequest>;
+  update(id: string, data: Partial<ApprovalRequest>): Promise<ApprovalRequest>;
+  /**
+   * requestedAt が cutoff より古い pending を expired に更新し、対象件数を返す。
+   */
+  expirePending(cutoff: Date): Promise<number>;
+}
+
+// ───────────────────────────────────────────
+// ConversationRepository / MessageRepository
+// ───────────────────────────────────────────
+
+export interface ConversationFilterOptions {
+  platform?: Platform;
+  status?: ThreadStatus;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ConversationRepository {
+  findById(id: string): Promise<ConversationThread | null>;
+  findByWorkspace(
+    workspaceId: string,
+    options?: ConversationFilterOptions,
+  ): Promise<ConversationThread[]>;
+  countByWorkspace(
+    workspaceId: string,
+    options?: Omit<ConversationFilterOptions, "limit" | "offset">,
+  ): Promise<number>;
+  /**
+   * (workspaceId, socialAccountId, externalThreadId) の組で既存スレッドを検索する。
+   * 受信イベント処理時に既存スレッドの特定に使う。
+   */
+  findByExternalThread(
+    workspaceId: string,
+    socialAccountId: string,
+    externalThreadId: string,
+  ): Promise<ConversationThread | null>;
+  create(thread: Omit<ConversationThread, "id" | "createdAt">): Promise<ConversationThread>;
+  update(id: string, data: Partial<ConversationThread>): Promise<ConversationThread>;
+}
+
+export interface MessageFilterOptions {
+  limit?: number;
+  offset?: number;
+}
+
+export interface MessageRepository {
+  findByThread(threadId: string, options?: MessageFilterOptions): Promise<Message[]>;
+  countByThread(threadId: string): Promise<number>;
+  create(message: Omit<Message, "id" | "createdAt">): Promise<Message>;
 }

@@ -25,3 +25,7 @@ export type {
   AccountStatus,
   BudgetAction,
 } from "./constants.js";
+
+// コスト単価テーブル
+export { COST_TABLE, DEFAULT_COST_PER_REQUEST, getCostRate, estimateCost } from "./cost-table.js";
+export type { CostRate } from "./cost-table.js";

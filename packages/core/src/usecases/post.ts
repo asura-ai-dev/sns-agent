@@ -5,8 +5,13 @@
  * design.md セクション 3.1（posts）、4.2（投稿管理）、11（投稿バリデーション）に準拠。
  */
 import type { Platform } from "@sns-agent/config";
+import { estimateCost } from "@sns-agent/config";
 import type { MediaAttachment, Post, SocialAccount } from "../domain/entities.js";
-import type { AccountRepository, PostRepository } from "../interfaces/repositories.js";
+import type {
+  AccountRepository,
+  PostRepository,
+  UsageRepository,
+} from "../interfaces/repositories.js";
 import type { SocialProvider, ValidationResult } from "../interfaces/social-provider.js";
 import { NotFoundError, ValidationError, ProviderError } from "../errors/domain-error.js";
 import { decrypt } from "../domain/crypto.js";
@@ -22,6 +27,11 @@ export interface PostUsecaseDeps {
   providers: Map<Platform, SocialProvider>;
   /** AES-256-GCM 用の暗号化キー */
   encryptionKey: string;
+  /**
+   * 使用量記録先。省略時は記録しない (後方互換)。
+   * Task 4003: Provider 呼び出し成否をこの Repository に記録する。
+   */
+  usageRepo?: UsageRepository;
 }
 
 // ───────────────────────────────────────────
@@ -120,6 +130,40 @@ function decryptCredentials(credentialsEncrypted: string, encryptionKey: string)
     return decrypt(credentialsEncrypted, encryptionKey);
   } catch {
     throw new ProviderError("Failed to decrypt account credentials");
+  }
+}
+
+/**
+ * Provider 呼び出し後に使用量レコードを記録する (best-effort)。
+ * usageRepo 未設定・記録失敗はログのみで投稿フローを止めない。
+ */
+async function recordProviderUsage(
+  deps: PostUsecaseDeps,
+  args: {
+    workspaceId: string;
+    platform: Platform;
+    endpoint: string;
+    actorId: string | null;
+    success: boolean;
+  },
+): Promise<void> {
+  if (!deps.usageRepo) return;
+  try {
+    const estimated = estimateCost(args.platform, args.endpoint, 1);
+    await deps.usageRepo.record({
+      workspaceId: args.workspaceId,
+      platform: args.platform,
+      endpoint: args.endpoint,
+      actorId: args.actorId,
+      actorType: "user",
+      requestCount: 1,
+      success: args.success,
+      estimatedCostUsd: estimated,
+      recordedAt: new Date(),
+    });
+  } catch (err) {
+    // best-effort: 使用量記録の失敗でフローを止めない
+    console.error("[post.usage] failed to record usage:", err);
   }
 }
 
@@ -291,17 +335,32 @@ export async function publishPost(
           publishError: result.error ?? "unknown error",
         },
       });
+      await recordProviderUsage(deps, {
+        workspaceId,
+        platform: post.platform,
+        endpoint: "post.publish",
+        actorId: post.createdBy ?? null,
+        success: false,
+      });
       throw new ProviderError(`Failed to publish post: ${result.error ?? "unknown error"}`, {
         postId,
         post: updated,
       });
     }
 
-    return deps.postRepo.update(postId, {
+    const published = await deps.postRepo.update(postId, {
       status: "published",
       platformPostId: result.platformPostId,
       publishedAt: result.publishedAt ?? new Date(),
     });
+    await recordProviderUsage(deps, {
+      workspaceId,
+      platform: post.platform,
+      endpoint: "post.publish",
+      actorId: post.createdBy ?? null,
+      success: true,
+    });
+    return published;
   } catch (err) {
     // Provider 呼び出し自体が throw した場合
     if (err instanceof ProviderError) {
@@ -315,6 +374,13 @@ export async function publishPost(
           : {}),
         publishError: err instanceof Error ? err.message : String(err),
       },
+    });
+    await recordProviderUsage(deps, {
+      workspaceId,
+      platform: post.platform,
+      endpoint: "post.publish",
+      actorId: post.createdBy ?? null,
+      success: false,
     });
     throw new ProviderError(
       `Failed to publish post: ${err instanceof Error ? err.message : String(err)}`,
@@ -353,6 +419,14 @@ export async function deletePost(
     const result = await provider.deletePost({
       accountCredentials: credentials,
       platformPostId: post.platformPostId,
+    });
+
+    await recordProviderUsage(deps, {
+      workspaceId,
+      platform: post.platform,
+      endpoint: "post.delete",
+      actorId: post.createdBy ?? null,
+      success: result.success,
     });
 
     if (!result.success) {

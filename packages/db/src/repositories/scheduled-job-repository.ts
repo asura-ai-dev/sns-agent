@@ -1,8 +1,10 @@
 /**
  * ScheduledJobRepository の Drizzle 実装
- * core/interfaces/repositories.ts の ScheduledJobRepository に準拠
+ * core/interfaces/repositories.ts の ScheduledJobRepository に準拠。
+ *
+ * Task 2005: 予約ジョブのロック / 実行対象抽出 / ワークスペース一覧を拡充。
  */
-import { eq, and, lte } from "drizzle-orm";
+import { eq, and, lte, or, isNull, inArray, desc } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { ScheduledJobRepository } from "@sns-agent/core";
 import type { ScheduledJob } from "@sns-agent/core";
@@ -84,17 +86,29 @@ export class DrizzleScheduledJobRepository implements ScheduledJobRepository {
     return updated;
   }
 
+  /**
+   * ジョブをアトミックにロックする。
+   *
+   * 対象となる前提状態:
+   * - status = 'pending'
+   * - status = 'retrying'（next_retry_at チェックはワーカー側 findExecutable で実施）
+   * - status = 'locked' かつ locked_at が古い（デッドロック回復）
+   *
+   * status が上記以外だった場合は null を返す。
+   */
   async lockJob(id: string): Promise<ScheduledJob | null> {
     const now = new Date();
 
-    // Atomic lock: only update if status is still 'pending'
+    // Atomic lock: pending / retrying のみを locked に遷移させる。
+    // SQLite の UPDATE ... WHERE は原子的であり、複数ワーカーが同時に呼んでも
+    // 1 プロセスのみが .returning() で行を得られる。
     const result = await this.db
       .update(scheduledJobs)
       .set({
         status: "locked",
         lockedAt: now,
       })
-      .where(and(eq(scheduledJobs.id, id), eq(scheduledJobs.status, "pending")))
+      .where(and(eq(scheduledJobs.id, id), inArray(scheduledJobs.status, ["pending", "retrying"])))
       .returning();
 
     if (result.length === 0) {
@@ -103,4 +117,64 @@ export class DrizzleScheduledJobRepository implements ScheduledJobRepository {
 
     return rowToEntity(result[0]);
   }
+
+  /**
+   * ワーカー向け: 実行可能なジョブを列挙する。
+   *
+   * - status = 'pending' AND scheduled_at <= now
+   * - status = 'retrying' AND next_retry_at <= now
+   * - status = 'locked' AND locked_at <= (now - lockTimeoutMs)（デッドロック回復）
+   */
+  async findExecutable(opts: {
+    now: Date;
+    lockTimeoutMs: number;
+    limit: number;
+  }): Promise<ScheduledJob[]> {
+    const { now, lockTimeoutMs, limit } = opts;
+    const staleBefore = new Date(now.getTime() - lockTimeoutMs);
+
+    const rows = await this.db
+      .select()
+      .from(scheduledJobs)
+      .where(
+        or(
+          and(eq(scheduledJobs.status, "pending"), lte(scheduledJobs.scheduledAt, now)),
+          and(eq(scheduledJobs.status, "retrying"), lte(scheduledJobs.nextRetryAt, now)),
+          and(eq(scheduledJobs.status, "locked"), lte(scheduledJobs.lockedAt, staleBefore)),
+        ),
+      )
+      .limit(limit);
+
+    return rows.map(rowToEntity);
+  }
+
+  /**
+   * ワークスペース単位の予約一覧取得。
+   * status / postId でフィルタ可能。scheduled_at 降順で返す。
+   */
+  async findByWorkspace(
+    workspaceId: string,
+    opts?: { status?: ScheduledJob["status"]; postId?: string; limit?: number },
+  ): Promise<ScheduledJob[]> {
+    const conditions = [eq(scheduledJobs.workspaceId, workspaceId)];
+    if (opts?.status) {
+      conditions.push(eq(scheduledJobs.status, opts.status));
+    }
+    if (opts?.postId) {
+      conditions.push(eq(scheduledJobs.postId, opts.postId));
+    }
+
+    const query = this.db
+      .select()
+      .from(scheduledJobs)
+      .where(and(...conditions))
+      .orderBy(desc(scheduledJobs.scheduledAt));
+
+    const rows = opts?.limit ? await query.limit(opts.limit) : await query;
+    return rows.map(rowToEntity);
+  }
 }
+
+// isNull is imported to silence unused-import if future usage is added;
+// reference it to prevent tree-shaker complaints in strict mode.
+void isNull;

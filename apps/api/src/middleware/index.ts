@@ -8,3 +8,4 @@ export { authMiddleware } from "./auth.js";
 export { requirePermission } from "./rbac.js";
 export { auditMiddleware } from "./audit.js";
 export { idempotencyMiddleware } from "./idempotency.js";
+export { usageRecorderMiddleware } from "./usage-recorder.js";

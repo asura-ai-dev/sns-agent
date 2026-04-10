@@ -12,3 +12,8 @@ export { DrizzleUserRepository } from "./user-repository.js";
 export type { UserRepository } from "./user-repository.js";
 export { DrizzleAgentIdentityRepository } from "./agent-identity-repository.js";
 export type { AgentIdentityRepository } from "./agent-identity-repository.js";
+export { DrizzleApprovalRepository } from "./approval-repository.js";
+export {
+  DrizzleConversationRepository,
+  DrizzleMessageRepository,
+} from "./conversation-repository.js";

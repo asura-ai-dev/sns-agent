@@ -81,4 +81,42 @@ export class DrizzleUsageRepository implements UsageRepository {
       totalCostUsd: Number(row.totalCostUsd) || 0,
     }));
   }
+
+  /**
+   * 指定範囲のサマリ集計を取得する (Task 4003)。
+   * コアインターフェース外の補助メソッド。aggregate の結果を platform 横断で合算する。
+   */
+  async getSummary(
+    workspaceId: string,
+    options: { startDate: Date; endDate: Date },
+  ): Promise<{
+    totalRequests: number;
+    successCount: number;
+    failureCount: number;
+    totalCostUsd: number;
+    byPlatform: UsageAggregation[];
+  }> {
+    const byPlatform = await this.aggregate(workspaceId, options);
+    const totals = byPlatform.reduce(
+      (acc, row) => {
+        acc.totalRequests += row.totalRequests;
+        acc.successCount += row.successCount;
+        acc.failureCount += row.failureCount;
+        acc.totalCostUsd += row.totalCostUsd;
+        return acc;
+      },
+      { totalRequests: 0, successCount: 0, failureCount: 0, totalCostUsd: 0 },
+    );
+    return { ...totals, byPlatform };
+  }
+
+  async findRecent(workspaceId: string, limit = 50): Promise<UsageRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(usageRecords)
+      .where(eq(usageRecords.workspaceId, workspaceId))
+      .orderBy(sql`${usageRecords.recordedAt} desc`)
+      .limit(limit);
+    return rows.map(rowToEntity);
+  }
 }

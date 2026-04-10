@@ -15,9 +15,17 @@ import {
   listPosts,
   getPost,
   ValidationError,
+  requiresApproval,
+  createApprovalRequest,
 } from "@sns-agent/core";
-import type { MediaAttachment, Post, PostUsecaseDeps } from "@sns-agent/core";
-import { DrizzlePostRepository, DrizzleAccountRepository } from "@sns-agent/db";
+import type { MediaAttachment, Post, PostUsecaseDeps, ApprovalUsecaseDeps } from "@sns-agent/core";
+import {
+  DrizzlePostRepository,
+  DrizzleAccountRepository,
+  DrizzleUsageRepository,
+  DrizzleApprovalRepository,
+  DrizzleAuditLogRepository,
+} from "@sns-agent/db";
 import { requirePermission } from "../middleware/rbac.js";
 import { idempotencyMiddleware } from "../middleware/idempotency.js";
 import { getProviderRegistry } from "../providers.js";
@@ -39,6 +47,7 @@ function buildDeps(db: AppVariables["db"]): PostUsecaseDeps {
     accountRepo: new DrizzleAccountRepository(db),
     providers: getProviderRegistry().getAll(),
     encryptionKey,
+    usageRepo: new DrizzleUsageRepository(db),
   };
 }
 
@@ -225,14 +234,66 @@ posts.delete("/:id", requirePermission("post:publish"), async (c) => {
 // ───────────────────────────────────────────
 // POST /api/posts/:id/publish - 即時公開
 // ───────────────────────────────────────────
+//
+// 承認ポリシー統合:
+//   actor.role に基づき requiresApproval を判定し、承認が必要な場合は
+//   承認リクエストを作成して Post の status を 'scheduled'（承認待ち）に
+//   変更する。レスポンスには { requiresApproval: true, approvalId } を含める。
+//   design.md 4.2、architecture.md 12.3 に準拠。
+//
 posts.post("/:id/publish", requirePermission("post:publish"), async (c) => {
   const actor = c.get("actor");
   const db = c.get("db");
   const deps = buildDeps(db);
   const id = c.req.param("id");
 
+  // 事前に Post の存在と所有権を確認
+  const post = await getPost(deps, actor.workspaceId, id);
+
+  if (post.status !== "draft") {
+    throw new ValidationError(`Only draft posts can be published (current status: ${post.status})`);
+  }
+
+  // 承認ポリシー判定（agent ロールや LINE broadcast 等）
+  const needsApproval = requiresApproval("post:publish", actor.role, {
+    platform: post.platform,
+  });
+
+  if (needsApproval) {
+    const approvalDeps: ApprovalUsecaseDeps = {
+      approvalRepo: new DrizzleApprovalRepository(db),
+      auditRepo: new DrizzleAuditLogRepository(db),
+    };
+
+    const approval = await createApprovalRequest(approvalDeps, {
+      workspaceId: actor.workspaceId,
+      resourceType: "post",
+      resourceId: post.id,
+      requestedBy: actor.id,
+      requestedByType: actor.type === "agent" ? "agent" : "user",
+      reason: `${actor.role} requested publish of ${post.platform} post`,
+    });
+
+    // Post の status を scheduled（承認待ち）に変更する
+    const updated = await deps.postRepo.update(post.id, { status: "scheduled" });
+
+    return c.json(
+      {
+        data: serializePost(updated),
+        meta: {
+          requiresApproval: true,
+          approvalId: approval.id,
+        },
+      },
+      202,
+    );
+  }
+
   const published = await publishPost(deps, actor.workspaceId, id);
-  return c.json({ data: serializePost(published) });
+  return c.json({
+    data: serializePost(published),
+    meta: { requiresApproval: false },
+  });
 });
 
 export { posts };
