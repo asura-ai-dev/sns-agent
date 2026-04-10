@@ -41,3 +41,6 @@ export type {
 
 // JobQueue
 export type { JobQueue } from "./job-queue.js";
+
+// ProviderRegistry
+export { ProviderRegistry } from "./provider-registry.js";

@@ -47,6 +47,9 @@ importers:
       '@sns-agent/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@sns-agent/provider-x':
+        specifier: workspace:*
+        version: link:../../packages/provider-x
       hono:
         specifier: ^4.7.6
         version: 4.12.12
@@ -105,7 +108,17 @@ importers:
         version: 5.9.3
 
   packages/cli:
+    dependencies:
+      '@sns-agent/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      commander:
+        specifier: ^12.1.0
+        version: 12.1.0
     devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.19.17
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
@@ -186,10 +199,23 @@ importers:
         version: 5.9.3
 
   packages/provider-x:
+    dependencies:
+      '@sns-agent/config':
+        specifier: workspace:*
+        version: link:../config
+      '@sns-agent/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.19.17
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.4(@types/node@22.19.17)(vite@8.0.8(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0))
 
   packages/sdk:
     dependencies:
@@ -1392,6 +1418,10 @@ packages:
 
   color-name@1.1.4:
     resolution: {integrity: sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==}
+
+  commander@12.1.0:
+    resolution: {integrity: sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA==}
+    engines: {node: '>=18'}
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -3128,6 +3158,8 @@ snapshots:
       color-name: 1.1.4
 
   color-name@1.1.4: {}
+
+  commander@12.1.0: {}
 
   concat-map@0.0.1: {}
 

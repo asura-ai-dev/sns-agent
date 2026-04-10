@@ -66,6 +66,7 @@ export type {
   RefreshResult,
   JobQueue,
 } from "./interfaces/index.js";
+export { ProviderRegistry } from "./interfaces/index.js";
 
 // Policies
 export { PERMISSIONS, rolePermissions, checkPermission } from "./policies/index.js";

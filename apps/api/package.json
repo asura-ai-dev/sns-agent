@@ -15,6 +15,7 @@
     "@sns-agent/config": "workspace:*",
     "@sns-agent/core": "workspace:*",
     "@sns-agent/db": "workspace:*",
+    "@sns-agent/provider-x": "workspace:*",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

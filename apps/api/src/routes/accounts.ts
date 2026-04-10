@@ -20,6 +20,7 @@ import {
 import type { AccountUsecaseDeps } from "@sns-agent/core";
 import { DrizzleAccountRepository } from "@sns-agent/db";
 import { requirePermission } from "../middleware/rbac.js";
+import { getProviderRegistry } from "../providers.js";
 import type { AppVariables } from "../types.js";
 
 const accounts = new Hono<{ Variables: AppVariables }>();
@@ -31,7 +32,7 @@ const accounts = new Hono<{ Variables: AppVariables }>();
 /**
  * リクエストコンテキストから AccountUsecaseDeps を組み立てる。
  *
- * providers は現時点では空の Map を渡す（provider-x 等の実装後に注入する）。
+ * providers は ProviderRegistry から取得する（Task 2003）。
  * encryptionKey は環境変数 ENCRYPTION_KEY から取得。開発時はデフォルト値を使用。
  */
 function buildDeps(db: AppVariables["db"]): AccountUsecaseDeps {
@@ -44,7 +45,7 @@ function buildDeps(db: AppVariables["db"]): AccountUsecaseDeps {
 
   return {
     accountRepo: new DrizzleAccountRepository(db),
-    providers: new Map(),
+    providers: getProviderRegistry().getAll(),
     encryptionKey,
     callbackBaseUrl,
   };
