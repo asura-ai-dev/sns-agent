@@ -8,13 +8,14 @@
   "scripts": {
     "build": "tsc",
     "lint": "echo \"Lint via root\"",
-    "test": "echo \"No tests yet\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@sns-agent/config": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.4"
   }
 }

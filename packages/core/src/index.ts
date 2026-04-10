@@ -43,6 +43,7 @@ export type {
   BudgetPolicyRepository,
   LlmRouteRepository,
   AuditLogRepository,
+  AuditLogFilterOptions,
   SocialProvider,
   ConnectAccountInput,
   ConnectAccountResult,
@@ -73,6 +74,25 @@ export type { Permission } from "./policies/index.js";
 // Usecases
 export { resolveActorByApiKey, resolveActorByUserId } from "./usecases/auth.js";
 export type { Actor, AuthUserRepository, AuthAgentIdentityRepository } from "./usecases/auth.js";
+
+export {
+  listAccounts,
+  getAccount,
+  initiateConnection,
+  handleOAuthCallback,
+  disconnectAccount,
+  refreshAccountToken,
+  checkTokenExpiry,
+} from "./usecases/account.js";
+export type { AccountSummary, AccountUsecaseDeps, OAuthStatePayload } from "./usecases/account.js";
+
+export { recordAudit, listAuditLogs, exportAuditLogs } from "./usecases/audit.js";
+export type {
+  RecordAuditInput,
+  ListAuditLogsInput,
+  ListAuditLogsResult,
+  ExportAuditLogsInput,
+} from "./usecases/audit.js";
 
 // Errors
 export {

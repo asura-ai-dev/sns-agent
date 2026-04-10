@@ -12,8 +12,9 @@ import {
   errorHandler,
   createCorsMiddleware,
   authMiddleware,
+  auditMiddleware,
 } from "./middleware/index.js";
-import type { Actor } from "@sns-agent/core";
+import type { AppVariables } from "./types.js";
 import {
   accounts,
   posts,
@@ -27,16 +28,6 @@ import {
   approvals,
   webhooks,
 } from "./routes/index.js";
-
-/**
- * Hono の Variables 型定義。
- * c.set / c.get で型安全にアクセスする。
- */
-type AppVariables = {
-  requestId: string;
-  db: DbClient;
-  actor: Actor;
-};
 
 const app = new Hono<{ Variables: AppVariables }>();
 
@@ -55,8 +46,16 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-// 認証ミドルウェア（/api/health と /api/webhooks を除く全ルートに適用）
-app.use("/api/accounts/*", authMiddleware);
+// 認証ミドルウェア（/api/health, /api/webhooks, /api/accounts/callback を除く全ルートに適用）
+// OAuth コールバックは認証不要（state パラメータで検証する）
+app.use("/api/accounts/*", async (c, next) => {
+  // callback エンドポイントは認証をスキップ
+  if (c.req.path === "/api/accounts/callback") {
+    await next();
+    return;
+  }
+  return authMiddleware(c, next);
+});
 app.use("/api/posts/*", authMiddleware);
 app.use("/api/schedules/*", authMiddleware);
 app.use("/api/usage/*", authMiddleware);
@@ -66,6 +65,17 @@ app.use("/api/skills/*", authMiddleware);
 app.use("/api/agent/*", authMiddleware);
 app.use("/api/audit/*", authMiddleware);
 app.use("/api/approvals/*", authMiddleware);
+
+// 自動監査記録ミドルウェア（認証後・書き込み系エンドポイントで適用）
+// POST / PATCH / PUT / DELETE の完了後に audit_logs テーブルへ追記する
+app.use("/api/accounts/*", auditMiddleware);
+app.use("/api/posts/*", auditMiddleware);
+app.use("/api/schedules/*", auditMiddleware);
+app.use("/api/budget/*", auditMiddleware);
+app.use("/api/llm/*", auditMiddleware);
+app.use("/api/skills/*", auditMiddleware);
+app.use("/api/agent/*", auditMiddleware);
+app.use("/api/approvals/*", auditMiddleware);
 
 // エラーハンドラ
 app.onError(errorHandler);
