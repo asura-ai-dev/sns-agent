@@ -8,12 +8,21 @@
   "scripts": {
     "build": "tsc",
     "lint": "echo \"Lint via root\"",
-    "test": "echo \"No tests yet\""
+    "test": "echo \"No tests yet\"",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "drizzle-orm": "^0.44.1"
+    "@sns-agent/config": "workspace:*",
+    "@sns-agent/core": "workspace:*",
+    "drizzle-orm": "^0.44.1",
+    "better-sqlite3": "^11.9.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.15.0",
+    "drizzle-kit": "^0.31.1",
     "typescript": "^5.8.3"
   }
 }
