@@ -106,17 +106,49 @@ function makeAccountRepo(accounts: SocialAccount[]): AccountRepository {
 function makePostRepo(initial: Post[] = []): PostRepository {
   const store = new Map(initial.map((p) => [p.id, { ...p }]));
   let seq = initial.length;
+  const filter = (wsId: string, opts: Parameters<PostRepository["findByWorkspace"]>[1]): Post[] => {
+    let arr = [...store.values()].filter((p) => p.workspaceId === wsId);
+    const platformList =
+      opts?.platforms && opts.platforms.length > 0
+        ? opts.platforms
+        : opts?.platform
+          ? [opts.platform]
+          : undefined;
+    if (platformList) arr = arr.filter((p) => platformList.includes(p.platform));
+    const statusList =
+      opts?.statuses && opts.statuses.length > 0
+        ? opts.statuses
+        : opts?.status
+          ? [opts.status]
+          : undefined;
+    if (statusList) arr = arr.filter((p) => statusList.includes(p.status));
+    if (opts?.from) {
+      const from = opts.from;
+      arr = arr.filter((p) => p.createdAt >= from);
+    }
+    if (opts?.to) {
+      const to = opts.to;
+      arr = arr.filter((p) => p.createdAt <= to);
+    }
+    if (opts?.search) {
+      const q = opts.search.toLowerCase();
+      arr = arr.filter((p) => (p.contentText ?? "").toLowerCase().includes(q));
+    }
+    arr.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return arr;
+  };
   return {
     findById: async (id) => {
       const p = store.get(id);
       return p ? { ...p } : null;
     },
     findByWorkspace: async (wsId, opts) => {
-      let arr = [...store.values()].filter((p) => p.workspaceId === wsId);
-      if (opts?.platform) arr = arr.filter((p) => p.platform === opts.platform);
-      if (opts?.status) arr = arr.filter((p) => p.status === opts.status);
-      return arr;
+      const arr = filter(wsId, opts);
+      const offset = opts?.offset ?? 0;
+      const end = opts?.limit ? offset + opts.limit : undefined;
+      return arr.slice(offset, end);
     },
+    countByWorkspace: async (wsId, opts) => filter(wsId, opts).length,
     create: async (p) => {
       seq += 1;
       const now = new Date();
@@ -191,6 +223,14 @@ function makeJobRepo(initial: ScheduledJob[] = []): ScheduledJobRepository & {
       const locked = { ...j, status: "locked" as const, lockedAt: new Date() };
       store.set(id, locked);
       return { ...locked };
+    },
+    findByPostIds: async (postIds) => {
+      if (postIds.length === 0) return [];
+      const set = new Set(postIds);
+      return [...store.values()]
+        .filter((j) => set.has(j.postId))
+        .sort((a, b) => b.scheduledAt.getTime() - a.scheduledAt.getTime())
+        .map((j) => ({ ...j }));
     },
     findByWorkspace: async (wsId, opts) => {
       let arr = [...store.values()].filter((j) => j.workspaceId === wsId);

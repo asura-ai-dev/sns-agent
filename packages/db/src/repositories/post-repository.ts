@@ -1,12 +1,16 @@
 /**
  * PostRepository の Drizzle 実装
  * core/interfaces/repositories.ts の PostRepository に準拠
+ *
+ * Task 2006: 一覧クエリを拡充し、複数 platform / status、日付範囲、
+ * contentText 部分一致検索、ソートキー切り替え、total count 返却に対応する。
  */
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, asc, inArray, gte, lte, like, sql, type SQL } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import type { PostRepository } from "@sns-agent/core";
+import type { PostRepository, PostListFilters } from "@sns-agent/core";
 import type { Post } from "@sns-agent/core";
 import { posts } from "../schema/posts.js";
+import { scheduledJobs } from "../schema/scheduled-jobs.js";
 import type { DbClient } from "../client.js";
 
 function rowToEntity(row: typeof posts.$inferSelect): Post {
@@ -28,6 +32,51 @@ function rowToEntity(row: typeof posts.$inferSelect): Post {
   };
 }
 
+/**
+ * PostListFilters から WHERE 条件の配列を構築する。
+ * workspaceId は別途呼び出し側で追加する。
+ */
+function buildConditions(options: PostListFilters | undefined): SQL[] {
+  const conditions: SQL[] = [];
+  if (!options) return conditions;
+
+  // platforms (配列) を優先、なければ単一 platform
+  const platformList =
+    options.platforms && options.platforms.length > 0
+      ? options.platforms
+      : options.platform
+        ? [options.platform]
+        : undefined;
+  if (platformList && platformList.length > 0) {
+    conditions.push(inArray(posts.platform, platformList as Array<Post["platform"]>));
+  }
+
+  const statusList =
+    options.statuses && options.statuses.length > 0
+      ? options.statuses
+      : options.status
+        ? [options.status]
+        : undefined;
+  if (statusList && statusList.length > 0) {
+    conditions.push(inArray(posts.status, statusList as Array<Post["status"]>));
+  }
+
+  if (options.from) {
+    conditions.push(gte(posts.createdAt, options.from));
+  }
+  if (options.to) {
+    conditions.push(lte(posts.createdAt, options.to));
+  }
+
+  if (options.search && options.search.length > 0) {
+    // SQLite LIKE は大文字小文字を区別しない (default collation)
+    // エスケープは単純化のため %/_ はそのまま扱う (v1 ベストエフォート)
+    conditions.push(like(posts.contentText, `%${options.search}%`));
+  }
+
+  return conditions;
+}
+
 export class DrizzlePostRepository implements PostRepository {
   constructor(private readonly db: DbClient) {}
 
@@ -36,24 +85,48 @@ export class DrizzlePostRepository implements PostRepository {
     return rows.length > 0 ? rowToEntity(rows[0]) : null;
   }
 
-  async findByWorkspace(
-    workspaceId: string,
-    options?: { platform?: string; status?: string; limit?: number; offset?: number },
-  ): Promise<Post[]> {
-    const conditions = [eq(posts.workspaceId, workspaceId)];
+  async findByWorkspace(workspaceId: string, options?: PostListFilters): Promise<Post[]> {
+    const conditions: SQL[] = [eq(posts.workspaceId, workspaceId), ...buildConditions(options)];
 
-    if (options?.platform) {
-      conditions.push(eq(posts.platform, options.platform as Post["platform"]));
+    const orderBy = options?.orderBy ?? "createdAt";
+
+    // scheduledAt ソートは scheduled_jobs との LEFT JOIN が必要。
+    // created_at / published_at は posts テーブル内で完結。
+    if (orderBy === "scheduledAt") {
+      // 1 post に対し複数ジョブがある可能性があるため MAX(scheduled_at) を使う
+      const subquery = this.db
+        .select({
+          postId: scheduledJobs.postId,
+          maxScheduledAt: sql<number>`MAX(${scheduledJobs.scheduledAt})`.as("max_scheduled_at"),
+        })
+        .from(scheduledJobs)
+        .groupBy(scheduledJobs.postId)
+        .as("latest_schedule");
+
+      let query = this.db
+        .select({ post: posts })
+        .from(posts)
+        .leftJoin(subquery, eq(posts.id, subquery.postId))
+        .where(and(...conditions))
+        .orderBy(desc(subquery.maxScheduledAt), desc(posts.createdAt));
+
+      if (options?.limit) {
+        query = query.limit(options.limit) as typeof query;
+      }
+      if (options?.offset) {
+        query = query.offset(options.offset) as typeof query;
+      }
+      const rows = await query;
+      return rows.map((r) => rowToEntity(r.post));
     }
-    if (options?.status) {
-      conditions.push(eq(posts.status, options.status as Post["status"]));
-    }
+
+    const orderExpr = orderBy === "publishedAt" ? desc(posts.publishedAt) : desc(posts.createdAt);
 
     let query = this.db
       .select()
       .from(posts)
       .where(and(...conditions))
-      .orderBy(desc(posts.createdAt));
+      .orderBy(orderExpr, desc(posts.createdAt));
 
     if (options?.limit) {
       query = query.limit(options.limit) as typeof query;
@@ -64,6 +137,18 @@ export class DrizzlePostRepository implements PostRepository {
 
     const rows = await query;
     return rows.map(rowToEntity);
+  }
+
+  async countByWorkspace(
+    workspaceId: string,
+    options?: Omit<PostListFilters, "limit" | "offset" | "orderBy">,
+  ): Promise<number> {
+    const conditions: SQL[] = [eq(posts.workspaceId, workspaceId), ...buildConditions(options)];
+    const rows = await this.db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(posts)
+      .where(and(...conditions));
+    return Number(rows[0]?.count ?? 0);
   }
 
   async create(post: Omit<Post, "id" | "createdAt" | "updatedAt">): Promise<Post> {
@@ -124,3 +209,6 @@ export class DrizzlePostRepository implements PostRepository {
     return rows.length > 0 ? rowToEntity(rows[0]) : null;
   }
 }
+
+// asc is exported to keep the import surface aligned with future sort extensions.
+void asc;

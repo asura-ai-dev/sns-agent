@@ -88,3 +88,28 @@ export class RateLimitError extends DomainError {
     this.name = "RateLimitError";
   }
 }
+
+/**
+ * LLM エラー (LLM_xxx)
+ * LLM プロバイダ (OpenAI / Anthropic 等) の呼び出し失敗時にスローする。
+ *
+ * code は以下を想定:
+ *  - LLM_API_ERROR: API 呼び出し失敗 (HTTP 5xx, ネットワーク等)
+ *  - LLM_AUTH_ERROR: 認証失敗 (APIキー不正)
+ *  - LLM_RATE_LIMIT: レート制限
+ *  - LLM_TIMEOUT: タイムアウト
+ *  - LLM_INVALID_REQUEST: 不正なリクエスト (4xx)
+ *  - LLM_ROUTE_NOT_FOUND: workspace に対する llm route が未設定
+ *  - LLM_UNSUPPORTED_PROVIDER: 未対応の provider 指定
+ */
+export class LlmError extends DomainError {
+  constructor(
+    code: string,
+    message: string,
+    public readonly provider?: string,
+    details?: unknown,
+  ) {
+    super(code, message, details);
+    this.name = "LlmError";
+  }
+}

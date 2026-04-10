@@ -2,7 +2,7 @@
  * LlmRouteRepository の Drizzle 実装（骨格）
  * core/interfaces/repositories.ts の LlmRouteRepository に準拠
  */
-import { eq, and, desc, isNull, or } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { LlmRouteRepository } from "@sns-agent/core";
 import type { LlmRoute } from "@sns-agent/core";
@@ -43,30 +43,42 @@ export class DrizzleLlmRouteRepository implements LlmRouteRepository {
     workspaceId: string,
     options: { platform?: string; action?: string },
   ): Promise<LlmRoute | null> {
-    // Priority-based matching: most specific first (both set), then partial, then default (both null)
+    // Fetch all workspace routes and perform specificity scoring in the application layer.
+    // Specificity rule (design.md 3.1): platform+action > platform > action > default (both NULL).
+    // Ties broken by route.priority DESC.
+    //
+    // SQL 層で複雑な specificity ロジックを組むより、全件取得してアプリ側で判定する方が
+    // v1 スコープではシンプルかつテスト容易。ワークスペースあたりのルート件数は
+    // 数十件程度を想定しており、全件取得のコストは問題にならない。
     const rows = await this.db
       .select()
       .from(llmRoutes)
-      .where(
-        and(
-          eq(llmRoutes.workspaceId, workspaceId),
-          or(
-            // Exact match
-            options.platform
-              ? eq(llmRoutes.platform, options.platform)
-              : isNull(llmRoutes.platform),
-            isNull(llmRoutes.platform),
-          ),
-          or(
-            options.action ? eq(llmRoutes.action, options.action) : isNull(llmRoutes.action),
-            isNull(llmRoutes.action),
-          ),
-        ),
-      )
-      .orderBy(desc(llmRoutes.priority))
-      .limit(1);
+      .where(eq(llmRoutes.workspaceId, workspaceId));
 
-    return rows.length > 0 ? rowToEntity(rows[0]) : null;
+    if (rows.length === 0) return null;
+
+    type Scored = { row: (typeof rows)[number]; score: number };
+    const candidates: Scored[] = [];
+
+    for (const row of rows) {
+      // route が platform/action を指定していて、options と一致しない場合は除外
+      if (row.platform !== null && row.platform !== options.platform) continue;
+      if (row.action !== null && row.action !== options.action) continue;
+
+      let score = 0;
+      if (row.platform !== null && row.platform === options.platform) score += 2;
+      if (row.action !== null && row.action === options.action) score += 1;
+      candidates.push({ row, score });
+    }
+
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return b.row.priority - a.row.priority;
+    });
+
+    return rowToEntity(candidates[0].row);
   }
 
   async create(route: Omit<LlmRoute, "id" | "createdAt" | "updatedAt">): Promise<LlmRoute> {

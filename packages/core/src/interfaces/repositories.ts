@@ -34,12 +34,47 @@ export interface AccountRepository {
 // ───────────────────────────────────────────
 // PostRepository
 // ───────────────────────────────────────────
+
+/**
+ * 投稿一覧のソートキー。
+ * - createdAt: 作成日時（デフォルト、降順）
+ * - publishedAt: 公開日時（降順。NULL は末尾）
+ * - scheduledAt: 予約日時（scheduled_jobs.scheduled_at を参照）
+ */
+export type PostOrderBy = "createdAt" | "publishedAt" | "scheduledAt";
+
+export interface PostListFilters {
+  /** 単一プラットフォーム（後方互換） */
+  platform?: string;
+  /** 複数プラットフォーム（OR 条件） */
+  platforms?: string[];
+  /** 単一ステータス（後方互換） */
+  status?: string;
+  /** 複数ステータス（OR 条件） */
+  statuses?: string[];
+  /** created_at の下限（inclusive） */
+  from?: Date;
+  /** created_at の上限（inclusive） */
+  to?: Date;
+  /** contentText の部分一致検索 */
+  search?: string;
+  /** ソートキー（デフォルト createdAt） */
+  orderBy?: PostOrderBy;
+  limit?: number;
+  offset?: number;
+}
+
 export interface PostRepository {
   findById(id: string): Promise<Post | null>;
-  findByWorkspace(
+  findByWorkspace(workspaceId: string, options?: PostListFilters): Promise<Post[]>;
+  /**
+   * findByWorkspace と同じフィルタで該当件数を返す。
+   * limit/offset/orderBy は無視される。
+   */
+  countByWorkspace(
     workspaceId: string,
-    options?: { platform?: string; status?: string; limit?: number; offset?: number },
-  ): Promise<Post[]>;
+    options?: Omit<PostListFilters, "limit" | "offset" | "orderBy">,
+  ): Promise<number>;
   create(post: Omit<Post, "id" | "createdAt" | "updatedAt">): Promise<Post>;
   update(id: string, data: Partial<Post>): Promise<Post>;
   delete(id: string): Promise<void>;
@@ -60,6 +95,13 @@ export interface ScheduledJobRepository {
    * 既にロックされている場合は null を返す。
    */
   lockJob(id: string): Promise<ScheduledJob | null>;
+  /**
+   * 指定した post_id 群に紐づく予約ジョブを返す。
+   * 投稿一覧の schedule 情報（scheduledAt, status）を埋めるために使う。
+   * 1 post に対し複数ジョブが存在する場合もあるが、呼び出し側は
+   * 最新（scheduled_at 降順の先頭）を選択する。
+   */
+  findByPostIds(postIds: string[]): Promise<ScheduledJob[]>;
 }
 
 // ───────────────────────────────────────────
@@ -79,6 +121,8 @@ export interface UsageRepository {
     workspaceId: string,
     options: {
       platform?: string;
+      /** 指定時はこのエンドポイントに限定して集計する（Task 4004 予算 scope=endpoint 用） */
+      endpoint?: string;
       startDate: Date;
       endDate: Date;
     },
@@ -89,6 +133,7 @@ export interface UsageRepository {
 // BudgetPolicyRepository
 // ───────────────────────────────────────────
 export interface BudgetPolicyRepository {
+  findById(id: string): Promise<BudgetPolicy | null>;
   findByWorkspace(workspaceId: string): Promise<BudgetPolicy[]>;
   create(policy: Omit<BudgetPolicy, "id" | "createdAt" | "updatedAt">): Promise<BudgetPolicy>;
   update(id: string, data: Partial<BudgetPolicy>): Promise<BudgetPolicy>;

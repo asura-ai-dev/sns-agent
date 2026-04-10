@@ -9,4 +9,5 @@ export {
   BudgetExceededError,
   ProviderError,
   RateLimitError,
+  LlmError,
 } from "./domain-error.js";

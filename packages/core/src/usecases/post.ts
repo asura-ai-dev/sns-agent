@@ -6,15 +6,28 @@
  */
 import type { Platform } from "@sns-agent/config";
 import { estimateCost } from "@sns-agent/config";
-import type { MediaAttachment, Post, SocialAccount } from "../domain/entities.js";
+import type { MediaAttachment, Post, ScheduledJob, SocialAccount } from "../domain/entities.js";
 import type {
   AccountRepository,
+  ApprovalRepository,
+  AuditLogRepository,
+  BudgetPolicyRepository,
+  PostListFilters as RepoPostListFilters,
+  PostOrderBy,
   PostRepository,
+  ScheduledJobRepository,
   UsageRepository,
 } from "../interfaces/repositories.js";
 import type { SocialProvider, ValidationResult } from "../interfaces/social-provider.js";
-import { NotFoundError, ValidationError, ProviderError } from "../errors/domain-error.js";
+import {
+  BudgetExceededError,
+  NotFoundError,
+  ProviderError,
+  ValidationError,
+} from "../errors/domain-error.js";
 import { decrypt } from "../domain/crypto.js";
+import { evaluateBudgetPolicy, type BudgetEvaluation } from "../policies/budget.js";
+import { createApprovalRequest, type ApprovalUsecaseDeps } from "./approval.js";
 
 // ───────────────────────────────────────────
 // 依存注入コンテキスト
@@ -32,6 +45,26 @@ export interface PostUsecaseDeps {
    * Task 4003: Provider 呼び出し成否をこの Repository に記録する。
    */
   usageRepo?: UsageRepository;
+  /**
+   * 予約ジョブリポジトリ。省略時は listPosts の schedule 情報が埋まらない (後方互換)。
+   * Task 2006: 投稿一覧の schedule フィールド生成に使う。
+   */
+  scheduledJobRepo?: ScheduledJobRepository;
+  /**
+   * 予算ポリシーリポジトリ。
+   * Task 4004: publishPost 実行前に evaluateBudgetPolicy を呼ぶのに使用する。
+   * 省略時は予算チェックをスキップ (後方互換)。
+   */
+  budgetPolicyRepo?: BudgetPolicyRepository;
+  /**
+   * 承認リポジトリ。予算ポリシーで require-approval になった場合に使う (Task 4004)。
+   * 省略時は require-approval を warn と同じ挙動にフォールバック（後方互換）。
+   */
+  approvalRepo?: ApprovalRepository;
+  /**
+   * 監査ログリポジトリ。承認リクエスト作成時の記録に使う (Task 4004 / 6002)。
+   */
+  auditRepo?: AuditLogRepository;
 }
 
 // ───────────────────────────────────────────
@@ -57,22 +90,57 @@ export interface UpdatePostInput {
 }
 
 export interface ListPostsFilters {
+  /** 単一プラットフォーム（後方互換） */
   platform?: Platform;
+  /** 複数プラットフォーム（OR 条件） */
+  platforms?: Platform[];
+  /** 単一ステータス（後方互換） */
   status?: Post["status"];
+  /** 複数ステータス（OR 条件） */
+  statuses?: Array<Post["status"]>;
+  /** created_at の下限 */
   from?: Date;
+  /** created_at の上限 */
   to?: Date;
+  /** contentText の部分一致検索 */
+  search?: string;
+  /** ソートキー。デフォルト createdAt */
+  orderBy?: PostOrderBy;
+  /** 1-based ページ番号 */
   page?: number;
+  /** 1 ページあたりの件数。デフォルト 20、最大 100 */
   limit?: number;
 }
 
+/** 投稿一覧の1要素。schedule / socialAccount を埋めた投稿オブジェクト */
+export interface PostListItem extends Post {
+  /** JOIN したソーシャルアカウント情報 */
+  socialAccount: {
+    id: string;
+    platform: Platform;
+    displayName: string;
+  } | null;
+  /** 予約ジョブが存在する場合のスケジュール情報 */
+  schedule: {
+    scheduledAt: Date;
+    status: ScheduledJob["status"];
+  } | null;
+}
+
 export interface ListPostsResult {
-  data: Post[];
+  data: PostListItem[];
   meta: {
     page: number;
     limit: number;
     total: number;
+    totalPages: number;
   };
 }
+
+/** 1 ページあたりの最大件数 */
+const LIST_POSTS_MAX_LIMIT = 100;
+/** 1 ページあたりのデフォルト件数 */
+const LIST_POSTS_DEFAULT_LIMIT = 20;
 
 // ───────────────────────────────────────────
 // ヘルパー
@@ -289,24 +357,117 @@ export async function updatePost(
 // ───────────────────────────────────────────
 
 /**
- * 下書きを即時公開する。
+ * Task 4004: publishPost の拡張結果型。
+ * API ルートはこの型経由で budget warning / require-approval を受け取る。
+ */
+export interface PublishPostResult {
+  post: Post;
+  /**
+   * 予算ポリシー評価結果。budgetPolicyRepo 未設定または該当ポリシーなしの場合は null。
+   * action / allowed / percentage を呼び出し側が参照する。
+   */
+  budgetEvaluation: BudgetEvaluation | null;
+  /**
+   * 予算ポリシーが require-approval を返し、承認リクエストが作成された場合の ID。
+   * 承認が不要な場合は null。
+   */
+  approvalRequestId: string | null;
+}
+
+/**
+ * 予算ポリシーチェック付きで下書きを公開する (Task 4004)。
  *
  * フロー:
  * 1. Post を取得し status が draft であることを確認
- * 2. status を publishing に更新（中間状態）
- * 3. Provider.publishPost を呼び出し
- * 4. 成功: status=published, platform_post_id, published_at を記録
- *    失敗: status=failed, last error を validation_result に追記
+ * 2. 予算ポリシーを評価（deps.budgetPolicyRepo 指定時のみ）
+ *    - block: BudgetExceededError を投げて公開を中止
+ *    - require-approval: 承認リクエストを作成し、Post を scheduled に戻す
+ *    - warn: 続行、結果に warning を含める
+ * 3. Provider.publishPost を呼び出し（以降は従来フロー）
  */
-export async function publishPost(
+export async function publishPostChecked(
   deps: PostUsecaseDeps,
   workspaceId: string,
   postId: string,
-): Promise<Post> {
+  options?: { requestedBy?: string | null },
+): Promise<PublishPostResult> {
   const post = await loadOwnedPost(deps, workspaceId, postId);
 
   if (post.status !== "draft") {
     throw new ValidationError(`Only draft posts can be published (current status: ${post.status})`);
+  }
+
+  // 1. 予算ポリシー評価
+  let evaluation: BudgetEvaluation | null = null;
+  if (deps.budgetPolicyRepo && deps.usageRepo) {
+    const endpoint = "post.publish";
+    const additionalCost = estimateCost(post.platform, endpoint, 1) ?? 0;
+    evaluation = await evaluateBudgetPolicy(
+      {
+        budgetPolicyRepo: deps.budgetPolicyRepo,
+        usageRepo: deps.usageRepo,
+      },
+      {
+        workspaceId,
+        platform: post.platform,
+        endpoint,
+        additionalCost,
+      },
+    );
+
+    // block: 公開中止
+    if (!evaluation.allowed && evaluation.action === "block") {
+      throw new BudgetExceededError(
+        evaluation.reason ?? `Budget exceeded for ${post.platform}/post.publish`,
+        {
+          policyId: evaluation.matchedPolicy?.id,
+          scopeType: evaluation.matchedPolicy?.scopeType,
+          consumed: evaluation.consumed,
+          limit: evaluation.limit,
+          percentage: evaluation.percentage,
+        },
+      );
+    }
+
+    // require-approval: 承認リクエストを作成し、公開は保留
+    if (evaluation.action === "require-approval") {
+      if (deps.approvalRepo && deps.auditRepo) {
+        const approvalDeps: ApprovalUsecaseDeps = {
+          approvalRepo: deps.approvalRepo,
+          auditRepo: deps.auditRepo,
+        };
+        const requester = options?.requestedBy ?? post.createdBy ?? "system";
+        const approval = await createApprovalRequest(approvalDeps, {
+          workspaceId,
+          resourceType: "post",
+          resourceId: post.id,
+          requestedBy: requester,
+          reason: evaluation.reason,
+        });
+
+        // Post の status を scheduled (承認待ち) に変更
+        const updated = await deps.postRepo.update(postId, {
+          status: "scheduled",
+        });
+
+        return {
+          post: updated,
+          budgetEvaluation: evaluation,
+          approvalRequestId: approval.id,
+        };
+      }
+      // approvalRepo 未設定: BudgetExceededError で通知
+      throw new BudgetExceededError(
+        `Budget requires approval but approval repo is not configured: ${evaluation.reason}`,
+        {
+          policyId: evaluation.matchedPolicy?.id,
+          consumed: evaluation.consumed,
+          limit: evaluation.limit,
+          percentage: evaluation.percentage,
+        },
+      );
+    }
+    // warn は続行
   }
 
   const account = await loadAccountForWorkspace(deps, workspaceId, post.socialAccountId);
@@ -360,7 +521,11 @@ export async function publishPost(
       actorId: post.createdBy ?? null,
       success: true,
     });
-    return published;
+    return {
+      post: published,
+      budgetEvaluation: evaluation,
+      approvalRequestId: null,
+    };
   } catch (err) {
     // Provider 呼び出し自体が throw した場合
     if (err instanceof ProviderError) {
@@ -387,6 +552,23 @@ export async function publishPost(
       { postId },
     );
   }
+}
+
+/**
+ * 後方互換用の薄いラッパー。
+ * Task 2004 からの既存呼び出し (CLI / 承認フロー / createPost publishNow) は Post 単体を期待するため、
+ * publishPostChecked の結果から post のみを取り出して返す。
+ *
+ * 予算ポリシーが block / require-approval の場合は publishPostChecked が例外または
+ * approvalRequestId を返すため、ここで直接呼ぶ API ルートは publishPostChecked を使うこと。
+ */
+export async function publishPost(
+  deps: PostUsecaseDeps,
+  workspaceId: string,
+  postId: string,
+): Promise<Post> {
+  const result = await publishPostChecked(deps, workspaceId, postId);
+  return result.post;
 }
 
 // ───────────────────────────────────────────
@@ -444,9 +626,34 @@ export async function deletePost(
 // ───────────────────────────────────────────
 
 /**
+ * リポジトリへ渡す共通フィルタを構築する。
+ */
+function buildRepoFilters(filters: ListPostsFilters): RepoPostListFilters {
+  return {
+    platform: filters.platform,
+    platforms: filters.platforms,
+    status: filters.status,
+    statuses: filters.statuses,
+    from: filters.from,
+    to: filters.to,
+    search: filters.search,
+    orderBy: filters.orderBy,
+  };
+}
+
+/**
  * ワークスペースの投稿一覧を返す。
- * filters: platform, status, 日付範囲 (from/to, created_at 基準), page, limit
- * from/to はリポジトリ側がサポートしていないため、ここでフィルタする（v1 ベストエフォート）。
+ *
+ * 機能:
+ * - platform / status は複数指定可（platforms / statuses を優先）
+ * - from / to で created_at の範囲検索
+ * - search で contentText の部分一致検索
+ * - orderBy: createdAt / publishedAt / scheduledAt
+ * - ページネーション: page (1-based) + limit (default 20, max 100)
+ * - total count と totalPages を meta に返す
+ * - 各 Post に socialAccount / schedule を付与して返す
+ *
+ * deps.scheduledJobRepo が省略された場合、schedule フィールドは常に null。
  */
 export async function listPosts(
   deps: PostUsecaseDeps,
@@ -454,41 +661,74 @@ export async function listPosts(
   filters: ListPostsFilters = {},
 ): Promise<ListPostsResult> {
   const page = filters.page && filters.page > 0 ? filters.page : 1;
-  const limit = filters.limit && filters.limit > 0 ? Math.min(filters.limit, 200) : 20;
+  const rawLimit = filters.limit && filters.limit > 0 ? filters.limit : LIST_POSTS_DEFAULT_LIMIT;
+  const limit = Math.min(rawLimit, LIST_POSTS_MAX_LIMIT);
+  const offset = (page - 1) * limit;
 
-  // from/to フィルタは JS 層で行うため、全件取得して絞り込む
-  const needsDateFilter = !!(filters.from || filters.to);
+  const repoFilters = buildRepoFilters(filters);
 
-  if (needsDateFilter) {
-    const all = await deps.postRepo.findByWorkspace(workspaceId, {
-      platform: filters.platform,
-      status: filters.status,
-    });
+  // 1. 件数取得 + ページデータ取得を並列発火
+  const [total, pagePosts] = await Promise.all([
+    deps.postRepo.countByWorkspace(workspaceId, repoFilters),
+    deps.postRepo.findByWorkspace(workspaceId, {
+      ...repoFilters,
+      limit,
+      offset,
+    }),
+  ]);
 
-    const filtered = all.filter((p) => {
-      if (filters.from && p.createdAt < filters.from) return false;
-      if (filters.to && p.createdAt > filters.to) return false;
-      return true;
-    });
+  // 2. JOIN 対象の ID 集合を収集
+  const accountIds = Array.from(new Set(pagePosts.map((p) => p.socialAccountId)));
+  const postIds = pagePosts.map((p) => p.id);
 
-    const total = filtered.length;
-    const start = (page - 1) * limit;
-    const paged = filtered.slice(start, start + limit);
+  // 3. socialAccount の一括取得 (Repository に findByIds がないため個別取得)
+  const accountMap = new Map<string, SocialAccount>();
+  await Promise.all(
+    accountIds.map(async (id) => {
+      const acc = await deps.accountRepo.findById(id);
+      if (acc && acc.workspaceId === workspaceId) {
+        accountMap.set(id, acc);
+      }
+    }),
+  );
 
-    return { data: paged, meta: { page, limit, total } };
+  // 4. scheduled_jobs の一括取得 (scheduled_at 降順で返る想定)
+  const scheduleByPost = new Map<string, { scheduledAt: Date; status: ScheduledJob["status"] }>();
+  if (deps.scheduledJobRepo && postIds.length > 0) {
+    const jobs = await deps.scheduledJobRepo.findByPostIds(postIds);
+    // scheduled_at 降順の先頭 = 最新ジョブを採用する
+    for (const job of jobs) {
+      if (!scheduleByPost.has(job.postId)) {
+        scheduleByPost.set(job.postId, {
+          scheduledAt: job.scheduledAt,
+          status: job.status,
+        });
+      }
+    }
   }
 
-  // 日付フィルタなし: repository の offset/limit を使う
-  // total 取得のため 2 クエリ。v1 は簡素化のため全件取得してカウントする。
-  const all = await deps.postRepo.findByWorkspace(workspaceId, {
-    platform: filters.platform,
-    status: filters.status,
+  // 5. 各 Post を PostListItem に変換
+  const data: PostListItem[] = pagePosts.map((post) => {
+    const account = accountMap.get(post.socialAccountId) ?? null;
+    return {
+      ...post,
+      socialAccount: account
+        ? {
+            id: account.id,
+            platform: account.platform,
+            displayName: account.displayName,
+          }
+        : null,
+      schedule: scheduleByPost.get(post.id) ?? null,
+    };
   });
-  const total = all.length;
-  const start = (page - 1) * limit;
-  const paged = all.slice(start, start + limit);
 
-  return { data: paged, meta: { page, limit, total } };
+  const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+
+  return {
+    data,
+    meta: { page, limit, total, totalPages },
+  };
 }
 
 // ───────────────────────────────────────────

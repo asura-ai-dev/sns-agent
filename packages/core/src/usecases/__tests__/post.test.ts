@@ -68,6 +68,55 @@ function createMockAccountRepo(accounts: SocialAccount[]): AccountRepository {
   };
 }
 
+function applyPostFilters(
+  store: Map<string, Post>,
+  wsId: string,
+  options: Parameters<PostRepository["findByWorkspace"]>[1],
+): Post[] {
+  let filtered = [...store.values()].filter((p) => p.workspaceId === wsId);
+  const platformList =
+    options?.platforms && options.platforms.length > 0
+      ? options.platforms
+      : options?.platform
+        ? [options.platform]
+        : undefined;
+  if (platformList) {
+    filtered = filtered.filter((p) => platformList.includes(p.platform));
+  }
+  const statusList =
+    options?.statuses && options.statuses.length > 0
+      ? options.statuses
+      : options?.status
+        ? [options.status]
+        : undefined;
+  if (statusList) {
+    filtered = filtered.filter((p) => statusList.includes(p.status));
+  }
+  if (options?.from) {
+    const from = options.from;
+    filtered = filtered.filter((p) => p.createdAt >= from);
+  }
+  if (options?.to) {
+    const to = options.to;
+    filtered = filtered.filter((p) => p.createdAt <= to);
+  }
+  if (options?.search) {
+    const q = options.search.toLowerCase();
+    filtered = filtered.filter((p) => (p.contentText ?? "").toLowerCase().includes(q));
+  }
+  // ソート（createdAt 降順がデフォルト）
+  const orderBy = options?.orderBy ?? "createdAt";
+  filtered.sort((a, b) => {
+    if (orderBy === "publishedAt") {
+      const av = a.publishedAt?.getTime() ?? 0;
+      const bv = b.publishedAt?.getTime() ?? 0;
+      return bv - av;
+    }
+    return b.createdAt.getTime() - a.createdAt.getTime();
+  });
+  return filtered;
+}
+
 function createMockPostRepo(initial: Post[] = []): PostRepository {
   const store = new Map(initial.map((p) => [p.id, { ...p }]));
   let seq = initial.length;
@@ -77,15 +126,12 @@ function createMockPostRepo(initial: Post[] = []): PostRepository {
       return p ? { ...p } : null;
     },
     findByWorkspace: async (wsId, options) => {
-      let filtered = [...store.values()].filter((p) => p.workspaceId === wsId);
-      if (options?.platform) {
-        filtered = filtered.filter((p) => p.platform === options.platform);
-      }
-      if (options?.status) {
-        filtered = filtered.filter((p) => p.status === options.status);
-      }
-      return filtered;
+      const filtered = applyPostFilters(store, wsId, options);
+      const offset = options?.offset ?? 0;
+      const end = options?.limit ? offset + options.limit : undefined;
+      return filtered.slice(offset, end);
     },
+    countByWorkspace: async (wsId, options) => applyPostFilters(store, wsId, options).length,
     create: async (post) => {
       seq += 1;
       const now = new Date();

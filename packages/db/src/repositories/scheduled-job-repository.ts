@@ -149,6 +149,21 @@ export class DrizzleScheduledJobRepository implements ScheduledJobRepository {
   }
 
   /**
+   * 指定した post_id 群に紐づく予約ジョブを返す。
+   * 投稿一覧の schedule 情報（scheduledAt, status）を埋めるために使う。
+   * scheduled_at 降順で返すため、呼び出し側は先頭を最新として扱える。
+   */
+  async findByPostIds(postIds: string[]): Promise<ScheduledJob[]> {
+    if (postIds.length === 0) return [];
+    const rows = await this.db
+      .select()
+      .from(scheduledJobs)
+      .where(inArray(scheduledJobs.postId, postIds))
+      .orderBy(desc(scheduledJobs.scheduledAt));
+    return rows.map(rowToEntity);
+  }
+
+  /**
    * ワークスペース単位の予約一覧取得。
    * status / postId でフィルタ可能。scheduled_at 降順で返す。
    */

@@ -6,6 +6,8 @@
 export type {
   AccountRepository,
   PostRepository,
+  PostListFilters,
+  PostOrderBy,
   ScheduledJobRepository,
   UsageRepository,
   UsageAggregation,

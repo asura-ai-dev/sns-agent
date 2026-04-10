@@ -16,6 +16,9 @@
 
 import { Command } from "commander";
 import { registerAccountsCommand } from "./commands/accounts.js";
+import { registerPostCommand } from "./commands/post.js";
+import { registerScheduleCommand } from "./commands/schedule.js";
+import { registerInboxCommand } from "./commands/inbox.js";
 import { registerUsageCommand } from "./commands/usage.js";
 import { registerLlmCommand } from "./commands/llm.js";
 import { registerSkillsCommand } from "./commands/skills.js";
@@ -34,6 +37,9 @@ program
 
 // ---- サブコマンド登録 ----
 registerAccountsCommand(program);
+registerPostCommand(program);
+registerScheduleCommand(program);
+registerInboxCommand(program);
 registerUsageCommand(program);
 registerLlmCommand(program);
 registerSkillsCommand(program);

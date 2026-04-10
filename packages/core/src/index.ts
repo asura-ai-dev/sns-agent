@@ -37,6 +37,8 @@ export { encrypt, decrypt } from "./domain/index.js";
 export type {
   AccountRepository,
   PostRepository,
+  PostListFilters,
+  PostOrderBy,
   ScheduledJobRepository,
   UsageRepository,
   UsageAggregation,
@@ -79,6 +81,16 @@ export { PERMISSIONS, rolePermissions, checkPermission } from "./policies/index.
 export type { Permission } from "./policies/index.js";
 export { requiresApproval, DEFAULT_APPROVAL_POLICY } from "./policies/index.js";
 export type { ApprovalAction, ApprovalContext, ApprovalPolicyConfig } from "./policies/index.js";
+export {
+  evaluateBudgetPolicy,
+  getPeriodStart as getBudgetPeriodStart,
+  getPeriodEnd as getBudgetPeriodEnd,
+} from "./policies/index.js";
+export type {
+  EvaluateBudgetPolicyDeps,
+  EvaluateBudgetPolicyInput,
+  BudgetEvaluation,
+} from "./policies/index.js";
 
 // Usecases
 export { resolveActorByApiKey, resolveActorByUserId } from "./usecases/auth.js";
@@ -99,6 +111,7 @@ export {
   createPost,
   updatePost,
   publishPost,
+  publishPostChecked,
   deletePost,
   listPosts,
   getPost,
@@ -109,6 +122,8 @@ export type {
   UpdatePostInput,
   ListPostsFilters,
   ListPostsResult,
+  PostListItem,
+  PublishPostResult,
 } from "./usecases/post.js";
 
 export {
@@ -165,6 +180,21 @@ export type {
   SendReplyResult as InboxSendReplyResult,
 } from "./usecases/inbox.js";
 
+export {
+  listPolicies as listBudgetPolicies,
+  createPolicy as createBudgetPolicy,
+  updatePolicy as updateBudgetPolicy,
+  deletePolicy as deleteBudgetPolicy,
+  getBudgetStatus,
+} from "./usecases/budget.js";
+export type {
+  BudgetUsecaseDeps,
+  CreateBudgetPolicyInput,
+  UpdateBudgetPolicyInput,
+  BudgetPolicyStatus,
+  BudgetStatusResult,
+} from "./usecases/budget.js";
+
 export { recordAudit, listAuditLogs, exportAuditLogs } from "./usecases/audit.js";
 export type {
   RecordAuditInput,
@@ -204,4 +234,5 @@ export {
   BudgetExceededError,
   ProviderError,
   RateLimitError,
+  LlmError,
 } from "./errors/index.js";

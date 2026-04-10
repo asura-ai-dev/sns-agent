@@ -10,7 +10,7 @@ import { PLATFORMS, POST_STATUSES } from "@sns-agent/config";
 import {
   createPost,
   updatePost,
-  publishPost,
+  publishPostChecked,
   deletePost,
   listPosts,
   getPost,
@@ -18,13 +18,23 @@ import {
   requiresApproval,
   createApprovalRequest,
 } from "@sns-agent/core";
-import type { MediaAttachment, Post, PostUsecaseDeps, ApprovalUsecaseDeps } from "@sns-agent/core";
+import type {
+  MediaAttachment,
+  Post,
+  PostListItem,
+  PostUsecaseDeps,
+  ApprovalUsecaseDeps,
+  PostOrderBy,
+  BudgetEvaluation,
+} from "@sns-agent/core";
 import {
   DrizzlePostRepository,
   DrizzleAccountRepository,
   DrizzleUsageRepository,
   DrizzleApprovalRepository,
   DrizzleAuditLogRepository,
+  DrizzleScheduledJobRepository,
+  DrizzleBudgetPolicyRepository,
 } from "@sns-agent/db";
 import { requirePermission } from "../middleware/rbac.js";
 import { idempotencyMiddleware } from "../middleware/idempotency.js";
@@ -48,6 +58,27 @@ function buildDeps(db: AppVariables["db"]): PostUsecaseDeps {
     providers: getProviderRegistry().getAll(),
     encryptionKey,
     usageRepo: new DrizzleUsageRepository(db),
+    scheduledJobRepo: new DrizzleScheduledJobRepository(db),
+    budgetPolicyRepo: new DrizzleBudgetPolicyRepository(db),
+    approvalRepo: new DrizzleApprovalRepository(db),
+    auditRepo: new DrizzleAuditLogRepository(db),
+  };
+}
+
+function serializeBudgetEvaluation(ev: BudgetEvaluation | null): Record<string, unknown> | null {
+  if (!ev) return null;
+  return {
+    allowed: ev.allowed,
+    action: ev.action,
+    consumed: ev.consumed,
+    projected: ev.projected,
+    limit: ev.limit,
+    percentage: ev.percentage,
+    warning: ev.warning,
+    reason: ev.reason,
+    policyId: ev.matchedPolicy?.id ?? null,
+    scopeType: ev.matchedPolicy?.scopeType ?? null,
+    scopeValue: ev.matchedPolicy?.scopeValue ?? null,
   };
 }
 
@@ -78,6 +109,18 @@ function serializePost(post: Post): Record<string, unknown> {
   };
 }
 
+/**
+ * PostListItem を API レスポンス形式に整形する。
+ * 基本の Post フィールドに加え、socialAccount / schedule を含める。
+ */
+function serializePostListItem(item: PostListItem): Record<string, unknown> {
+  return {
+    ...serializePost(item),
+    socialAccount: item.socialAccount,
+    schedule: item.schedule,
+  };
+}
+
 // ───────────────────────────────────────────
 // ヘルパー: クエリパラメータ -> フィルタ
 // ───────────────────────────────────────────
@@ -94,6 +137,30 @@ function parseDateOrUndefined(value: string | undefined): Date | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
+/**
+ * カンマ区切りもしくは同一キーの複数出現に対応した配列パーサ。
+ * `?platform=x,line` と `?platform=x&platform=line` の両方をサポート。
+ */
+function parseListParam(values: string[] | undefined): string[] | undefined {
+  if (!values || values.length === 0) return undefined;
+  const out: string[] = [];
+  for (const v of values) {
+    for (const item of v.split(",")) {
+      const trimmed = item.trim();
+      if (trimmed) out.push(trimmed);
+    }
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+const ORDER_BY_VALUES = ["createdAt", "publishedAt", "scheduledAt"] as const;
+function parseOrderBy(value: string | undefined): PostOrderBy | undefined {
+  if (!value) return undefined;
+  return (ORDER_BY_VALUES as readonly string[]).includes(value)
+    ? (value as PostOrderBy)
+    : undefined;
+}
+
 // ───────────────────────────────────────────
 // Idempotency ミドルウェア（POST/PATCH）
 // ───────────────────────────────────────────
@@ -107,35 +174,71 @@ posts.get("/", requirePermission("post:read"), async (c) => {
   const db = c.get("db");
   const deps = buildDeps(db);
 
-  const platformQ = c.req.query("platform");
-  const statusQ = c.req.query("status");
+  //
+  // 対応クエリパラメータ:
+  // - platform: "x" | "line" | "instagram"。カンマ区切り or 複数出現で OR 条件
+  // - status: draft | scheduled | publishing | published | failed | deleted。同上
+  // - from, to: ISO 8601 日付。created_at の範囲
+  // - search: contentText の部分一致検索
+  // - orderBy: createdAt (default) | publishedAt | scheduledAt
+  // - page: 1-based (default 1)
+  // - limit: default 20, max 100
+  //
+  const platformValues = parseListParam(c.req.queries("platform"));
+  const statusValues = parseListParam(c.req.queries("status"));
   const fromQ = c.req.query("from");
   const toQ = c.req.query("to");
+  const searchQ = c.req.query("search");
+  const orderByQ = c.req.query("orderBy");
   const pageQ = c.req.query("page");
   const limitQ = c.req.query("limit");
 
-  if (platformQ && !PLATFORMS.includes(platformQ as Platform)) {
+  // バリデーション: platform / status の値チェック
+  if (platformValues) {
+    for (const p of platformValues) {
+      if (!PLATFORMS.includes(p as Platform)) {
+        throw new ValidationError(
+          `Invalid platform: ${p}. Must be one of: ${PLATFORMS.join(", ")}`,
+        );
+      }
+    }
+  }
+  if (statusValues) {
+    for (const s of statusValues) {
+      if (!POST_STATUSES.includes(s as Post["status"])) {
+        throw new ValidationError(
+          `Invalid status: ${s}. Must be one of: ${POST_STATUSES.join(", ")}`,
+        );
+      }
+    }
+  }
+
+  // orderBy バリデーション
+  if (orderByQ && !parseOrderBy(orderByQ)) {
     throw new ValidationError(
-      `Invalid platform: ${platformQ}. Must be one of: ${PLATFORMS.join(", ")}`,
+      `Invalid orderBy: ${orderByQ}. Must be one of: ${ORDER_BY_VALUES.join(", ")}`,
     );
   }
-  if (statusQ && !POST_STATUSES.includes(statusQ as Post["status"])) {
-    throw new ValidationError(
-      `Invalid status: ${statusQ}. Must be one of: ${POST_STATUSES.join(", ")}`,
-    );
+
+  // limit 上限チェック
+  const parsedLimit = parseIntOrUndefined(limitQ);
+  if (parsedLimit !== undefined && parsedLimit > 100) {
+    throw new ValidationError("limit must be 100 or less");
   }
 
   const result = await listPosts(deps, actor.workspaceId, {
-    platform: platformQ as Platform | undefined,
-    status: statusQ as Post["status"] | undefined,
+    platforms: platformValues as Platform[] | undefined,
+    statuses: statusValues as Array<Post["status"]> | undefined,
     from: parseDateOrUndefined(fromQ),
     to: parseDateOrUndefined(toQ),
+    search: searchQ,
+    orderBy: parseOrderBy(orderByQ),
     page: parseIntOrUndefined(pageQ),
-    limit: parseIntOrUndefined(limitQ),
+    limit: parsedLimit,
   });
 
   return c.json({
-    data: result.data.map(serializePost),
+    data: result.data.map(serializePostListItem),
     meta: result.meta,
   });
 });
@@ -289,10 +392,31 @@ posts.post("/:id/publish", requirePermission("post:publish"), async (c) => {
     );
   }
 
-  const published = await publishPost(deps, actor.workspaceId, id);
+  const result = await publishPostChecked(deps, actor.workspaceId, id, {
+    requestedBy: actor.id,
+  });
+
+  // 予算 require-approval で承認リクエストが作成された場合
+  if (result.approvalRequestId) {
+    return c.json(
+      {
+        data: serializePost(result.post),
+        meta: {
+          requiresApproval: true,
+          approvalId: result.approvalRequestId,
+          budget: serializeBudgetEvaluation(result.budgetEvaluation),
+        },
+      },
+      202,
+    );
+  }
+
   return c.json({
-    data: serializePost(published),
-    meta: { requiresApproval: false },
+    data: serializePost(result.post),
+    meta: {
+      requiresApproval: false,
+      budget: serializeBudgetEvaluation(result.budgetEvaluation),
+    },
   });
 });
 

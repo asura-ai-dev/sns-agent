@@ -8,9 +8,18 @@
   "scripts": {
     "build": "tsc",
     "lint": "echo \"Lint via root\"",
-    "test": "echo \"No tests yet\""
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sns-agent/config": "workspace:*",
+    "@sns-agent/core": "workspace:*",
+    "@sns-agent/db": "workspace:*",
+    "openai": "^4.77.0",
+    "@anthropic-ai/sdk": "^0.33.1"
   },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.4"
   }
 }
