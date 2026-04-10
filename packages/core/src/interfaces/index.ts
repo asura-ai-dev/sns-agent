@@ -12,6 +12,7 @@ export type {
   BudgetPolicyRepository,
   LlmRouteRepository,
   AuditLogRepository,
+  AuditLogFilterOptions,
 } from "./repositories.js";
 
 // SocialProvider

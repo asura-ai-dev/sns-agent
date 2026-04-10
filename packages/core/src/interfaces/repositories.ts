@@ -111,17 +111,24 @@ export interface LlmRouteRepository {
 // AuditLogRepository
 // ───────────────────────────────────────────
 // 追記のみ: UPDATE / DELETE メソッドなし（design.md セクション 3）
+
+export interface AuditLogFilterOptions {
+  actorId?: string;
+  actorType?: string;
+  action?: string;
+  resourceType?: string;
+  platform?: string;
+  startDate?: Date;
+  endDate?: Date;
+  limit?: number;
+  offset?: number;
+}
+
 export interface AuditLogRepository {
   create(log: Omit<AuditLog, "id">): Promise<AuditLog>;
-  findByWorkspace(
+  findByWorkspace(workspaceId: string, options?: AuditLogFilterOptions): Promise<AuditLog[]>;
+  countByWorkspace(
     workspaceId: string,
-    options?: {
-      actorId?: string;
-      action?: string;
-      startDate?: Date;
-      endDate?: Date;
-      limit?: number;
-      offset?: number;
-    },
-  ): Promise<AuditLog[]>;
+    options?: Omit<AuditLogFilterOptions, "limit" | "offset">,
+  ): Promise<number>;
 }
