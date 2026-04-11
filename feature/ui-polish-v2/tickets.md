@@ -16,7 +16,7 @@ GitHub issues: asura-ai-dev/sns-agent #1〜#16（ローカル ID == GH 番号）
 ## Phase 2: 主要改善
 
 - [x] #006 [gh#6](https://github.com/asura-ai-dev/sns-agent/issues/6) PlatformIcon にチップ用 variant を追加
-- [ ] #007 [gh#7](https://github.com/asura-ai-dev/sns-agent/issues/7) PostFilters のプラットフォームチップを PlatformIcon 化（depends_on: 006）
+- [x] #007 [gh#7](https://github.com/asura-ai-dev/sns-agent/issues/7) PostFilters のプラットフォームチップを PlatformIcon 化（depends_on: 006）
 - [ ] #008 [gh#8](https://github.com/asura-ai-dev/sns-agent/issues/8) settings/accounts の接続ボタンとカードで PlatformIcon を統一（depends_on: 006）
 - [ ] #009 [gh#9](https://github.com/asura-ai-dev/sns-agent/issues/9) Inbox のプラットフォーム絞り込みとスレッド行を PlatformIcon 化（depends_on: 006）
 - [ ] #010 [gh#10](https://github.com/asura-ai-dev/sns-agent/issues/10) dashboard PlatformOverview のシンボルを PlatformIcon に統一（depends_on: 006）
