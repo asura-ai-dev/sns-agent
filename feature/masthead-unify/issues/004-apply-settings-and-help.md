@@ -1,7 +1,7 @@
 ---
 id: 004
 gh: null
-title: settings 5 ページと /help の masthead を MASTHEAD_TITLES 駆動に差し替え、/help 6 セクションを HELP_SECTIONS に寄せる
+title: settings 5 ページと /help の h1 を MASTHEAD_TITLES に差し替え
 type: refactor
 depends_on: [001]
 files:
@@ -12,101 +12,66 @@ files:
   - apps/web/src/app/(dashboard)/settings/budget/page.tsx
   - apps/web/src/app/(dashboard)/help/page.tsx
 done_when:
-  - settings/accounts/page.tsx から `title="Connected Accounts"` のハードコードが削除されている
-  - settings/users/page.tsx から `title="Members & Agents"` のハードコードが削除されている
-  - settings/llm/page.tsx から `title="Dispatch Roster"` のハードコードが削除されている
-  - settings/budget/page.tsx から `title="Allowances Register"` のハードコードが削除されている
-  - settings/audit/page.tsx から h1 "Operations Ledger" 文字列リテラルが削除されている (dashboard と重複する独自文言)
-  - 5 ページすべての SettingsShell 呼び出し / audit masthead が `MASTHEAD_TITLES[settings*]` 経由で文言を取得している
-  - help/page.tsx から文字列リテラル "Help for Daily Operations" が削除されている
-  - help/page.tsx の HELP_SECTIONS ローカル配列の kicker 文字列リテラル ("Reading Room" 等) が labels.ts の `HELP_SECTIONS` を参照する形に置き換わっている
-  - help の 6 セクション全てが labels.ts の HELP_SECTIONS を経由して kicker を描画している
-  - 対象 6 ページすべての masthead が「英語 kicker → 日本語 h1」の 2 要素構造（+ 任意の英語 subheading）を持つ
+  - settings/accounts/page.tsx から `title="Connected Accounts"` が削除されている
+  - settings/users/page.tsx から `title="Members & Agents"` が削除されている
+  - settings/llm/page.tsx から `title="Dispatch Roster"` が削除されている
+  - settings/budget/page.tsx から `title="Allowances Register"` が削除されている
+  - settings/audit/page.tsx から h1 "Operations Ledger" literal が削除されている (dashboard と重複)
+  - 5 settings ページすべての `SettingsShell` 呼び出し / audit masthead が `MASTHEAD_TITLES.settings*` 経由で title を取得している
+  - help/page.tsx から "Help for Daily Operations" literal が削除されている
+  - help/page.tsx の h1 が `{MASTHEAD_TITLES.help}` を描画している
+  - 対象 6 ページすべて `MASTHEAD_TITLES` を import している
   - `pnpm --filter @sns-agent/web typecheck` が成功する
   - `pnpm --filter @sns-agent/web build` が成功する
 ---
 
 ## Context
 
-spec.md F2 の 3 つ目。settings 5 ページは `SettingsShell` を経由するタイプと、`audit` のようにページ内で直接 masthead を組むタイプが混在している。/help は独自 HELP_SECTIONS 配列を持ちつつ h1 に "Help for Daily Operations" をハードコードしている。
+settings 5 ページは `SettingsShell` を経由するタイプと、audit のようにページ内で直接 masthead を組むタイプが混在。/help は "Help for Daily Operations" をハードコード。001 の flat `MASTHEAD_TITLES` 経由に置き換える。
 
-本 issue では辞書差し替えに集中する。`SettingsShell.tsx` の内部実装は **変更しない**（prop 名互換を維持）。
-
-詩的 tagline は保存せず破棄する。masthead は 2 要素（英語 kicker + 日本語短名詞 h1）に単純化する。
+`SettingsShell.tsx` の props interface は変更しない（prop 名互換を維持）。
 
 ## Implementation Notes
 
 ### settings/accounts, users, llm, budget (`SettingsShell` 経由)
 
-4 ページいずれも以下のパターンで `SettingsShell` を呼んでいる:
-
 ```tsx
-<SettingsShell
-  activeSlug="..."
-  eyebrow={SECTION_KICKERS.settingsXxx}
-  title="Connected Accounts"
-  description="..."
->
-```
+import { MASTHEAD_TITLES } from "@/lib/i18n/labels";
 
-目標:
-
-```tsx
-import { SECTION_KICKERS, MASTHEAD_TITLES } from "@/lib/i18n/labels";
-
-const m = MASTHEAD_TITLES.settingsAccounts;
 <SettingsShell
   activeSlug="accounts"
-  eyebrow={SECTION_KICKERS[m.kickerKey]}
-  title={m.ja}              // ← 日本語 h1 ("アカウント接続")
-  description={m.en}        // ← 英語 subheading or 空文字
+  eyebrow={SECTION_KICKERS.settingsAccounts}  // 既存 eyebrow 保持して良い
+  title={MASTHEAD_TITLES.settingsAccounts}    // ← "Accounts"
+  description=""                                // 既存長文 description は空に
 >
 ```
 
-- `title` は日本語に切り替わる（UI 上の h1 が日本語に）
-- `description` は英語 subheading (`m.en` = "Connected Accounts" 等) か空文字に差し替える。現行の長い日本語説明文は削除する
-- `SettingsShell` の既存 description スロットは維持し、props 互換は破壊しない
-- `SettingsShell.tsx` 本体の props interface は変更しない
+- `title` は英語 1 語に切り替わる
+- 既存の長い日本語 description は削除（空文字でも可）
+- `SettingsShell.tsx` 本体は触らない
 
 対象 4 ページ: accounts, users, llm, budget。
 
 ### settings/audit
 
-audit は `SettingsShell` ではなく独自に masthead を組んでおり、h1 が `"Operations Ledger"`（dashboard と同文言）にハードコードされている。これは dashboard とタイトルが衝突するため必ず差し替える。
+独自に masthead を組んでおり h1 が "Operations Ledger"（dashboard と衝突）。
 
-目標:
+- h1 literal を `{MASTHEAD_TITLES.settingsAudit}` = "Audit" に置換
+- 既存の罫線 / edition 装飾 / total records 表示は触らない
+- description 日本語があれば削除
 
-- 301-306 行付近の h1 を `MASTHEAD_TITLES.settingsAudit.ja` = "監査ログ" に置換
-- kicker 行（299 行付近）は `SECTION_KICKERS.settingsAudit` または `SECTION_KICKERS[MASTHEAD_TITLES.settingsAudit.kickerKey]` のまま
-- 308 行の description 日本語は削除する（masthead を 2 要素化するため）
-- 既存の罫線 / edition 装飾 / total records 表示は **一切変更しない**
+### /help (`help/page.tsx`)
 
-### help (`help/page.tsx`)
-
-現状:
-
-1. 76-93 行の header が `eyebrow="Help Desk"`（現状は `Help Desk` の文字列リテラル）、h1 が `"Help for Daily Operations"`、italic 副題が日本語ハードコード
-2. 10-71 行に `HELP_SECTIONS` ローカル配列があり、各 entry の `kicker` がハードコード（"Reading Room" 等）
-
-目標:
-
-- header masthead:
-  - eyebrow を `SECTION_KICKERS.help`（001 で追加済み = "Help Desk"）に置換
-  - h1 を `MASTHEAD_TITLES.help.ja` = "ヘルプ" に置換
-  - 既存の日本語 italic 副題ブロックは削除する
-- 6 セクションの kicker:
-  - ローカルの `HELP_SECTIONS` 配列を、`labels.ts` の新定数 `HELP_SECTIONS`（001 で追加済み）を参照する形に書き換える
-  - 具体的には、`const SECTIONS = [{ sectionKey: "dashboard", icon: Compass, body: [...] }, ...] as const` のような「キー + icon + body のみ」の配列を作り、描画時に `labels.HELP_SECTIONS[item.sectionKey].kicker` と `labels.HELP_SECTIONS[item.sectionKey].titleJa` を参照する
-  - 各セクションの `title`（現状の英語 "Dashboard" 等）は、`HELP_SECTIONS[key].titleJa`（日本語）に差し替えて良い。あるいは並記にする場合も本 issue の done_when には抵触しない
-  - body 本文（日本語 3 行）はそのままローカル配列に残す
+- h1 "Help for Daily Operations" を `{MASTHEAD_TITLES.help}` = "Help" に置換
+- 既存の日本語 italic 副題ブロックは削除
+- 6 セクション内部の見出し（"Dashboard", "Posts" 等）はそのまま残して良い（本 issue の scope は h1 のみ）
 
 ### 禁止事項
 
-- `SettingsShell.tsx` の props interface や内部レイアウトは変更しない
-- settings/audit の罫線 / edition 装飾 / 再読み込みボタン等は変更しない
-- `/help` の本文（body の日本語 3 行）は改稿しない。kicker 辞書化のみ
-- dashboard / posts / calendar / inbox / usage / skills / agents / Sidebar は触らない（002 / 003 / 005 の責務）
-- `MASTHEAD_TITLES`, `HELP_SECTIONS`, `SECTION_KICKERS` に entry を足さない（001 で閉じている）
+- `SettingsShell.tsx` の props interface / 内部レイアウトは変更しない
+- settings/audit の装飾 / 再読み込みボタン等は変更しない
+- /help の本文 body（日本語 3 行）は改稿しない
+- dashboard / posts / calendar / inbox / usage / skills / agents / Sidebar は触らない
 
 ### 検証
 
@@ -114,5 +79,3 @@ audit は `SettingsShell` ではなく独自に masthead を組んでおり、h1
 pnpm --filter @sns-agent/web typecheck
 pnpm --filter @sns-agent/web build
 ```
-
-ローカルで `/settings/accounts`, `/settings/users`, `/settings/audit`, `/settings/llm`, `/settings/budget`, `/help` の masthead を目視確認し、視覚上のレイアウトが変わっていないこと、h1 が日本語になっていることを確認する。
