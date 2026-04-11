@@ -9,7 +9,7 @@ GitHub issues: 未登録（後続で同期）
 
 ## Phase 1: 辞書基盤
 
-- [ ] #001 labels.ts に `MASTHEAD_TITLES` / `HELP_SECTIONS` を追加し、`NAV_LABELS` に `/help`、`SECTION_KICKERS` に `help` を追加する
+- [x] #001 labels.ts に `MASTHEAD_TITLES` / `HELP_SECTIONS` を追加し、`NAV_LABELS` に `/help`、`SECTION_KICKERS` に `help` を追加する
 
 ## Phase 2: masthead 適用
 

@@ -6,6 +6,7 @@ export const NAV_LABELS = [
   { href: "/usage", en: "Usage", ja: "使用量" },
   { href: "/skills", en: "Skills", ja: "スキル" },
   { href: "/agents", en: "Agents", ja: "チャット" },
+  { href: "/help", en: "Help", ja: "ヘルプ" },
   { href: "/settings", en: "Settings", ja: "設定" },
 ] as const;
 
@@ -39,6 +40,24 @@ export const COMMON_ACTIONS = {
   confirm: "確認",
 } as const;
 
+export const MASTHEAD_TITLES = {
+  dashboard: "Dashboard",
+  posts: "Posts",
+  postsNew: "New Post",
+  calendar: "Calendar",
+  inbox: "Inbox",
+  usage: "Usage",
+  skills: "Skills",
+  agents: "Agents",
+  settingsAccounts: "Accounts",
+  settingsUsers: "Users",
+  settingsAudit: "Audit",
+  settingsLlm: "LLM",
+  settingsBudget: "Budget",
+  help: "Help",
+} as const;
+
 export type NavLabel = (typeof NAV_LABELS)[number];
 export type SectionKickerKey = keyof typeof SECTION_KICKERS;
 export type CommonActionKey = keyof typeof COMMON_ACTIONS;
+export type MastheadKey = keyof typeof MASTHEAD_TITLES;
