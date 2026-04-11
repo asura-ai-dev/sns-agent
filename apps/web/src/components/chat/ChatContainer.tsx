@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Broadcast, RssSimple, List, ArrowClockwise } from "@phosphor-icons/react";
-import { SECTION_KICKERS } from "@/lib/i18n/labels";
+import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
 import { ChatInput } from "./ChatInput";
 import { MessageBubble, type ChatMessage } from "./MessageBubble";
 import { ActionPreview } from "./ActionPreview";
@@ -287,14 +287,8 @@ export function ChatContainer({
                 fontOpticalSizing: "auto",
               }}
             >
-              The Wire Room
+              {MASTHEAD_TITLES.agents}
             </h1>
-            <p
-              className="mt-0.5 font-display text-sm italic text-base-content/60"
-              style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic" }}
-            >
-              SNS Agent と対話しながら依頼内容を整理・実行できます
-            </p>
           </div>
         </div>
 

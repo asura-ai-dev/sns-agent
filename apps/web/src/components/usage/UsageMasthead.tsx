@@ -6,7 +6,7 @@
  * with a distinct title and edition labels.
  */
 import { RssSimple } from "@phosphor-icons/react/dist/ssr";
-import { SECTION_KICKERS } from "@/lib/i18n/labels";
+import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
 
 interface UsageMastheadProps {
   now: Date;
@@ -57,14 +57,8 @@ export function UsageMasthead({
             className="font-display text-[40px] font-semibold leading-[1.02] tracking-[-0.02em] text-base-content sm:text-[52px]"
             style={{ fontFamily: "'Fraunces', serif", fontOpticalSizing: "auto" }}
           >
-            Treasury Bulletin
+            {MASTHEAD_TITLES.usage}
           </h1>
-          <p
-            className="mt-1 font-display text-sm italic leading-tight text-base-content/60"
-            style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic" }}
-          >
-            API 利用量、LLM トークン、推定コストの推移を確認できます
-          </p>
         </div>
 
         <div className="flex items-center gap-6 pb-1 font-mono text-[10px] uppercase tracking-[0.2em] text-base-content/55">
