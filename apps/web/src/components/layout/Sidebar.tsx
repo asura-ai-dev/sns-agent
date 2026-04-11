@@ -49,7 +49,9 @@ function SidebarContent({ pathname, onNavigate, collapsible = false }: SidebarCo
         <span
           className={[
             "font-display text-lg font-semibold tracking-tight",
-            collapsible ? "sidebar-collapsible-label sidebar-fade whitespace-nowrap opacity-100 lg:opacity-0" : "",
+            collapsible
+              ? "sidebar-collapsible-label sidebar-fade whitespace-nowrap opacity-100 lg:opacity-0"
+              : "",
           ].join(" ")}
         >
           SNS Agent
@@ -74,10 +76,12 @@ function SidebarContent({ pathname, onNavigate, collapsible = false }: SidebarCo
               <span
                 className={[
                   "min-w-0 whitespace-nowrap",
-                  collapsible ? "sidebar-collapsible-label sidebar-fade opacity-100 lg:opacity-0" : "",
+                  collapsible
+                    ? "sidebar-collapsible-label sidebar-fade opacity-100 lg:opacity-0"
+                    : "",
                 ].join(" ")}
               >
-                {item.ja}
+                {item.en}
               </span>
             </Link>
           );
@@ -89,7 +93,9 @@ function SidebarContent({ pathname, onNavigate, collapsible = false }: SidebarCo
         <p
           className={[
             "text-xs text-base-content/50",
-            collapsible ? "sidebar-collapsible-label sidebar-fade whitespace-nowrap opacity-100 lg:opacity-0" : "",
+            collapsible
+              ? "sidebar-collapsible-label sidebar-fade whitespace-nowrap opacity-100 lg:opacity-0"
+              : "",
           ].join(" ")}
         >
           v1.0.0
