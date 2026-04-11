@@ -41,20 +41,20 @@ export const COMMON_ACTIONS = {
 } as const;
 
 export const MASTHEAD_TITLES = {
-  dashboard: "Dashboard",
-  posts: "Posts",
-  postsNew: "New Post",
-  calendar: "Calendar",
-  inbox: "Inbox",
-  usage: "Usage",
-  skills: "Skills",
-  agents: "Agents",
-  settingsAccounts: "Accounts",
-  settingsUsers: "Users",
-  settingsAudit: "Audit",
+  dashboard: "ダッシュボード",
+  posts: "投稿",
+  postsNew: "新規投稿",
+  calendar: "カレンダー",
+  inbox: "受信トレイ",
+  usage: "使用量",
+  skills: "スキル",
+  agents: "チャット",
+  settingsAccounts: "アカウント",
+  settingsUsers: "メンバー",
+  settingsAudit: "監査ログ",
   settingsLlm: "LLM",
-  settingsBudget: "Budget",
-  help: "Help",
+  settingsBudget: "予算",
+  help: "ヘルプ",
 } as const;
 
 export type NavLabel = (typeof NAV_LABELS)[number];
