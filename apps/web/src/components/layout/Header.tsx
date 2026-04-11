@@ -1,17 +1,62 @@
 "use client";
 
-import { useState } from "react";
-import { Bell, List, CaretDown } from "@phosphor-icons/react";
+import { Suspense, useState } from "react";
+import { usePathname } from "next/navigation";
+import { Bell, List, CaretDown, SquaresFour } from "@phosphor-icons/react";
 import { NotificationDropdown } from "../approvals/NotificationDropdown";
 import { ApprovalDialog } from "../approvals/ApprovalDialog";
 import { useApprovals } from "../approvals/useApprovals";
 import type { ApprovalRequestDto } from "../approvals/types";
+import { usePlatformViewMode } from "@/lib/view-mode/usePlatformViewMode";
+
+function ViewModeToggle({ pageKey }: { pageKey: "posts" | "inbox" }) {
+  const { mode, setMode } = usePlatformViewMode(pageKey);
+  return (
+    <div
+      className="flex items-center rounded-full border border-base-300 bg-base-200/60 p-1"
+      role="group"
+      aria-label="プラットフォーム表示モード"
+    >
+      <button
+        type="button"
+        onClick={() => setMode("unified")}
+        className={
+          "btn btn-ghost btn-sm btn-square rounded-full border-0 " +
+          (mode === "unified" ? "bg-base-100 text-base-content shadow-sm" : "text-base-content/60")
+        }
+        aria-pressed={mode === "unified"}
+      >
+        <List size={16} />
+        <span className="sr-only">Unified 表示</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setMode("columns")}
+        className={
+          "btn btn-ghost btn-sm btn-square rounded-full border-0 " +
+          (mode === "columns" ? "bg-base-100 text-base-content shadow-sm" : "text-base-content/60")
+        }
+        aria-pressed={mode === "columns"}
+      >
+        <SquaresFour size={16} />
+        <span className="sr-only">Columns 表示</span>
+      </button>
+    </div>
+  );
+}
 
 export function Header() {
+  const pathname = usePathname();
   const { data, pendingCount, loading, approve, reject } = useApprovals();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [dialogRequest, setDialogRequest] = useState<ApprovalRequestDto | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const viewModePageKey: "posts" | "inbox" = pathname.startsWith("/inbox") ? "inbox" : "posts";
+  const showViewModeToggle =
+    pathname === "/posts" ||
+    pathname.startsWith("/posts/") ||
+    pathname === "/inbox" ||
+    pathname.startsWith("/inbox/");
 
   const openDialog = (req: ApprovalRequestDto) => {
     setDialogRequest(req);
@@ -56,6 +101,12 @@ export function Header() {
 
       {/* Right: notifications + avatar */}
       <div className="flex items-center gap-2">
+        {showViewModeToggle ? (
+          <Suspense fallback={null}>
+            <ViewModeToggle pageKey={viewModePageKey} />
+          </Suspense>
+        ) : null}
+
         {/* Notification bell + dropdown */}
         <div className="relative">
           <button
