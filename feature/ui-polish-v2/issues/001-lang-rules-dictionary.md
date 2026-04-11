@@ -1,5 +1,6 @@
 ---
 id: 001
+gh: 1
 title: 言語レイヤルール定義と共通辞書の整備
 type: refactor
 depends_on: []

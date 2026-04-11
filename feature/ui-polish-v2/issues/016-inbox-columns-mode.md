@@ -1,5 +1,6 @@
 ---
 id: 016
+gh: 16
 title: /inbox に columns 表示モードを実装
 type: feat
 depends_on: [009, 014]

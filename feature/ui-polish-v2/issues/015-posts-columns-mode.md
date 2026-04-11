@@ -1,5 +1,6 @@
 ---
 id: 015
+gh: 15
 title: /posts に columns 表示モードを実装
 type: feat
 depends_on: [007, 014]

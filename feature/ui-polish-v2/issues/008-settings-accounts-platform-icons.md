@@ -1,5 +1,6 @@
 ---
 id: 008
+gh: 8
 title: settings/accounts の接続ボタンとカードで PlatformIcon を統一
 type: ui
 depends_on: [006]

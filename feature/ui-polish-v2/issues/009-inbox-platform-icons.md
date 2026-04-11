@@ -1,5 +1,6 @@
 ---
 id: 009
+gh: 9
 title: Inbox のプラットフォーム絞り込みとスレッド行を PlatformIcon 化
 type: ui
 depends_on: [006]

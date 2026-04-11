@@ -1,5 +1,6 @@
 ---
 id: 011
+gh: 11
 title: Sidebar のホバー自動展開（collapsed / expanded 2 状態）
 type: ux
 depends_on: [005]

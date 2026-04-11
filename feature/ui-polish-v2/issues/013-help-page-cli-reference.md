@@ -1,5 +1,6 @@
 ---
 id: 013
+gh: 13
 title: /help ページに CLI リファレンスセクションを追加
 type: feat
 depends_on: [012]

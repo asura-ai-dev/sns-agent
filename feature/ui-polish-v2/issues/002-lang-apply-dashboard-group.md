@@ -1,5 +1,6 @@
 ---
 id: 002
+gh: 2
 title: 言語ルールを dashboard / usage / skills / agents に適用
 type: refactor
 depends_on: [001]

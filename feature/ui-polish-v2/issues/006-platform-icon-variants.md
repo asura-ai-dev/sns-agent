@@ -1,5 +1,6 @@
 ---
 id: 006
+gh: 6
 title: PlatformIcon にチップ用 variant を追加
 type: feat
 depends_on: []

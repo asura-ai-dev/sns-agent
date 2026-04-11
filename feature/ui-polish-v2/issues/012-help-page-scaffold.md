@@ -1,5 +1,6 @@
 ---
 id: 012
+gh: 12
 title: /help ページを作成し Web UI 主要機能セクションを追加
 type: feat
 depends_on: [001, 005]

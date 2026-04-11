@@ -1,5 +1,6 @@
 ---
 id: 003
+gh: 3
 title: 言語ルールを posts / calendar / inbox に適用
 type: refactor
 depends_on: [001]

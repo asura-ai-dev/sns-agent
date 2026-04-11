@@ -1,5 +1,6 @@
 ---
 id: 004
+gh: 4
 title: 言語ルールを settings 系 5 ページに適用
 type: refactor
 depends_on: [001]

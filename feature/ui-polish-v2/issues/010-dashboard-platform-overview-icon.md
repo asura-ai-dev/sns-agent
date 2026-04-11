@@ -1,5 +1,6 @@
 ---
 id: 010
+gh: 10
 title: dashboard PlatformOverview のシンボルを PlatformIcon に統一
 type: ui
 depends_on: [006]

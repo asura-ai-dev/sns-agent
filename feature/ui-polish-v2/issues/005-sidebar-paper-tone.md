@@ -1,5 +1,6 @@
 ---
 id: 005
+gh: 5
 title: Sidebar を paper ベーストークンに差し替え
 type: ui
 depends_on: []

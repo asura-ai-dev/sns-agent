@@ -1,5 +1,6 @@
 ---
 id: 007
+gh: 7
 title: PostFilters のプラットフォームチップを PlatformIcon 化
 type: ui
 depends_on: [006]

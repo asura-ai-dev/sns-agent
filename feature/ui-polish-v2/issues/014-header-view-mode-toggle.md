@@ -1,5 +1,6 @@
 ---
 id: 014
+gh: 14
 title: Header にプラットフォーム表示モードトグルと状態フックを追加
 type: feat
 depends_on: []
