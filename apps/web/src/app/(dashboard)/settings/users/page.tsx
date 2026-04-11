@@ -41,6 +41,7 @@ import { SettingsShell } from "@/components/settings/SettingsShell";
 import { ConfirmDialog } from "@/components/settings/ConfirmDialog";
 import { useCurrentRole } from "@/components/settings/useCurrentRole";
 import { RoleBadge, type Role } from "@/components/settings/RoleBadge";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 
 // ───────────────────────────────────────────
 // 型
@@ -325,7 +326,7 @@ function InviteUserModal({
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Taro Yamada"
+              placeholder="例: 山田 太郎"
               className="input input-sm w-full rounded-sm border-base-300 bg-base-100 focus:border-primary focus:outline-none"
             />
           </div>
@@ -334,7 +335,7 @@ function InviteUserModal({
               htmlFor="invite-email"
               className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-base-content/50"
             >
-              Email
+              メールアドレス
             </label>
             <div className="relative">
               <Envelope
@@ -346,7 +347,7 @@ function InviteUserModal({
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="user@example.com"
+                placeholder="例: user@example.com"
                 className="input input-sm w-full rounded-sm border-base-300 bg-base-100 pl-8 font-mono text-xs focus:border-primary focus:outline-none"
               />
             </div>
@@ -356,7 +357,7 @@ function InviteUserModal({
               htmlFor="invite-role"
               className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-base-content/50"
             >
-              Role
+              ロール
             </label>
             <select
               id="invite-role"
@@ -390,7 +391,7 @@ function InviteUserModal({
             disabled={busy}
             className="btn btn-sm rounded-sm border-base-300 bg-base-100 font-mono text-xs uppercase tracking-wider"
           >
-            cancel
+            キャンセル
           </button>
           <button
             type="button"
@@ -398,7 +399,7 @@ function InviteUserModal({
             disabled={busy}
             className="btn btn-sm rounded-sm border-none bg-primary font-mono text-xs uppercase tracking-wider text-primary-content hover:bg-primary/90"
           >
-            {busy ? "..." : "send invite"}
+            {busy ? "..." : "招待を送信"}
           </button>
         </div>
 
@@ -535,7 +536,7 @@ function CreateAgentModal({
             <div className="rounded-sm border border-primary/40 bg-primary/5 px-4 py-3">
               <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-primary">
                 <CheckCircle size={12} weight="fill" />
-                agent created
+                発行完了
               </div>
               <div className="mt-2 text-sm text-base-content/80">
                 <span className="font-semibold">{createdAgent.name}</span> を発行しました。
@@ -556,7 +557,7 @@ function CreateAgentModal({
                       ) : (
                         <Eye size={11} weight="bold" />
                       )}
-                      {revealed ? "hide" : "show"}
+                      {revealed ? "隠す" : "表示"}
                     </button>
                     <button
                       type="button"
@@ -564,7 +565,7 @@ function CreateAgentModal({
                       className="btn btn-xs rounded-sm border-base-300 bg-base-100 font-mono text-[10px] uppercase tracking-wider"
                     >
                       <Copy size={11} weight="bold" />
-                      {copied ? "copied" : "copy"}
+                      {copied ? "コピー済み" : "コピー"}
                     </button>
                   </div>
                 </div>
@@ -576,7 +577,7 @@ function CreateAgentModal({
                   </code>
                 </pre>
                 <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-error">
-                  once closed, this key will not be shown again
+                  この画面を閉じると、このキーは再表示できません
                 </p>
               </div>
             </div>
@@ -595,7 +596,7 @@ function CreateAgentModal({
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="scheduled-poster"
+                placeholder="例: scheduled-poster"
                 className="input input-sm w-full rounded-sm border-base-300 bg-base-100 font-mono text-xs focus:border-primary focus:outline-none"
               />
             </div>
@@ -604,7 +605,7 @@ function CreateAgentModal({
                 htmlFor="agent-role"
                 className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-base-content/50"
               >
-                Role
+                ロール
               </label>
               <select
                 id="agent-role"
@@ -639,7 +640,7 @@ function CreateAgentModal({
             disabled={busy}
             className="btn btn-sm rounded-sm border-base-300 bg-base-100 font-mono text-xs uppercase tracking-wider"
           >
-            {createdAgent?.apiKeyPlain ? "close" : "cancel"}
+            {createdAgent?.apiKeyPlain ? "閉じる" : "キャンセル"}
           </button>
           {!createdAgent?.apiKeyPlain && (
             <button
@@ -648,7 +649,7 @@ function CreateAgentModal({
               disabled={busy}
               className="btn btn-sm rounded-sm border-none bg-primary font-mono text-xs uppercase tracking-wider text-primary-content hover:bg-primary/90"
             >
-              {busy ? "..." : "generate key"}
+              {busy ? "..." : "キーを発行"}
             </button>
           )}
         </div>
@@ -768,7 +769,7 @@ export default function UsersSettingsPage() {
       setAgents(agentsList);
       setUsingDemoData(demo);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
+      setError(err instanceof Error ? err.message : "メンバー情報の取得に失敗しました");
       setUsers(loadDemoUsers());
       setAgents(loadDemoAgents());
       setUsingDemoData(true);
@@ -916,7 +917,7 @@ export default function UsersSettingsPage() {
   return (
     <SettingsShell
       activeSlug="users"
-      eyebrow="settings / users"
+      eyebrow={SECTION_KICKERS.settingsUsers}
       title="Members & Agents"
       description="ワークスペースのメンバーとエージェント ID を管理します。ロール変更・招待・API キー発行は admin / owner のみ実行できます。"
       actions={
@@ -942,7 +943,7 @@ export default function UsersSettingsPage() {
             aria-label="再読み込み"
           >
             <ArrowsClockwise size={14} weight="bold" className={loading ? "animate-spin" : ""} />
-            refresh
+            再読み込み
           </button>
         </>
       }
@@ -957,12 +958,12 @@ export default function UsersSettingsPage() {
           {!isAdmin && (
             <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-base-content/50">
               <Lock size={11} weight="bold" />
-              read-only
+              閲覧専用
             </span>
           )}
         </div>
         <p className="font-mono text-[10px] uppercase tracking-wider text-base-content/40">
-          {isAdmin ? "all operations available" : "admin / owner で管理操作が可能"}
+          {isAdmin ? "すべての管理操作が可能です" : "管理操作は admin / owner のみ実行できます"}
         </p>
       </div>
 
@@ -1013,7 +1014,7 @@ export default function UsersSettingsPage() {
               className="btn btn-xs gap-1 rounded-sm border-none bg-primary font-mono text-[10px] uppercase tracking-wider text-primary-content hover:bg-primary/90"
             >
               <Plus size={11} weight="bold" />
-              invite user
+              ユーザー招待
             </button>
           )}
         </div>
@@ -1029,7 +1030,7 @@ export default function UsersSettingsPage() {
           {loading && !users && (
             <div className="px-5 py-12 text-center font-mono text-xs uppercase tracking-wider text-base-content/50">
               <ArrowsClockwise size={14} className="mr-2 inline animate-spin" />
-              loading users…
+              ユーザーを読み込んでいます…
             </div>
           )}
           {error && (
@@ -1044,7 +1045,10 @@ export default function UsersSettingsPage() {
                 className="font-display text-lg text-base-content/40"
                 style={{ fontFamily: "'Fraunces', serif" }}
               >
-                No users yet
+                ユーザーはまだ登録されていません
+              </p>
+              <p className="mt-1 font-mono text-xs text-base-content/40">
+                招待したメンバーがここに表示されます
               </p>
             </div>
           )}
@@ -1100,7 +1104,7 @@ export default function UsersSettingsPage() {
               className="btn btn-xs gap-1 rounded-sm border-none bg-accent font-mono text-[10px] uppercase tracking-wider text-accent-content hover:bg-accent/90"
             >
               <Key size={11} weight="bold" />
-              new agent id
+              エージェント ID 発行
             </button>
           )}
         </div>
@@ -1116,7 +1120,7 @@ export default function UsersSettingsPage() {
           {loading && !agents && (
             <div className="px-5 py-12 text-center font-mono text-xs uppercase tracking-wider text-base-content/50">
               <ArrowsClockwise size={14} className="mr-2 inline animate-spin" />
-              loading agents…
+              エージェント ID を読み込んでいます…
             </div>
           )}
           {!loading && agents && agents.length === 0 && (
@@ -1125,11 +1129,11 @@ export default function UsersSettingsPage() {
                 className="font-display text-lg text-base-content/40"
                 style={{ fontFamily: "'Fraunces', serif" }}
               >
-                No agent identities
+                エージェント ID はまだありません
               </p>
               {isAdmin && (
                 <p className="mt-1 font-mono text-xs text-base-content/40">
-                  「new agent id」から作成してください
+                  「エージェント ID 発行」から作成してください
                 </p>
               )}
             </div>

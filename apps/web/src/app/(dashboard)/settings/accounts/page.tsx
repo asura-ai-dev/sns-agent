@@ -40,6 +40,7 @@ import type { Platform } from "@/components/settings/PlatformIcon";
 import { ConfirmDialog } from "@/components/settings/ConfirmDialog";
 import { useCurrentRole } from "@/components/settings/useCurrentRole";
 import { RoleBadge } from "@/components/settings/RoleBadge";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 
 // ───────────────────────────────────────────
 // 型
@@ -232,12 +233,12 @@ function ConnectModal({
                   {loading ? (
                     <>
                       <ArrowsClockwise size={11} className="animate-spin" />
-                      opening…
+                      認証画面を開いています…
                     </>
                   ) : (
                     <>
                       <ArrowSquareOut size={11} weight="bold" />
-                      open oauth
+                      OAuth を開く
                     </>
                   )}
                 </div>
@@ -292,13 +293,13 @@ export default function AccountsSettingsPage() {
         const body = await res.json().catch(() => ({}));
         throw new Error(
           (body as { error?: { message?: string } })?.error?.message ??
-            `Failed to fetch accounts (status ${res.status})`,
+            `アカウント一覧の取得に失敗しました（status ${res.status}）`,
         );
       }
       const json = (await res.json()) as ListResponse;
       setAccounts(json.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
+      setError(err instanceof Error ? err.message : "アカウント一覧の取得に失敗しました");
       setAccounts([]);
     } finally {
       setLoading(false);
@@ -331,7 +332,7 @@ export default function AccountsSettingsPage() {
         const body = await res.json().catch(() => ({}));
         throw new Error(
           (body as { error?: { message?: string } })?.error?.message ??
-            `Failed to start OAuth (status ${res.status})`,
+            `OAuth の開始に失敗しました（status ${res.status}）`,
         );
       }
       const json = (await res.json()) as ConnectResponse;
@@ -350,7 +351,7 @@ export default function AccountsSettingsPage() {
       setConnectOpen(false);
     } catch (err) {
       setActionTone("error");
-      setActionMessage(err instanceof Error ? err.message : "接続開始に失敗しました");
+      setActionMessage("接続開始に失敗しました");
     } finally {
       setConnectLoading(null);
     }
@@ -381,7 +382,7 @@ export default function AccountsSettingsPage() {
         const body = await res.json().catch(() => ({}));
         throw new Error(
           (body as { error?: { message?: string } })?.error?.message ??
-            `Failed to disconnect (status ${res.status})`,
+            `アカウントの切断に失敗しました（status ${res.status}）`,
         );
       }
       setActionTone("info");
@@ -390,7 +391,7 @@ export default function AccountsSettingsPage() {
       await fetchAccounts();
     } catch (err) {
       setActionTone("error");
-      setActionMessage(err instanceof Error ? err.message : "切断に失敗しました");
+      setActionMessage("切断に失敗しました");
     } finally {
       setDisconnectLoading(false);
     }
@@ -405,7 +406,7 @@ export default function AccountsSettingsPage() {
   return (
     <SettingsShell
       activeSlug="accounts"
-      eyebrow="settings / accounts"
+      eyebrow={SECTION_KICKERS.settingsAccounts}
       title="Connected Accounts"
       description="SNS アカウントの接続状態と OAuth トークンの有効期限を管理します。期限切れの接続には再認証が必要です。"
       actions={
@@ -429,7 +430,7 @@ export default function AccountsSettingsPage() {
             aria-label="再読み込み"
           >
             <ArrowsClockwise size={14} weight="bold" className={loading ? "animate-spin" : ""} />
-            refresh
+            再読み込み
           </button>
           {isAdmin && (
             <button
@@ -438,7 +439,7 @@ export default function AccountsSettingsPage() {
               className="btn btn-sm gap-2 rounded-sm border-none bg-primary font-mono text-xs uppercase tracking-wider text-primary-content hover:bg-primary/90"
             >
               <Plus size={14} weight="bold" />
-              new connection
+              新規接続
             </button>
           )}
         </>
@@ -454,12 +455,12 @@ export default function AccountsSettingsPage() {
           {!isAdmin && (
             <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-base-content/50">
               <Lock size={11} weight="bold" />
-              read-only
+              閲覧専用
             </span>
           )}
         </div>
         <p className="font-mono text-[10px] uppercase tracking-wider text-base-content/40">
-          {isAdmin ? "all operations available" : "admin / owner で接続・切断が可能"}
+          {isAdmin ? "すべての操作が可能です" : "接続・切断は admin / owner のみ実行できます"}
         </p>
       </div>
 
@@ -503,8 +504,8 @@ export default function AccountsSettingsPage() {
         <div className="grid grid-cols-12 gap-4 border-b border-base-300 bg-base-200/50 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.15em] text-base-content/60">
           <div className="col-span-4">account</div>
           <div className="col-span-2">status</div>
-          <div className="col-span-3">token expires</div>
-          <div className="col-span-3 text-right">actions</div>
+          <div className="col-span-3">token expiry</div>
+          <div className="col-span-3 text-right">controls</div>
         </div>
 
         <div className="divide-y divide-base-300/60">
@@ -512,7 +513,7 @@ export default function AccountsSettingsPage() {
             <div className="px-5 py-16 text-center">
               <div className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-base-content/50">
                 <ArrowsClockwise size={14} className="animate-spin" />
-                loading accounts…
+                アカウントを読み込んでいます…
               </div>
             </div>
           )}
@@ -526,7 +527,7 @@ export default function AccountsSettingsPage() {
                 onClick={() => void fetchAccounts()}
                 className="btn btn-xs mt-3 rounded-sm border-base-300 font-mono text-[10px] uppercase"
               >
-                retry
+                再試行
               </button>
             </div>
           )}
@@ -537,11 +538,11 @@ export default function AccountsSettingsPage() {
                 className="font-display text-lg text-base-content/40"
                 style={{ fontFamily: "'Fraunces', serif" }}
               >
-                No connected accounts
+                接続済みアカウントはありません
               </p>
               <p className="mt-1 font-mono text-xs text-base-content/40">
                 {isAdmin
-                  ? "「new connection」ボタンから最初のアカウントを接続してください"
+                  ? "「新規接続」から最初のアカウントを追加してください"
                   : "アカウントが接続されていません。admin / owner に依頼してください"}
               </p>
             </div>
@@ -608,7 +609,7 @@ export default function AccountsSettingsPage() {
                           aria-label={`${account.displayName} を再接続`}
                         >
                           <ArrowsClockwise size={11} weight="bold" />
-                          reconnect
+                          再接続
                         </button>
                       )}
                       <button
@@ -618,13 +619,13 @@ export default function AccountsSettingsPage() {
                         aria-label={`${account.displayName} を切断`}
                       >
                         <LinkBreak size={11} weight="bold" />
-                        disconnect
+                        切断
                       </button>
                     </>
                   ) : (
                     <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-base-content/40">
                       <Lock size={10} weight="bold" />
-                      read-only
+                      閲覧専用
                     </span>
                   )}
                 </div>

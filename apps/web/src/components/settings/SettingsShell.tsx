@@ -17,6 +17,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { Plugs, UsersFour, Brain, Coins, FileText, CaretRight } from "@phosphor-icons/react";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 
 interface NavItem {
   href: string;
@@ -30,35 +31,35 @@ interface NavItem {
 const SETTINGS_NAV: NavItem[] = [
   {
     href: "/settings/accounts",
-    label: "アカウント接続",
+    label: SECTION_KICKERS.settingsAccounts.replace("Settings / ", ""),
     description: "X / LINE / Instagram",
     icon: Plugs,
     slug: "accounts",
   },
   {
     href: "/settings/users",
-    label: "ユーザー管理",
-    description: "メンバーとエージェント",
+    label: SECTION_KICKERS.settingsUsers.replace("Settings / ", ""),
+    description: "Members & Agents",
     icon: UsersFour,
     slug: "users",
   },
   {
     href: "/settings/audit",
-    label: "監査ログ",
+    label: SECTION_KICKERS.settingsAudit.replace("Settings / ", ""),
     description: "Operations Ledger",
     icon: FileText,
     slug: "audit",
   },
   {
     href: "/settings/llm",
-    label: "LLM ルーティング",
+    label: SECTION_KICKERS.settingsLlm.replace("Settings / ", ""),
     description: "Dispatch Roster",
     icon: Brain,
     slug: "llm",
   },
   {
     href: "/settings/budget",
-    label: "予算ポリシー",
+    label: SECTION_KICKERS.settingsBudget.replace("Settings / ", ""),
     description: "Allowances Register",
     icon: Coins,
     slug: "budget",

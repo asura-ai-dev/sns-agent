@@ -12,6 +12,7 @@
 import { fetchBudgetPoliciesSafe, fetchBudgetStatusSafe } from "@/lib/api";
 import { SettingsShell } from "@/components/settings/SettingsShell";
 import { BudgetPolicyManager } from "@/components/settings/budget/BudgetPolicyManager";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export default async function BudgetSettingsPage() {
   return (
     <SettingsShell
       activeSlug="budget"
-      eyebrow="settings · section iv"
+      eyebrow={SECTION_KICKERS.settingsBudget}
       title="Allowances Register"
       description="ワークスペース・プラットフォーム・エンドポイント別に予算ポリシーを発行し、超過時の挙動を制御します。"
     >

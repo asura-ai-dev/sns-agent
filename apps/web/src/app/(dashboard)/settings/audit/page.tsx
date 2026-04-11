@@ -27,6 +27,7 @@ import {
   Copy,
   Export,
 } from "@phosphor-icons/react";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 
 // ───────────────────────────────────────────
 // 型定義
@@ -216,13 +217,13 @@ export default function AuditPage() {
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(
-          body?.error?.message ?? `Failed to fetch audit logs (status ${res.status})`,
+          body?.error?.message ?? `監査ログの取得に失敗しました（status ${res.status}）`,
         );
       }
       const json = (await res.json()) as AuditListResponse;
       setResponse(json);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
+      setError(err instanceof Error ? err.message : "監査ログの取得に失敗しました");
       setResponse(null);
     } finally {
       setLoading(false);
@@ -295,7 +296,7 @@ export default function AuditPage() {
           <div>
             <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] text-base-content/50">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />
-              settings / audit
+              {SECTION_KICKERS.settingsAudit}
             </p>
             <h1
               className="mt-2 font-display text-4xl font-semibold leading-none tracking-tight text-base-content"
@@ -321,14 +322,14 @@ export default function AuditPage() {
               aria-label="再読み込み"
             >
               <ArrowsClockwise size={14} weight="bold" className={loading ? "animate-spin" : ""} />
-              refresh
+              再読み込み
             </button>
             <button
               onClick={() => void exportLogs()}
               className="btn btn-sm gap-2 rounded-sm border-secondary bg-secondary font-mono text-xs uppercase tracking-wider text-secondary-content hover:bg-secondary/90"
             >
               <Export size={14} weight="bold" />
-              export
+              エクスポート
             </button>
           </div>
         </div>
@@ -346,7 +347,7 @@ export default function AuditPage() {
           {/* Actor search */}
           <div className="lg:col-span-2">
             <label className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-base-content/50">
-              Actor ID
+              アクター ID
             </label>
             <div className="relative">
               <MagnifyingGlass
@@ -357,7 +358,7 @@ export default function AuditPage() {
                 type="text"
                 value={filters.actorId}
                 onChange={(e) => setFilters({ ...filters, actorId: e.target.value })}
-                placeholder="uuid..."
+                placeholder="例: user_1234abcd"
                 className="input input-sm w-full rounded-sm border-base-300 bg-base-100 pl-8 font-mono text-xs focus:border-primary focus:outline-none"
               />
             </div>
@@ -366,7 +367,7 @@ export default function AuditPage() {
           {/* Actor type */}
           <div>
             <label className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-base-content/50">
-              Type
+              種別
             </label>
             <select
               value={filters.actorType}
@@ -375,7 +376,7 @@ export default function AuditPage() {
               }
               className="select select-sm w-full rounded-sm border-base-300 bg-base-100 font-mono text-xs focus:border-primary focus:outline-none"
             >
-              <option value="">all</option>
+              <option value="">すべて</option>
               <option value="user">user</option>
               <option value="agent">agent</option>
               <option value="system">system</option>
@@ -385,7 +386,7 @@ export default function AuditPage() {
           {/* Platform */}
           <div>
             <label className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-base-content/50">
-              Platform
+              プラットフォーム
             </label>
             <select
               value={filters.platform}
@@ -394,7 +395,7 @@ export default function AuditPage() {
               }
               className="select select-sm w-full rounded-sm border-base-300 bg-base-100 font-mono text-xs focus:border-primary focus:outline-none"
             >
-              <option value="">all</option>
+              <option value="">すべて</option>
               <option value="x">x</option>
               <option value="line">line</option>
               <option value="instagram">instagram</option>
@@ -404,13 +405,13 @@ export default function AuditPage() {
           {/* Action */}
           <div>
             <label className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-base-content/50">
-              Action
+              アクション
             </label>
             <input
               type="text"
               value={filters.action}
               onChange={(e) => setFilters({ ...filters, action: e.target.value })}
-              placeholder="POST /api/..."
+              placeholder="例: POST /api/posts"
               className="input input-sm w-full rounded-sm border-base-300 bg-base-100 font-mono text-xs focus:border-primary focus:outline-none"
             />
           </div>
@@ -418,7 +419,7 @@ export default function AuditPage() {
           {/* From date */}
           <div>
             <label className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-base-content/50">
-              From
+              開始日
             </label>
             <input
               type="date"
@@ -431,7 +432,7 @@ export default function AuditPage() {
           {/* To date */}
           <div className="lg:col-span-2">
             <label className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-base-content/50">
-              To
+              終了日
             </label>
             <input
               type="date"
@@ -447,13 +448,13 @@ export default function AuditPage() {
               onClick={applyFilters}
               className="btn btn-sm rounded-sm border-none bg-primary font-mono text-xs uppercase tracking-wider text-primary-content hover:bg-primary/90"
             >
-              apply
+              適用
             </button>
             <button
               onClick={resetFilters}
               className="btn btn-sm rounded-sm border-base-300 bg-base-100 font-mono text-xs uppercase tracking-wider hover:border-base-content/40"
             >
-              reset
+              リセット
             </button>
           </div>
         </div>
@@ -478,7 +479,7 @@ export default function AuditPage() {
             <div className="px-5 py-16 text-center">
               <div className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-base-content/50">
                 <ArrowsClockwise size={14} className="animate-spin" />
-                loading ledger…
+                監査ログを読み込んでいます…
               </div>
             </div>
           )}
@@ -491,16 +492,16 @@ export default function AuditPage() {
                 onClick={() => void fetchLogs()}
                 className="btn btn-xs mt-3 rounded-sm border-base-300 font-mono text-[10px] uppercase"
               >
-                retry
+                再試行
               </button>
             </div>
           )}
 
           {!loading && !error && response && response.data.length === 0 && (
             <div className="px-5 py-16 text-center">
-              <p className="font-display text-lg text-base-content/40">No entries recorded</p>
+              <p className="font-display text-lg text-base-content/40">記録済みのログはありません</p>
               <p className="mt-1 font-mono text-xs text-base-content/40">
-                フィルタ条件に一致するログがありません
+                条件に一致するログはありません
               </p>
             </div>
           )}
@@ -588,7 +589,7 @@ export default function AuditPage() {
                 aria-label="前へ"
               >
                 <CaretLeft size={12} weight="bold" />
-                prev
+                前へ
               </button>
               <div className="rounded-sm border border-base-300 bg-base-100 px-3 py-1 font-mono text-[11px]">
                 <span className="text-base-content">{page}</span>
@@ -600,7 +601,7 @@ export default function AuditPage() {
                 className="btn btn-xs rounded-sm border-base-300 bg-base-100 font-mono text-[10px] uppercase tracking-wider disabled:opacity-30"
                 aria-label="次へ"
               >
-                next
+                次へ
                 <CaretRight size={12} weight="bold" />
               </button>
             </div>
@@ -815,7 +816,7 @@ function JsonBlock({
           className="btn btn-xs rounded-sm border-base-300 bg-base-100 font-mono text-[10px] uppercase tracking-wider"
         >
           <Copy size={10} weight="bold" />
-          {copied ? "copied" : "copy"}
+          {copied ? "コピー済み" : "コピー"}
         </button>
       </div>
       <pre className="max-h-64 overflow-auto rounded-sm border border-base-300 bg-secondary/95 px-4 py-3 font-mono text-[11px] leading-relaxed text-secondary-content">

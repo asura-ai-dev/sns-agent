@@ -15,6 +15,7 @@
 import { fetchLlmRoutesSafe } from "@/lib/api";
 import { SettingsShell } from "@/components/settings/SettingsShell";
 import { LlmRouteManager } from "@/components/settings/llm/LlmRouteManager";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function LlmSettingsPage() {
   return (
     <SettingsShell
       activeSlug="llm"
-      eyebrow="settings · section v"
+      eyebrow={SECTION_KICKERS.settingsLlm}
       title="Dispatch Roster"
       description="プラットフォーム × アクションごとに使用する LLM モデル・温度・フォールバックを登録し、優先度で経路を決定します。"
     >
