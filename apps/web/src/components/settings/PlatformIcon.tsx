@@ -3,11 +3,21 @@
  *
  * 監査ログの PlatformChip と意匠を揃えつつ、設定画面ではより大きな
  * アイコン + ブランドカラーでアカウントカードのシンボルとして使う。
+ *
+ * @example
+ * <PlatformIcon platform="x" />
+ *
+ * @example
+ * <PlatformIcon platform="line" variant="outline" size={32} />
+ *
+ * @example
+ * <PlatformIcon platform="instagram" variant="chip" />
  */
 import { XLogo, InstagramLogo, ChatCircleDots } from "@phosphor-icons/react";
 import type { CSSProperties } from "react";
 
 export type Platform = "x" | "line" | "instagram";
+export type PlatformIconVariant = "solid" | "outline" | "chip";
 
 interface PlatformVisual {
   label: string;
@@ -44,26 +54,85 @@ export const PLATFORM_VISUALS: Record<Platform, PlatformVisual> = {
 interface PlatformIconProps {
   platform: Platform;
   size?: number;
+  variant?: PlatformIconVariant;
   className?: string;
 }
 
-export function PlatformIcon({ platform, size = 40, className = "" }: PlatformIconProps) {
+function getSolidAccentColor(visual: PlatformVisual) {
+  return visual.ring.replace(/,\s*[\d.]+\)$/, ")");
+}
+
+function getPlatformIconPresentation(
+  visual: PlatformVisual,
+  variant: PlatformIconVariant,
+  size?: number,
+): {
+  className: string;
+  iconSize: number;
+  style: CSSProperties;
+} {
+  const resolvedSize = size ?? (variant === "chip" ? 20 : 40);
+
+  if (variant === "chip") {
+    return {
+      className: "inline-flex rounded-full",
+      iconSize: Math.floor(resolvedSize * 0.55),
+      style: {
+        width: resolvedSize,
+        height: resolvedSize,
+        background: visual.background,
+        color: visual.color,
+        boxShadow: `0 0 0 1px ${visual.ring}`,
+      },
+    };
+  }
+
+  if (variant === "outline") {
+    const accentColor = getSolidAccentColor(visual);
+    return {
+      className: "inline-flex rounded-sm border",
+      iconSize: Math.floor(resolvedSize * 0.5),
+      style: {
+        width: resolvedSize,
+        height: resolvedSize,
+        background: "transparent",
+        borderColor: accentColor,
+        color: accentColor,
+        boxShadow: "none",
+      },
+    };
+  }
+
+  return {
+    className: "inline-flex rounded-sm",
+    iconSize: Math.floor(resolvedSize * 0.5),
+    style: {
+      width: resolvedSize,
+      height: resolvedSize,
+      background: visual.background,
+      color: visual.color,
+      boxShadow: `0 0 0 1px ${visual.ring}, 0 4px 12px -4px ${visual.ring}`,
+    },
+  };
+}
+
+export function PlatformIcon({
+  platform,
+  size,
+  variant = "solid",
+  className = "",
+}: PlatformIconProps) {
   const visual = PLATFORM_VISUALS[platform];
   const Icon = visual.icon;
-  const style: CSSProperties = {
-    width: size,
-    height: size,
-    background: visual.background,
-    color: visual.color,
-    boxShadow: `0 0 0 1px ${visual.ring}, 0 4px 12px -4px ${visual.ring}`,
-  };
+  const presentation = getPlatformIconPresentation(visual, variant, size);
+
   return (
     <span
       aria-label={visual.label}
-      className={`inline-flex shrink-0 items-center justify-center rounded-sm ${className}`}
-      style={style}
+      className={`${presentation.className} shrink-0 items-center justify-center ${className}`}
+      style={presentation.style}
     >
-      <Icon size={Math.floor(size * 0.5)} weight="bold" />
+      <Icon size={presentation.iconSize} weight="bold" />
     </span>
   );
 }
