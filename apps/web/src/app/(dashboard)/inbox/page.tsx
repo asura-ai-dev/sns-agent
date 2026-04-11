@@ -23,7 +23,7 @@
  */
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowsClockwise,
@@ -34,6 +34,7 @@ import {
 import { PlatformIcon, PLATFORM_VISUALS } from "@/components/settings/PlatformIcon";
 import type { Platform } from "@/components/settings/PlatformIcon";
 import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
+import { usePlatformViewMode } from "@/lib/view-mode/usePlatformViewMode";
 
 // ───────────────────────────────────────────
 // 型
@@ -101,6 +102,8 @@ const TABS: { value: TabValue; label: string; platform?: Platform }[] = [
   { value: "instagram", label: "Instagram", platform: "instagram" },
 ];
 
+const COLUMN_PLATFORMS: Platform[] = ["x", "line", "instagram"];
+
 // ───────────────────────────────────────────
 // ユーティリティ
 // ───────────────────────────────────────────
@@ -138,6 +141,15 @@ function formatClock(iso: string | null): string {
 // ───────────────────────────────────────────
 
 export default function InboxPage() {
+  return (
+    <Suspense fallback={null}>
+      <InboxPageContent />
+    </Suspense>
+  );
+}
+
+function InboxPageContent() {
+  const { mode } = usePlatformViewMode("inbox");
   const [activeTab, setActiveTab] = useState<TabValue>("all");
   const [threads, setThreads] = useState<ConversationThread[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -264,6 +276,13 @@ export default function InboxPage() {
 
   // ───────── 派生状態 ─────────
   const filteredThreads = useMemo(() => threads ?? [], [threads]);
+  const threadsByPlatform = useMemo(() => {
+    const grouped: Record<Platform, ConversationThread[]> = { x: [], line: [], instagram: [] };
+    for (const thread of filteredThreads) {
+      grouped[thread.platform].push(thread);
+    }
+    return grouped;
+  }, [filteredThreads]);
   const selectedThread = detail?.thread;
 
   return (
@@ -296,17 +315,61 @@ export default function InboxPage() {
         {/* 左: スレッド一覧 */}
         <aside
           className={[
-            "flex w-full shrink-0 flex-col border-r border-base-300 bg-base-100/80 md:w-[22rem] lg:w-[26rem]",
+            "flex w-full shrink-0 flex-col border-r border-base-300 bg-base-100/80",
+            mode === "columns" ? "md:min-w-0 md:flex-1 md:w-auto" : "md:w-[22rem] lg:w-[26rem]",
             mobileDetailOpen ? "hidden md:flex" : "flex",
           ].join(" ")}
         >
-          <ThreadList
-            threads={filteredThreads}
-            loading={loadingList}
-            error={listError}
-            selectedId={selectedId}
-            onSelect={handleSelectThread}
-          />
+          {mode === "columns" ? (
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto px-4 py-4 snap-x snap-mandatory md:px-5 sm:snap-none">
+                {COLUMN_PLATFORMS.map((platform) => {
+                  const platformThreads = threadsByPlatform[platform];
+                  const visual = PLATFORM_VISUALS[platform];
+
+                  return (
+                    <section
+                      key={platform}
+                      aria-label={`${visual.label} のスレッド ${platformThreads.length} 件`}
+                      className="flex h-full min-h-0 w-[18rem] shrink-0 snap-start flex-col rounded-box border border-base-300 bg-base-100 md:w-[20rem]"
+                    >
+                      <header className="flex items-center justify-between gap-3 border-b border-base-300 px-4 py-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <PlatformIcon platform={platform} size={28} />
+                          <div className="min-w-0">
+                            <p className="font-display text-sm font-semibold text-base-content">
+                              {visual.label}
+                            </p>
+                            <p className="text-[0.65rem] uppercase tracking-[0.18em] text-base-content/50">
+                              {platformThreads.length} 件
+                            </p>
+                          </div>
+                        </div>
+                      </header>
+                      <div className="min-h-0 flex-1 overflow-y-auto">
+                        <ThreadList
+                          threads={platformThreads}
+                          loading={loadingList}
+                          error={listError}
+                          selectedId={selectedId}
+                          onSelect={handleSelectThread}
+                          hideHeader
+                        />
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <ThreadList
+              threads={filteredThreads}
+              loading={loadingList}
+              error={listError}
+              selectedId={selectedId}
+              onSelect={handleSelectThread}
+            />
+          )}
         </aside>
 
         {/* 右: 会話 + 返信 */}
@@ -389,23 +452,27 @@ function ThreadList({
   error,
   selectedId,
   onSelect,
+  hideHeader = false,
 }: {
   threads: ConversationThread[];
   loading: boolean;
   error: string | null;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  hideHeader?: boolean;
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-base-300 px-5 py-4">
-        <span className="font-display text-sm font-semibold text-base-content">
-          スレッド
-          <span className="ml-2 font-sans text-xs font-normal text-base-content/50">
-            {threads.length}
+      {!hideHeader && (
+        <div className="flex items-center justify-between border-b border-base-300 px-5 py-4">
+          <span className="font-display text-sm font-semibold text-base-content">
+            スレッド
+            <span className="ml-2 font-sans text-xs font-normal text-base-content/50">
+              {threads.length}
+            </span>
           </span>
-        </span>
-      </div>
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loading && (
