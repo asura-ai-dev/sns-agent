@@ -125,7 +125,7 @@ export function SidebarDrawer() {
   };
 
   return (
-    <div className="drawer-side z-40">
+    <div className="drawer-side z-40 lg:hidden">
       <label htmlFor="app-drawer" aria-label="メニューを閉じる" className="drawer-overlay" />
       <div className="h-full w-60">
         <SidebarContent pathname={pathname} onNavigate={closeDrawer} />
