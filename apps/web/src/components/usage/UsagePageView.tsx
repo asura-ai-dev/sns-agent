@@ -35,9 +35,9 @@ interface UsagePageViewProps {
 }
 
 const PERIODS: { key: UsagePeriod; label: string; sub: string }[] = [
-  { key: "daily", label: "日次", sub: "daily" },
-  { key: "weekly", label: "週次", sub: "weekly" },
-  { key: "monthly", label: "月次", sub: "monthly" },
+  { key: "daily", label: "日次", sub: "1日単位" },
+  { key: "weekly", label: "週次", sub: "1週単位" },
+  { key: "monthly", label: "月次", sub: "1か月単位" },
 ];
 
 const PLATFORM_FILTERS: PlatformFilter[] = ["all", "x", "line", "instagram", "llm"];
@@ -251,13 +251,13 @@ export function UsagePageView({ viewModel, budgetStatuses, budgetIsFallback }: U
             href="/settings/budget"
             className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] text-base-content/55 underline-offset-4 hover:text-base-content hover:underline"
           >
-            manage policies
+            予算設定を開く
             <ArrowSquareOut size={11} weight="bold" />
           </a>
         </div>
         {budgetIsFallback && (
           <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.18em] text-warning-content/70">
-            wire offline · showing zeroed allowances
+            回線オフライン · 予算表示をゼロで代替しています
           </p>
         )}
         <BudgetConsumptionRows statuses={budgetStatuses} />

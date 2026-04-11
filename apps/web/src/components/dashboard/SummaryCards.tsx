@@ -74,8 +74,8 @@ export function SummaryCards({
       eyebrow: "column i",
       label: "total posts",
       value: formatInteger(totalPosts),
-      unit: "all platforms",
-      footnote: "drafts, scheduled & published",
+      unit: "全プラットフォーム",
+      footnote: "下書き・予約・公開を含む",
       Icon: Newspaper,
       roman: "I",
     },
@@ -83,8 +83,8 @@ export function SummaryCards({
       eyebrow: "column ii",
       label: "scheduled",
       value: formatInteger(scheduledPending),
-      unit: "awaiting run",
-      footnote: "pending jobs in the queue",
+      unit: "実行待ち",
+      footnote: "キュー内の予約ジョブ",
       Icon: ClockCountdown,
       roman: "II",
     },
@@ -93,7 +93,7 @@ export function SummaryCards({
       label: "est. cost",
       value: cost.value,
       unit: cost.unit,
-      footnote: "month-to-date, all providers",
+      footnote: "当月累計・全プロバイダー",
       Icon: CurrencyDollar,
       roman: "III",
     },
@@ -101,7 +101,7 @@ export function SummaryCards({
       eyebrow: "column iv",
       label: "accounts",
       value: formatInteger(connectedAccounts),
-      unit: "connected",
+      unit: "接続中",
       footnote: "x · line · instagram",
       Icon: PlugsConnected,
       roman: "IV",
@@ -175,7 +175,7 @@ export function SummaryCards({
                 {degraded && (
                   <span className="inline-flex items-center gap-1 text-warning">
                     <Warning size={9} weight="bold" />
-                    offline
+                    オフライン
                   </span>
                 )}
               </div>

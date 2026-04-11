@@ -13,6 +13,7 @@
  * design.md 10.2 Skills管理
  */
 import { fetchSkillPackagesSafe } from "@/lib/api";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 import { SkillsMasthead } from "@/components/skills/SkillsMasthead";
 import { SkillsManager } from "@/components/skills/SkillsManager";
 
@@ -24,7 +25,7 @@ export default async function SkillsPage() {
   return (
     <div className="space-y-6">
       <SkillsMasthead
-        eyebrow="capabilities · section i"
+        eyebrow={SECTION_KICKERS.skills}
         title="Capabilities Gazette"
         description="SNS ごとの skills パッケージを生成・有効化し、LLM から実行可能なアクション一覧を管理します。"
         packageCount={packagesRes.data.length}

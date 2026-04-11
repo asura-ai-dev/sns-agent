@@ -13,6 +13,7 @@
  */
 import { fetchUsageReportSafe, fetchBudgetStatusSafe } from "@/lib/api";
 import type { UsagePeriod } from "@/lib/api";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 
 import { UsageMasthead } from "@/components/usage/UsageMasthead";
 import { UsagePageView } from "@/components/usage/UsagePageView";
@@ -113,9 +114,9 @@ export default async function UsagePage({ searchParams }: UsagePageProps) {
 
   const degraded = viewModel.isFallback || budgetRes.isFallback;
   const errorLines = [
-    reportRes.errorMessage && `usage report: ${reportRes.errorMessage}`,
-    prevRes.errorMessage && `previous range: ${prevRes.errorMessage}`,
-    budgetRes.errorMessage && `budget status: ${budgetRes.errorMessage}`,
+    reportRes.errorMessage && `使用量レポート: ${reportRes.errorMessage}`,
+    prevRes.errorMessage && `前期間: ${prevRes.errorMessage}`,
+    budgetRes.errorMessage && `予算状況: ${budgetRes.errorMessage}`,
   ].filter(Boolean) as string[];
 
   return (
@@ -136,7 +137,7 @@ export default async function UsagePage({ searchParams }: UsagePageProps) {
 
       <footer className="border-t border-dashed border-base-content/20 pt-3 font-mono text-[9px] uppercase tracking-[0.22em] text-base-content/35">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span>sns agent · treasury bulletin</span>
+          <span>sns agent · {SECTION_KICKERS.usage.toLowerCase()}</span>
           <span>set in fraunces &amp; dm sans · period · {period}</span>
           <span>— printed server-side —</span>
         </div>

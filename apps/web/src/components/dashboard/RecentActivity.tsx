@@ -56,39 +56,39 @@ interface ActivityVisual {
 const KIND_VISUALS: Record<ActivityKind, ActivityVisual> = {
   "post.draft": {
     Icon: PencilSimple,
-    label: "draft",
+    label: "下書き",
     tone: "neutral",
-    verb: "saved as draft",
+    verb: "下書き保存",
   },
   "post.published": {
     Icon: PaperPlaneTilt,
-    label: "published",
+    label: "公開",
     tone: "success",
-    verb: "published to",
+    verb: "公開",
   },
   "post.failed": {
     Icon: XCircle,
-    label: "failed",
+    label: "失敗",
     tone: "error",
-    verb: "failed on",
+    verb: "失敗",
   },
   "schedule.created": {
     Icon: ClockCountdown,
-    label: "scheduled",
+    label: "予約",
     tone: "info",
-    verb: "scheduled for",
+    verb: "予約",
   },
   "schedule.succeeded": {
     Icon: CheckCircle,
-    label: "run · ok",
+    label: "実行完了",
     tone: "success",
-    verb: "ran successfully on",
+    verb: "実行完了",
   },
   "schedule.failed": {
     Icon: Warning,
-    label: "run · fail",
+    label: "実行失敗",
     tone: "error",
-    verb: "run failed on",
+    verb: "実行失敗",
   },
 };
 
@@ -123,16 +123,16 @@ function formatFilingTime(iso: string): {
   if (diff < 0) {
     // future (e.g. scheduled)
     const sec = Math.floor(-diff / 1000);
-    if (sec < 60) relative = `in ${sec}s`;
-    else if (sec < 3600) relative = `in ${Math.floor(sec / 60)}m`;
-    else if (sec < 86400) relative = `in ${Math.floor(sec / 3600)}h`;
-    else relative = `in ${Math.floor(sec / 86400)}d`;
+    if (sec < 60) relative = `${sec}秒後`;
+    else if (sec < 3600) relative = `${Math.floor(sec / 60)}分後`;
+    else if (sec < 86400) relative = `${Math.floor(sec / 3600)}時間後`;
+    else relative = `${Math.floor(sec / 86400)}日後`;
   } else {
     const sec = Math.floor(diff / 1000);
-    if (sec < 60) relative = `${sec}s ago`;
-    else if (sec < 3600) relative = `${Math.floor(sec / 60)}m ago`;
-    else if (sec < 86400) relative = `${Math.floor(sec / 3600)}h ago`;
-    else relative = `${Math.floor(sec / 86400)}d ago`;
+    if (sec < 60) relative = `${sec}秒前`;
+    else if (sec < 3600) relative = `${Math.floor(sec / 60)}分前`;
+    else if (sec < 86400) relative = `${Math.floor(sec / 3600)}時間前`;
+    else relative = `${Math.floor(sec / 86400)}日前`;
   }
   return { time, date, relative };
 }
@@ -279,13 +279,13 @@ function EmptyState() {
         className="font-display text-lg italic text-base-content/50"
         style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic" }}
       >
-        No dispatches yet.
+        まだアクティビティはありません。
       </div>
       <p className="max-w-sm font-sans text-xs text-base-content/45">
         アクティビティがまだ記録されていません。投稿を作成したり、アカウントを接続すると、ここに日次ログが流れ始めます。
       </p>
       <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.2em] text-base-content/30">
-        — awaiting the first filing —
+        最初の記録を待機中
       </div>
     </div>
   );

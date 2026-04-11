@@ -14,6 +14,7 @@
 "use client";
 
 import { Folders, NotePencil, Files, CircleNotch, RssSimple } from "@phosphor-icons/react";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 import type { ConversationSummary } from "./api";
 
 interface ConversationListProps {
@@ -34,17 +35,17 @@ function relativeDate(iso: string): string {
     const hour = 3_600_000;
     if (delta < hour) {
       const mins = Math.max(1, Math.round(delta / 60_000));
-      return `${mins}m ago`;
+      return `${mins}分前`;
     }
     if (delta < 24 * hour) {
       const hours = Math.round(delta / hour);
-      return `${hours}h ago`;
+      return `${hours}時間前`;
     }
     if (delta < 7 * 24 * hour) {
       const days = Math.round(delta / (24 * hour));
-      return `${days}d ago`;
+      return `${days}日前`;
     }
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }).toLowerCase();
+    return d.toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
   } catch {
     return "—";
   }
@@ -78,7 +79,7 @@ export function ConversationList({
       {/* Header */}
       <div className="border-b-2 border-base-content/75 px-4 pt-4 pb-3">
         <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-base-content/45">
-          section · file cabinet
+          {SECTION_KICKERS.agents}
         </div>
         <h2
           className="mt-0.5 font-display text-[22px] font-semibold leading-tight text-base-content"
@@ -90,7 +91,7 @@ export function ConversationList({
           className="mt-0.5 font-display text-xs italic text-base-content/55"
           style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic" }}
         >
-          bound editions of past dispatches
+          過去のやり取りを時系列で確認できます
         </p>
 
         <button
@@ -102,7 +103,7 @@ export function ConversationList({
           className="wire-stamp mt-3 flex w-full items-center justify-center gap-1.5 rounded-sm border-2 border-base-content/80 bg-base-100 px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-base-content shadow-[2px_2px_0_0_rgba(17,17,17,0.18)] transition hover:-translate-y-[1px] hover:shadow-[2px_3px_0_0_rgba(17,17,17,0.25)] active:translate-y-[1px] active:shadow-none"
         >
           <NotePencil size={13} weight="bold" />
-          new dispatch
+          新しいチャット
         </button>
       </div>
 
@@ -110,7 +111,7 @@ export function ConversationList({
       {offline && !loading && (
         <div className="mx-3 mt-3 flex items-start gap-2 rounded-sm border border-dashed border-warning/60 bg-warning/10 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.18em] text-[#7a4b00]">
           <RssSimple size={11} weight="bold" className="mt-0.5 shrink-0" />
-          <span>wire offline · demo archive shown</span>
+          <span>回線オフライン · デモ履歴を表示しています</span>
         </div>
       )}
 
@@ -119,7 +120,7 @@ export function ConversationList({
         {loading ? (
           <div className="flex items-center gap-2 px-3 py-6 font-mono text-[10px] uppercase tracking-[0.18em] text-base-content/45">
             <CircleNotch size={12} weight="bold" className="animate-spin" />
-            pulling archive...
+            履歴を読み込み中…
           </div>
         ) : conversations.length === 0 ? (
           <div className="px-3 py-8 text-center">
@@ -128,10 +129,10 @@ export function ConversationList({
               className="mt-2 font-display text-sm italic text-base-content/55"
               style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic" }}
             >
-              nothing on file yet.
+              まだ会話はありません。
             </p>
             <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.18em] text-base-content/40">
-              file a new dispatch to open the first edition
+              新しいチャットを開始すると、ここに履歴が表示されます
             </p>
           </div>
         ) : (
@@ -164,14 +165,11 @@ export function ConversationList({
                         fontOpticalSizing: "auto",
                       }}
                     >
-                      {c.title || "(untitled dispatch)"}
+                      {c.title || "（タイトル未設定）"}
                     </div>
                     <div className="mt-1 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-base-content/40">
                       <Files size={10} weight="bold" />
-                      <span className="tabular-nums">
-                        {c.messageCount} entr
-                        {c.messageCount === 1 ? "y" : "ies"}
-                      </span>
+                      <span className="tabular-nums">{c.messageCount} 件</span>
                     </div>
                   </button>
                 </li>

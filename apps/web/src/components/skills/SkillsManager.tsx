@@ -34,6 +34,7 @@ import {
 
 import { PlatformIcon, type Platform as UiPlatform } from "@/components/settings/PlatformIcon";
 import type { SkillPackageDto } from "@/lib/api";
+import { COMMON_ACTIONS } from "@/lib/i18n/labels";
 
 interface SkillsManagerProps {
   initialPackages: SkillPackageDto[];
@@ -197,7 +198,7 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
       setGenerateOpen(false);
       startTransition(() => router.refresh());
     } catch (err) {
-      setGenerateError(err instanceof Error ? err.message : "generate failed");
+      setGenerateError(err instanceof Error ? err.message : "生成に失敗しました");
     } finally {
       setGenerating(false);
     }
@@ -213,7 +214,7 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
       setPackages((prev) => prev.map((p) => (p.id === res.data.id ? res.data : p)));
       startTransition(() => router.refresh());
     } catch (err) {
-      setToggleError(err instanceof Error ? err.message : "toggle failed");
+      setToggleError(err instanceof Error ? err.message : "切り替えに失敗しました");
     } finally {
       setTogglingId(null);
     }
@@ -228,7 +229,7 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
       const res = await apiFetch<ManifestResponse>("GET", `/api/skills/${pkg.id}/manifest`);
       setDetailManifest(res.data.manifest);
     } catch (err) {
-      setDetailError(err instanceof Error ? err.message : "manifest fetch failed");
+      setDetailError(err instanceof Error ? err.message : "マニフェストの取得に失敗しました");
     } finally {
       setDetailLoading(false);
     }
@@ -273,7 +274,7 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
       {isFallback && (
         <div className="flex items-start gap-2 rounded-sm border border-dashed border-warning/60 bg-warning/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.15em] text-[#7a4b00]">
           <Warning size={12} weight="bold" className="mt-0.5 shrink-0" />
-          <span>wire offline · 生成・有効化は API 起動後に再試行してください</span>
+          <span>回線オフライン · 生成・有効化は API 起動後に再試行してください</span>
         </div>
       )}
 
@@ -317,7 +318,7 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
                     aria-hidden
                   />
                   <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-base-content/45">
-                    no packages installed
+                    パッケージはまだありません
                   </div>
                   <div className="mt-1 text-xs text-base-content/55">
                     Skills
@@ -411,7 +412,7 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
                       ) : (
                         <Prohibit size={11} weight="bold" />
                       )}
-                      {pkg.enabled ? "enabled" : "disabled"}
+                      {pkg.enabled ? "有効" : "無効"}
                     </span>
                   </td>
                   {/* toggle + view */}
@@ -482,14 +483,14 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
                     className="mt-0.5 font-display text-2xl font-semibold text-base-content"
                     style={{ fontFamily: "'Fraunces', serif" }}
                   >
-                    Generate Package
+                    Package Generator
                   </h3>
                 </div>
                 <button
                   type="button"
                   onClick={closeGenerate}
                   disabled={generating}
-                  aria-label="閉じる"
+                  aria-label={COMMON_ACTIONS.close}
                   className="rounded-sm p-1.5 text-base-content/50 transition-colors hover:bg-base-200 hover:text-base-content"
                 >
                   <X size={14} weight="bold" />
@@ -569,7 +570,7 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
                     disabled={generating}
                     className="rounded-sm border border-base-content/25 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-base-content/60 transition-colors hover:border-base-content/55 hover:text-base-content"
                   >
-                    取消
+                    {COMMON_ACTIONS.cancel}
                   </button>
                   <button
                     type="submit"
@@ -579,12 +580,12 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
                     {generating ? (
                       <>
                         <ArrowsClockwise size={12} weight="bold" className="animate-spin" />
-                        transmitting…
+                        生成中…
                       </>
                     ) : (
                       <>
                         <Lightning size={12} weight="bold" />
-                        generate
+                        パッケージ生成
                       </>
                     )}
                   </button>
@@ -656,7 +657,7 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
                 {detailLoading && (
                   <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.15em] text-base-content/50">
                     <ArrowsClockwise size={12} className="animate-spin" />
-                    loading manifest…
+                    マニフェストを読み込み中…
                   </div>
                 )}
                 {detailError && (
@@ -696,7 +697,7 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
                               </div>
                               {action.readOnly && (
                                 <span className="inline-flex h-5 items-center rounded-sm border border-info/40 bg-info/10 px-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.15em] text-info">
-                                  read-only
+                                  読み取り専用
                                 </span>
                               )}
                             </div>
@@ -789,7 +790,7 @@ function ParameterList({ schema }: { schema: ManifestAction["parameters"] }) {
   if (!isObject) {
     return (
       <div className="mt-3 rounded-sm border border-dashed border-base-content/20 bg-base-200/40 p-3 font-mono text-[10px] text-base-content/55">
-        parameters: {schema?.type ?? "—"}
+        パラメーター: {schema?.type ?? "—"}
       </div>
     );
   }
@@ -798,7 +799,7 @@ function ParameterList({ schema }: { schema: ManifestAction["parameters"] }) {
   if (entries.length === 0) {
     return (
       <div className="mt-3 rounded-sm border border-dashed border-base-content/20 bg-base-200/40 p-3 font-mono text-[10px] text-base-content/55">
-        no parameters
+        パラメーターなし
       </div>
     );
   }
@@ -812,7 +813,7 @@ function ParameterList({ schema }: { schema: ManifestAction["parameters"] }) {
               <span className="font-semibold">{key}</span>
               {req && (
                 <span className="font-mono text-[9px] uppercase tracking-wider text-error/80">
-                  required
+                  必須
                 </span>
               )}
             </dt>

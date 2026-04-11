@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Broadcast, RssSimple, List, ArrowClockwise } from "@phosphor-icons/react";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 import { ChatInput } from "./ChatInput";
 import { MessageBubble, type ChatMessage } from "./MessageBubble";
 import { ActionPreview } from "./ActionPreview";
@@ -178,8 +179,8 @@ export function ChatContainer({
               ...m,
               streaming: false,
               content: m.content
-                ? m.content + "\n\n[wire killed by operator]"
-                : "[wire killed by operator]",
+                ? m.content + "\n\n[オペレーターが停止しました]"
+                : "[オペレーターが停止しました]",
             }
           : m,
       ),
@@ -204,13 +205,13 @@ export function ChatContainer({
     const summary =
       typeof (res.value.outcome.result as { message?: unknown })?.message === "string"
         ? String((res.value.outcome.result as { message: string }).message)
-        : `${res.value.outcome.actionName} executed`;
+        : `${res.value.outcome.actionName} を実行しました`;
     setMessages((prev) => [
       ...prev,
       {
         id: genId(),
         role: "system",
-        content: `press log · ${summary}`,
+        content: `実行ログ · ${summary}`,
         createdAt: new Date().toISOString(),
       },
     ]);
@@ -225,7 +226,7 @@ export function ChatContainer({
       {
         id: genId(),
         role: "system",
-        content: "proof sheet killed by operator",
+        content: "確認シートをキャンセルしました",
         createdAt: new Date().toISOString(),
       },
     ]);
@@ -265,14 +266,14 @@ export function ChatContainer({
               className="flex items-center gap-1.5 rounded-sm border border-base-content/40 bg-base-100 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.2em] text-base-content/70 transition hover:bg-base-200 lg:hidden"
             >
               <List size={12} weight="bold" />
-              cabinet
+              一覧
             </button>
           )}
 
           <div className="flex-1">
             <div className="flex items-baseline justify-between gap-3">
               <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-base-content/45">
-                section · active wire desk
+                {SECTION_KICKERS.agents}
               </div>
               <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-base-content/45">
                 edition №{" "}
@@ -292,7 +293,7 @@ export function ChatContainer({
               className="mt-0.5 font-display text-sm italic text-base-content/60"
               style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic" }}
             >
-              a live dispatch exchange with the sns agent desk
+              SNS Agent と対話しながら依頼内容を整理・実行できます
             </p>
           </div>
         </div>
@@ -300,7 +301,7 @@ export function ChatContainer({
         {offline && (
           <div className="mt-3 flex items-start gap-2 rounded-sm border border-dashed border-warning/60 bg-warning/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[#7a4b00]">
             <RssSimple size={12} weight="bold" className="mt-0.5 shrink-0" />
-            <span>wire offline · operating on local fallback transcript</span>
+            <span>回線オフライン · ローカルの代替会話を表示しています</span>
           </div>
         )}
       </header>
@@ -360,29 +361,28 @@ function EmptyDesk() {
         <Broadcast size={26} weight="duotone" />
       </div>
       <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-base-content/45">
-        the desk is quiet
+        まだ会話はありません
       </div>
       <h2
         className="mt-1 font-display text-[28px] font-semibold leading-tight text-base-content"
         style={{ fontFamily: "'Fraunces', serif", fontOpticalSizing: "auto" }}
       >
-        File your first dispatch.
+        最初の依頼を送信してください。
       </h2>
       <p
         className="mt-2 font-display text-[15px] italic leading-snug text-base-content/65"
         style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic" }}
       >
-        Ask the agent to draft a post, summarise the week’s usage, or run a skill. A proof sheet
-        will come back to stamp before anything is pressed.
+        投稿の下書き、週次使用量の要約、スキルの実行依頼などを入力できます。実行前には確認内容が表示されます。
       </p>
       <div className="mt-6 flex flex-wrap items-center justify-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-base-content/50">
         <Suggestion label="今日の X 投稿を下書き" />
         <Suggestion label="LINE 予約の状態" />
-        <Suggestion label="instagram 週次使用量" />
+        <Suggestion label="Instagram 週次使用量" />
       </div>
       <div className="mt-8 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.2em] text-base-content/35">
         <ArrowClockwise size={11} weight="bold" />
-        type below · enter to file
+        下に入力して Enter で送信
       </div>
     </div>
   );

@@ -20,6 +20,7 @@ import {
   fetchUsageSummarySafe,
 } from "@/lib/api";
 import type { SocialAccount, Post, ScheduledJob } from "@/lib/api";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 
 import { SummaryCards } from "@/components/dashboard/SummaryCards";
 import { PlatformOverview } from "@/components/dashboard/PlatformOverview";
@@ -122,7 +123,7 @@ function buildActivity(posts: Post[], schedules: ScheduledJob[]): ActivityItem[]
     const publishedAtIso = toIso(p.publishedAt as unknown as Isoish);
     const platform = (p.platform as ActivityItem["platform"]) ?? "x";
     const snippet = (p.contentText ?? "").trim().replace(/\s+/g, " ").slice(0, 80);
-    const title = snippet ? `“${snippet}${snippet.length >= 80 ? "…" : ""}”` : "(no content)";
+    const title = snippet ? `「${snippet}${snippet.length >= 80 ? "…" : ""}」` : "本文なし";
 
     if (p.status === "published" && publishedAtIso) {
       items.push({
@@ -131,7 +132,7 @@ function buildActivity(posts: Post[], schedules: ScheduledJob[]): ActivityItem[]
         timestamp: publishedAtIso,
         platform,
         title,
-        detail: `post ${p.id.slice(0, 8)} · published`,
+        detail: `投稿 ${p.id.slice(0, 8)} · 公開済み`,
       });
     } else if (p.status === "failed") {
       items.push({
@@ -140,7 +141,7 @@ function buildActivity(posts: Post[], schedules: ScheduledJob[]): ActivityItem[]
         timestamp: createdAtIso ?? new Date().toISOString(),
         platform,
         title,
-        detail: `post ${p.id.slice(0, 8)} · failed`,
+        detail: `投稿 ${p.id.slice(0, 8)} · 失敗`,
       });
     } else if (p.status === "draft" && createdAtIso) {
       items.push({
@@ -149,7 +150,7 @@ function buildActivity(posts: Post[], schedules: ScheduledJob[]): ActivityItem[]
         timestamp: createdAtIso,
         platform,
         title,
-        detail: `draft ${p.id.slice(0, 8)}`,
+        detail: `下書き ${p.id.slice(0, 8)}`,
       });
     }
   }
@@ -173,20 +174,20 @@ function buildActivity(posts: Post[], schedules: ScheduledJob[]): ActivityItem[]
     if (job.status === "succeeded" && completedAtIso) {
       kind = "schedule.succeeded";
       timestamp = completedAtIso;
-      title = "Scheduled run completed";
-      detail = `job ${job.id.slice(0, 8)} · attempt ${job.attemptCount}`;
+      title = "予約実行が完了しました";
+      detail = `予約 ${job.id.slice(0, 8)} · ${job.attemptCount} 回実行`;
     } else if (job.status === "failed") {
       kind = "schedule.failed";
       timestamp = completedAtIso ?? scheduledAtIso ?? new Date().toISOString();
-      title = "Scheduled run failed";
+      title = "予約実行に失敗しました";
       detail = job.lastError
-        ? `job ${job.id.slice(0, 8)} · ${job.lastError.slice(0, 60)}`
-        : `job ${job.id.slice(0, 8)}`;
+        ? `予約 ${job.id.slice(0, 8)} · ${job.lastError.slice(0, 60)}`
+        : `予約 ${job.id.slice(0, 8)}`;
     } else if (job.status === "pending" && scheduledAtIso) {
       kind = "schedule.created";
       timestamp = scheduledAtIso;
-      title = "Post scheduled for publication";
-      detail = `job ${job.id.slice(0, 8)}`;
+      title = "投稿を予約しました";
+      detail = `予約 ${job.id.slice(0, 8)}`;
     }
 
     if (kind && timestamp) {
@@ -253,10 +254,10 @@ export default async function DashboardPage() {
 
   // Error lines visible in dev for debugging the degraded state.
   const errorLines = [
-    accountsRes.errorMessage && `accounts: ${accountsRes.errorMessage}`,
-    postsRes.errorMessage && `posts: ${postsRes.errorMessage}`,
-    schedulesRes.errorMessage && `schedules: ${schedulesRes.errorMessage}`,
-    usageRes.errorMessage && `usage: ${usageRes.errorMessage}`,
+    accountsRes.errorMessage && `アカウント: ${accountsRes.errorMessage}`,
+    postsRes.errorMessage && `投稿: ${postsRes.errorMessage}`,
+    schedulesRes.errorMessage && `予約: ${schedulesRes.errorMessage}`,
+    usageRes.errorMessage && `使用量: ${usageRes.errorMessage}`,
   ].filter(Boolean) as string[];
 
   return (
@@ -284,14 +285,13 @@ export default async function DashboardPage() {
               className="font-display text-[44px] font-semibold leading-[1.02] tracking-[-0.02em] text-base-content sm:text-[56px]"
               style={{ fontFamily: "'Fraunces', serif", fontOpticalSizing: "auto" }}
             >
-              The Operations Ledger
+              {SECTION_KICKERS.dashboard}
             </h1>
             <p
               className="mt-1 font-display text-sm italic leading-tight text-base-content/60"
               style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic" }}
             >
-              a daily read on posts, schedules, spend & bureaus &nbsp;—&nbsp; sns agent morning
-              edition
+              投稿、予約、使用量、運用状況を毎日確認できるダッシュボードです。
             </p>
           </div>
 
@@ -320,7 +320,7 @@ export default async function DashboardPage() {
           <div className="mt-4 flex items-start gap-3 rounded-sm border border-dashed border-warning/60 bg-warning/10 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.15em] text-[#7a4b00]">
             <RssSimple size={12} weight="bold" className="mt-0.5 shrink-0" />
             <div className="min-w-0 flex-1">
-              <div className="font-semibold">press wire offline · using local fallback</div>
+              <div className="font-semibold">回線オフライン · ローカルの代替データを表示しています</div>
               {errorLines.length > 0 && (
                 <ul className="mt-1 space-y-0.5 normal-case tracking-normal text-[#7a4b00]/80">
                   {errorLines.map((line) => (
@@ -379,7 +379,7 @@ export default async function DashboardPage() {
       {/* Colophon */}
       <footer className="border-t border-dashed border-base-content/20 pt-3 font-mono text-[9px] uppercase tracking-[0.22em] text-base-content/35">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span>sns agent · operations ledger</span>
+          <span>sns agent · {SECTION_KICKERS.dashboard.toLowerCase()}</span>
           <span>set in fraunces &amp; dm sans · {dateline.weekday.toLowerCase()} edition</span>
           <span>— printed server-side —</span>
         </div>

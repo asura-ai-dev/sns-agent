@@ -6,6 +6,7 @@
  * with a distinct title and edition labels.
  */
 import { RssSimple } from "@phosphor-icons/react/dist/ssr";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 
 interface UsageMastheadProps {
   now: Date;
@@ -42,7 +43,7 @@ export function UsageMasthead({
           {dateline.weekday} · {dateline.date}
         </div>
         <div className="font-mono text-[10px] uppercase leading-none tracking-[0.22em] text-base-content/55">
-          treasury · section iv &nbsp;·&nbsp; api &amp; llm spend
+          {SECTION_KICKERS.usage} &nbsp;·&nbsp; api &amp; llm spend
         </div>
       </div>
 
@@ -62,7 +63,7 @@ export function UsageMasthead({
             className="mt-1 font-display text-sm italic leading-tight text-base-content/60"
             style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic" }}
           >
-            an accounting of api volume, llm tokens &amp; the running spend
+            API 利用量、LLM トークン、推定コストの推移を確認できます
           </p>
         </div>
 
@@ -92,7 +93,7 @@ export function UsageMasthead({
         <div className="mt-4 flex items-start gap-3 rounded-sm border border-dashed border-warning/60 bg-warning/10 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.15em] text-[#7a4b00]">
           <RssSimple size={12} weight="bold" className="mt-0.5 shrink-0" />
           <div className="min-w-0 flex-1">
-            <div className="font-semibold">press wire offline · using local fallback</div>
+            <div className="font-semibold">回線オフライン · ローカルの代替データを表示しています</div>
             {errorLines.length > 0 && (
               <ul className="mt-1 space-y-0.5 normal-case tracking-normal text-[#7a4b00]/80">
                 {errorLines.map((line) => (
