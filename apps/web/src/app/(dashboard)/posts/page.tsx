@@ -19,6 +19,7 @@ import { PostFilters } from "@/components/posts/PostFilters";
 import { PostList } from "@/components/posts/PostList";
 import { deletePostApi, fetchPosts, publishPostApi } from "@/components/posts/api";
 import type { Post, PostListFilters, PostListMeta } from "@/components/posts/types";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 
 const DEFAULT_FILTERS: PostListFilters = {
   platforms: [],
@@ -121,7 +122,7 @@ export default function PostsPage() {
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[0.7rem] font-medium uppercase tracking-[0.18em] text-base-content/50">
-            Post Ledger · 投稿一覧
+            {SECTION_KICKERS.posts}
           </p>
           <h1 className="mt-1 font-display text-3xl font-semibold leading-tight tracking-tight text-base-content">
             すべての SNS を一つの紙面で

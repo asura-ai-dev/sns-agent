@@ -13,6 +13,7 @@
 
 import { MagnifyingGlass, X } from "@phosphor-icons/react";
 import { PLATFORM_VISUALS } from "@/components/settings/PlatformIcon";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 import { ALL_PLATFORMS, POST_STATUSES } from "./types";
 import type { Platform, PostListFilters, PostStatus } from "./types";
 
@@ -66,7 +67,7 @@ export function PostFilters({ value, onChange, disabled }: PostFiltersProps) {
 
   return (
     <section
-      aria-label="投稿フィルタ"
+      aria-label={`${SECTION_KICKERS.posts} filters`}
       className="rounded-box border border-base-300 bg-base-100 p-4 sm:p-5"
     >
       {/* Row 1: Platform chips + search */}

@@ -33,6 +33,7 @@ import {
 } from "@phosphor-icons/react";
 import { PlatformIcon, PLATFORM_VISUALS } from "@/components/settings/PlatformIcon";
 import type { Platform } from "@/components/settings/PlatformIcon";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 
 // ───────────────────────────────────────────
 // 型
@@ -271,7 +272,7 @@ export default function InboxPage() {
       <header className="flex items-end justify-between gap-4">
         <div>
           <p className="text-[0.7rem] font-medium uppercase tracking-[0.18em] text-base-content/50">
-            Unified Inbox · 受信トレイ
+            {SECTION_KICKERS.inbox}
           </p>
           <h1 className="mt-1 font-display text-3xl font-semibold leading-tight tracking-tight text-base-content">
             会話を一箇所で読む

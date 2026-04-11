@@ -45,6 +45,7 @@ import {
   startOfWeekMonday,
   toDatetimeLocalValue,
 } from "@/components/calendar/dateUtils";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 
 // ───────────────────────────────────────────
 // API helpers
@@ -233,7 +234,7 @@ export default function CalendarPage() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[0.7rem] font-medium uppercase tracking-[0.18em] text-base-content/50">
-            Almanac · 予約カレンダー
+            {SECTION_KICKERS.calendar}
           </p>
           <h1 className="mt-1 font-display text-3xl font-semibold leading-tight tracking-tight text-base-content">
             予約を一枚の暦で見渡す

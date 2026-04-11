@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
 import { PostForm } from "@/components/posts/PostForm";
+import { SECTION_KICKERS } from "@/lib/i18n/labels";
 
 export default function NewPostPage() {
   return (
@@ -20,7 +21,7 @@ export default function NewPostPage() {
           投稿一覧へ戻る
         </Link>
         <p className="mt-3 font-mono text-[0.65rem] font-medium uppercase tracking-[0.22em] text-base-content/50">
-          composition desk · 新規起稿
+          {SECTION_KICKERS.compose}
         </p>
         <h1 className="mt-1 font-display text-3xl font-semibold leading-tight tracking-tight text-base-content">
           新しい投稿を作成

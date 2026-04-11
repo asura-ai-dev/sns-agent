@@ -18,6 +18,7 @@ import {
   LinkSimple,
 } from "@phosphor-icons/react";
 import { PlatformIcon, PLATFORM_VISUALS } from "@/components/settings/PlatformIcon";
+import { COMMON_ACTIONS, SECTION_KICKERS } from "@/lib/i18n/labels";
 import { StatusBadge } from "./StatusBadge";
 import type { Post } from "./types";
 
@@ -68,7 +69,7 @@ export function PostList({ posts, loading, error, onPublish, onDelete, pendingId
         className="rounded-box border border-warning/40 bg-warning/5 px-5 py-4 text-sm text-base-content/80"
       >
         <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-warning">
-          post wire offline · using local fallback
+          {SECTION_KICKERS.posts} offline · using local fallback
         </p>
         <p className="mt-2 font-display text-base font-medium leading-snug text-base-content" style={{ fontFamily: "'Fraunces', serif" }}>
           投稿一覧を取得できませんでした
@@ -305,7 +306,7 @@ function RowActions({
       {canEdit && (
         <Link
           href={`/posts/${post.id}/edit`}
-          aria-label="編集"
+          aria-label={COMMON_ACTIONS.edit}
           className={`${btn} ${size}`}
           data-testid="post-action-edit"
         >
@@ -327,7 +328,7 @@ function RowActions({
       {canDelete && (
         <button
           type="button"
-          aria-label="削除"
+          aria-label={COMMON_ACTIONS.delete}
           disabled={pending}
           onClick={() => onDelete(post)}
           className={`${btn} ${size} hover:border-error/30 hover:text-error`}

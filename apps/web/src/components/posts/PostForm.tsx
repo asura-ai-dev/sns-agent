@@ -25,6 +25,7 @@ import {
   CaretDown,
 } from "@phosphor-icons/react";
 import { PlatformIcon, PLATFORM_VISUALS } from "@/components/settings/PlatformIcon";
+import { COMMON_ACTIONS, SECTION_KICKERS } from "@/lib/i18n/labels";
 import { CharacterCounter } from "./CharacterCounter";
 import { PostPreview } from "./PostPreview";
 import { PLATFORM_LIMITS, getCounterZone } from "./platformLimits";
@@ -199,7 +200,7 @@ export function PostForm() {
     <div className="grid gap-6 lg:grid-cols-[1fr_minmax(0,22rem)]">
       {/* ────────── Composer ────────── */}
       <section
-        aria-label="Composer"
+        aria-label={SECTION_KICKERS.compose}
         className="space-y-5 rounded-box border border-base-300 bg-base-100 p-5 sm:p-6"
       >
         {/* Account select */}
@@ -322,7 +323,7 @@ export function PostForm() {
                   </div>
                   <button
                     type="button"
-                    aria-label={`${m.name ?? "メディア"} を削除`}
+                    aria-label={`${m.name ?? "メディア"} を${COMMON_ACTIONS.delete}`}
                     onClick={() => removeMedia(idx)}
                     className="inline-flex h-7 w-7 items-center justify-center rounded-field border border-base-300 text-base-content/60 hover:border-error/30 hover:text-error"
                   >
@@ -374,7 +375,7 @@ export function PostForm() {
       </section>
 
       {/* ────────── Preview ────────── */}
-      <aside aria-label="Preview" className="space-y-3 lg:sticky lg:top-4 lg:self-start">
+      <aside aria-label={SECTION_KICKERS.compose} className="space-y-3 lg:sticky lg:top-4 lg:self-start">
         <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-base-content/50">
           Preview
         </p>
