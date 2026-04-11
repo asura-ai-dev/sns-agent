@@ -71,6 +71,51 @@ const HELP_SECTIONS = [
   },
 ] as const;
 
+const CLI_REFERENCE = [
+  {
+    command: "accounts",
+    description:
+      "接続済みアカウントの確認と新規接続の起点です。運用前に一覧と接続状態を整えると、その後の投稿や返信が安定します。",
+    examples: ["sns accounts list", "sns accounts connect x"],
+  },
+  {
+    command: "post",
+    description:
+      "下書きの作成、一覧確認、即時公開までをひと続きで扱います。まず本文を整え、必要に応じて公開判断を CLI から進めます。",
+    examples: ['sns post create --platform x --account team-x --text "新機能のお知らせです"', "sns post list --platform x"],
+  },
+  {
+    command: "schedule",
+    description:
+      "予約投稿の一覧確認と時刻調整に使います。公開の間隔を維持したいときに、直近の予定を落ち着いて見直せます。",
+    examples: ["sns schedule list", "sns schedule create --post 9f2c2b1a --at 2026-04-12T09:00:00+09:00"],
+  },
+  {
+    command: "inbox",
+    description:
+      "会話スレッドの流れを確認し、どの媒体の返信を優先するかを整理するための入口です。状況確認を素早く行えます。",
+    examples: ["sns inbox list --platform line", "sns inbox show thread_01 --limit 20"],
+  },
+  {
+    command: "usage",
+    description:
+      "API 利用量とコスト感を見渡すための集計コマンドです。月次の振り返りと日々の消費傾向の確認に向いています。",
+    examples: ["sns usage report --range monthly", "sns usage summary"],
+  },
+  {
+    command: "llm",
+    description:
+      "LLM のルーティング設定を確認し、媒体や用途ごとの経路を調整します。運用ルールを変える前の現状把握にも使えます。",
+    examples: ["sns llm route list", "sns llm route set --platform x --provider openai --model gpt-5.4-mini"],
+  },
+  {
+    command: "skills",
+    description:
+      "スキルパッケージの一覧確認と生成、切り替えを扱います。媒体ごとの支援セットを整えると運用の再現性が上がります。",
+    examples: ["sns skills list", "sns skills pack --platform instagram --provider codex"],
+  },
+] as const;
+
 export default function HelpPage() {
   return (
     <div className="mx-auto max-w-5xl bg-base-100 text-base-content">
@@ -126,6 +171,52 @@ export default function HelpPage() {
             </section>
           );
         })}
+
+        <section className="py-8 sm:py-10">
+          <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)] md:gap-8">
+            <div>
+              <p className="text-[0.68rem] font-medium uppercase tracking-[0.22em] text-base-content/45">
+                CLI Reference
+              </p>
+              <h2
+                className="mt-1 font-display text-2xl font-semibold leading-tight text-base-content"
+                style={{ fontFamily: "'Fraunces', serif" }}
+              >
+                Command Line
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-base-content/65">
+                Web UI と並行して使うための代表的なコマンドをまとめています。細かな引数を暗記するより、よく使う流れから読み始める想定です。
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {CLI_REFERENCE.map((section) => (
+                <article
+                  key={section.command}
+                  className="rounded-sm border border-base-content/10 bg-base-200/20 p-4 sm:p-5"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
+                    <h3
+                      className="font-display text-xl font-semibold leading-tight text-base-content"
+                      style={{ fontFamily: "'Fraunces', serif" }}
+                    >
+                      {section.command}
+                    </h3>
+                    <code className="font-mono text-xs uppercase tracking-[0.16em] text-base-content/45">
+                      sns {section.command}
+                    </code>
+                  </div>
+                  <p className="mt-2 text-sm leading-7 text-base-content/72">
+                    {section.description}
+                  </p>
+                  <pre className="mt-3 overflow-x-auto rounded-sm border border-base-content/10 bg-base-100 px-4 py-3 font-mono text-xs leading-6 text-base-content">
+                    <code>{section.examples.join("\n")}</code>
+                  </pre>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );
