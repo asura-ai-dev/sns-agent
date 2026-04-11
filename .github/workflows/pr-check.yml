@@ -1,0 +1,66 @@
+name: PR Check
+on:
+  pull_request:
+    branches: [main, dev]
+
+concurrency:
+  group: pr-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Typecheck
+        run: pnpm --filter @sns-agent/web typecheck
+
+      - name: Test
+        run: pnpm run test
+
+  issue-flow:
+    name: Issue-driven checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect feature path
+        id: feat
+        run: |
+          path=$(bash scripts/ci/detect-feature.sh origin/${{ github.base_ref }})
+          echo "path=$path" >> $GITHUB_OUTPUT
+          echo "feature: $path"
+
+      - name: Check commit refs
+        run: bash scripts/ci/check-commit-refs.sh origin/${{ github.base_ref }}
+
+      - name: Check tickets closed
+        if: steps.feat.outputs.path != ''
+        run: bash scripts/ci/check-tickets-closed.sh ${{ steps.feat.outputs.path }}
+
+      - name: Run feature verify (optional)
+        if: steps.feat.outputs.path != ''
+        run: bash scripts/ci/run-feature-verify.sh ${{ steps.feat.outputs.path }}
