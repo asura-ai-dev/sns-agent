@@ -13,18 +13,19 @@ import {
   Question,
   GearSix,
 } from "@phosphor-icons/react";
+import { NAV_LABELS } from "@/lib/i18n/labels";
 
-const NAV_ITEMS = [
-  { href: "/", label: "ダッシュボード", icon: House },
-  { href: "/posts", label: "投稿", icon: PaperPlaneTilt },
-  { href: "/calendar", label: "カレンダー", icon: CalendarBlank },
-  { href: "/inbox", label: "受信トレイ", icon: Tray },
-  { href: "/usage", label: "使用量", icon: ChartBar },
-  { href: "/skills", label: "Skills", icon: Package },
-  { href: "/agents", label: "チャット", icon: ChatCircle },
-  { href: "/help", label: "ヘルプ", icon: Question },
-  { href: "/settings", label: "設定", icon: GearSix },
-] as const;
+const NAV_ICONS: Record<string, typeof House> = {
+  "/": House,
+  "/posts": PaperPlaneTilt,
+  "/calendar": CalendarBlank,
+  "/inbox": Tray,
+  "/usage": ChartBar,
+  "/skills": Package,
+  "/agents": ChatCircle,
+  "/help": Question,
+  "/settings": GearSix,
+};
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
@@ -57,13 +58,14 @@ function SidebarContent({ pathname, onNavigate, collapsible = false }: SidebarCo
 
       {/* Navigation */}
       <nav className="mt-2 flex flex-1 flex-col gap-0.5 px-3">
-        {NAV_ITEMS.map((item) => {
+        {NAV_LABELS.map((item) => {
           const active = isActive(pathname, item.href);
-          const Icon = item.icon;
+          const Icon = NAV_ICONS[item.href];
           return (
             <Link
               key={item.href}
               href={item.href}
+              aria-label={item.en}
               onClick={onNavigate}
               data-active={active}
               className="sidebar-nav-item flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-base-content/70 transition-colors hover:bg-base-200/60 hover:text-base-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
@@ -75,7 +77,7 @@ function SidebarContent({ pathname, onNavigate, collapsible = false }: SidebarCo
                   collapsible ? "sidebar-collapsible-label sidebar-fade opacity-100 lg:opacity-0" : "",
                 ].join(" ")}
               >
-                {item.label}
+                {item.ja}
               </span>
             </Link>
           );
