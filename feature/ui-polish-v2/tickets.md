@@ -27,7 +27,7 @@ GitHub issues: asura-ai-dev/sns-agent #1〜#16（ローカル ID == GH 番号）
 - [x] #012 [gh#12](https://github.com/asura-ai-dev/sns-agent/issues/12) /help ページを作成し Web UI 主要機能セクションを追加（depends_on: 001, 005）
 - [ ] #013 [gh#13](https://github.com/asura-ai-dev/sns-agent/issues/13) /help ページに CLI リファレンスセクションを追加（depends_on: 012）
 - [x] #014 [gh#14](https://github.com/asura-ai-dev/sns-agent/issues/14) Header にプラットフォーム表示モードトグルと状態フックを追加
-- [ ] #015 [gh#15](https://github.com/asura-ai-dev/sns-agent/issues/15) /posts に columns 表示モードを実装（depends_on: 007, 014）
+- [x] #015 [gh#15](https://github.com/asura-ai-dev/sns-agent/issues/15) /posts に columns 表示モードを実装（depends_on: 007, 014）
 - [ ] #016 [gh#16](https://github.com/asura-ai-dev/sns-agent/issues/16) /inbox に columns 表示モードを実装（depends_on: 009, 014）
 
 ## 並列実行の可能性
