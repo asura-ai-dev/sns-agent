@@ -124,3 +124,12 @@ export function getProviderRegistry(): ProviderRegistry {
 export function resetProviderRegistry(): void {
   cached = null;
 }
+
+/**
+ * テスト専用: ProviderRegistry を直接差し替える。
+ * createProviderRegistry() は環境変数依存のため、統合テストではモック provider
+ * を組んだ registry を外部注入する必要がある。
+ */
+export function setProviderRegistry(registry: ProviderRegistry): void {
+  cached = registry;
+}
