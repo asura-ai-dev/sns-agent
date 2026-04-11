@@ -1,0 +1,69 @@
+name: Deploy
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag or SHA to deploy"
+        required: true
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Deploy
+        id: deploy
+        run: |
+          echo "Replace this step with your deploy command."
+          echo "Examples:"
+          echo "  vercel deploy --prod --token=\$VERCEL_TOKEN"
+          echo "  wrangler deploy"
+          echo "  gh release create ..."
+          echo "url=https://example.com" >> $GITHUB_OUTPUT
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+
+      - name: Smoke test
+        run: |
+          url="${{ steps.deploy.outputs.url }}"
+          curl -fsS "$url" > /dev/null && echo "smoke OK"
+
+  rollback:
+    name: Rollback on failure
+    needs: deploy
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify
+        run: |
+          echo "::error::Deploy failed. Manual rollback required."
+          echo "Replace with: vercel rollback / wrangler rollback / etc"

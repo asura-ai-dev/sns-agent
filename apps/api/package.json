@@ -1,0 +1,35 @@
+{
+  "name": "@sns-agent/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "lint": "echo \"Lint via root\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "hono": "^4.7.6",
+    "@hono/node-server": "^1.14.1",
+    "@sns-agent/config": "workspace:*",
+    "@sns-agent/core": "workspace:*",
+    "@sns-agent/db": "workspace:*",
+    "@sns-agent/provider-x": "workspace:*",
+    "@sns-agent/provider-instagram": "workspace:*",
+    "@sns-agent/provider-line": "workspace:*",
+    "@sns-agent/llm": "workspace:*",
+    "@sns-agent/skills": "workspace:*",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.15.0",
+    "@types/uuid": "^10.0.0",
+    "better-sqlite3": "^11.9.1",
+    "drizzle-orm": "^0.44.1",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.4"
+  }
+}

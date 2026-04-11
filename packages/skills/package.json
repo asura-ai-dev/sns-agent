@@ -1,0 +1,22 @@
+{
+  "name": "@sns-agent/skills",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "echo \"Lint via root\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sns-agent/config": "workspace:*",
+    "@sns-agent/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.4"
+  }
+}

@@ -1,0 +1,59 @@
+name: Merge Gate
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: merge-gate
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build & artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ github.sha }}
+          path: |
+            dist
+            build
+            apps/web/.next
+          if-no-files-found: ignore
+          retention-days: 14
+
+  tag-release:
+    name: Auto tag (optional)
+    needs: build
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, '[release]')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create tag
+        run: |
+          tag="v$(date +%Y.%m.%d)-${GITHUB_SHA::7}"
+          git tag "$tag"
+          git push origin "$tag"
