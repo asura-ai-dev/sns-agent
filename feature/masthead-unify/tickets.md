@@ -13,13 +13,13 @@ GitHub issues: 未登録（後続で同期）
 
 ## Phase 2: masthead 適用
 
-- [ ] #002 dashboard / posts / posts/new / calendar / inbox の masthead を `MASTHEAD_TITLES` 駆動に差し替え（depends_on: 001）
-- [ ] #003 usage / skills / agents の masthead を `MASTHEAD_TITLES` 駆動に差し替え（depends_on: 001）
-- [ ] #004 settings 5 ページと /help の masthead を `MASTHEAD_TITLES` 駆動に差し替え、/help の 6 セクションを `HELP_SECTIONS` に寄せる（depends_on: 001）
+- [x] #002 dashboard / posts / posts/new / calendar / inbox の masthead を `MASTHEAD_TITLES` 駆動に差し替え（depends_on: 001）
+- [x] #003 usage / skills / agents の masthead を `MASTHEAD_TITLES` 駆動に差し替え（depends_on: 001）
+- [x] #004 settings 5 ページと /help の masthead を `MASTHEAD_TITLES` 駆動に差し替え（depends_on: 001）
 
 ## Phase 3: Sidebar
 
-- [ ] #005 Sidebar の `NAV_ITEMS` を `NAV_LABELS` ベースに差し替え、`/help` を出現させる（depends_on: 001）
+- [x] #005 Sidebar の `NAV_ITEMS` を `NAV_LABELS` ベースに差し替え、`/help` を出現させる（depends_on: 001）
 
 ## 並列実行の可能性
 
