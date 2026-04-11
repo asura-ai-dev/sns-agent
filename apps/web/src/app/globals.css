@@ -183,12 +183,12 @@
 
 @media (width >= 64rem) {
   .sidebar-desktop-root:hover,
-  .sidebar-desktop-root:focus-within {
+  .sidebar-desktop-root:has(:focus-visible) {
     width: calc(var(--spacing) * 60);
   }
 
   .sidebar-desktop-root:hover .sidebar-collapsible-label,
-  .sidebar-desktop-root:focus-within .sidebar-collapsible-label {
+  .sidebar-desktop-root:has(:focus-visible) .sidebar-collapsible-label {
     opacity: 1;
   }
 }
