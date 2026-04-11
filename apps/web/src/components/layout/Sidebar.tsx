@@ -10,6 +10,7 @@ import {
   ChartBar,
   Package,
   ChatCircle,
+  Question,
   GearSix,
 } from "@phosphor-icons/react";
 
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { href: "/usage", label: "使用量", icon: ChartBar },
   { href: "/skills", label: "Skills", icon: Package },
   { href: "/agents", label: "チャット", icon: ChatCircle },
+  { href: "/help", label: "ヘルプ", icon: Question },
   { href: "/settings", label: "設定", icon: GearSix },
 ] as const;
 
