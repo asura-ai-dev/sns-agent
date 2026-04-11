@@ -215,6 +215,7 @@ function ConnectModal({
                 type="button"
                 onClick={() => onSelect(p)}
                 disabled={!!loadingPlatform}
+                aria-label={`${visual.label} に接続`}
                 className="group relative flex flex-col items-start gap-3 rounded-sm border border-base-300 bg-base-100 p-5 text-left transition-all hover:-translate-y-0.5 hover:border-accent/60 hover:shadow-lg disabled:opacity-60"
               >
                 <PlatformIcon platform={p} size={48} />
