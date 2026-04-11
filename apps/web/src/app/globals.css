@@ -182,6 +182,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .sidebar-expand,
+  .sidebar-fade {
+    transition: none !important;
+  }
+
   .animate-wire-slip-in,
   .wire-slip-pulse,
   .wire-dot,

@@ -32,17 +32,27 @@ function isActive(pathname: string, href: string): boolean {
 interface SidebarContentProps {
   pathname: string;
   onNavigate?: () => void;
+  collapsible?: boolean;
 }
 
-function SidebarContent({ pathname, onNavigate }: SidebarContentProps) {
+function SidebarContent({ pathname, onNavigate, collapsible = false }: SidebarContentProps) {
   return (
     <div className="flex h-full flex-col bg-base-100 text-base-content">
       {/* Brand */}
       <div className="flex h-16 items-center gap-2.5 px-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
           <span className="font-display text-sm font-bold text-primary-content">S</span>
         </div>
-        <span className="font-display text-lg font-semibold tracking-tight">SNS Agent</span>
+        <span
+          className={[
+            "font-display text-lg font-semibold tracking-tight",
+            collapsible
+              ? "sidebar-fade whitespace-nowrap opacity-100 lg:opacity-0 lg:group-hover/sidebar:opacity-100 lg:group-focus-within/sidebar:opacity-100"
+              : "",
+          ].join(" ")}
+        >
+          SNS Agent
+        </span>
       </div>
 
       {/* Navigation */}
@@ -58,8 +68,17 @@ function SidebarContent({ pathname, onNavigate }: SidebarContentProps) {
               data-active={active}
               className="sidebar-nav-item flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-base-content/70 transition-colors hover:bg-base-200/60 hover:text-base-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
-              <Icon size={22} weight={active ? "fill" : "regular"} />
-              {item.label}
+              <Icon size={22} weight={active ? "fill" : "regular"} className="shrink-0" />
+              <span
+                className={[
+                  "min-w-0 whitespace-nowrap",
+                  collapsible
+                    ? "sidebar-fade opacity-100 lg:opacity-0 lg:group-hover/sidebar:opacity-100 lg:group-focus-within/sidebar:opacity-100"
+                    : "",
+                ].join(" ")}
+              >
+                {item.label}
+              </span>
             </Link>
           );
         })}
@@ -67,7 +86,16 @@ function SidebarContent({ pathname, onNavigate }: SidebarContentProps) {
 
       {/* Footer */}
       <div className="border-t border-base-300 px-5 py-4">
-        <p className="text-xs text-base-content/50">v1.0.0</p>
+        <p
+          className={[
+            "text-xs text-base-content/50",
+            collapsible
+              ? "sidebar-fade whitespace-nowrap opacity-100 lg:opacity-0 lg:group-hover/sidebar:opacity-100 lg:group-focus-within/sidebar:opacity-100"
+              : "",
+          ].join(" ")}
+        >
+          v1.0.0
+        </p>
       </div>
     </div>
   );
@@ -77,9 +105,9 @@ function SidebarContent({ pathname, onNavigate }: SidebarContentProps) {
 export function SidebarDesktop() {
   const pathname = usePathname();
   return (
-    <aside className="hidden w-60 shrink-0 border-r border-base-300 lg:block">
-      <div className="fixed inset-y-0 left-0 z-30 w-60">
-        <SidebarContent pathname={pathname} />
+    <aside className="group/sidebar hidden w-16 shrink-0 lg:block">
+      <div className="sidebar-expand fixed inset-y-0 left-0 z-30 w-16 overflow-hidden border-r border-base-300 bg-base-100 transition-[width] duration-200 ease-out group-hover/sidebar:w-60 group-focus-within/sidebar:w-60">
+        <SidebarContent pathname={pathname} collapsible />
       </div>
     </aside>
   );
