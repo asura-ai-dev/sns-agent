@@ -13,7 +13,7 @@
  * @example
  * <PlatformIcon platform="instagram" variant="chip" />
  */
-import { XLogo, InstagramLogo, ChatCircleDots } from "@phosphor-icons/react";
+import { XLogo, InstagramLogo, ChatCircleDots } from "@phosphor-icons/react/dist/ssr";
 import type { CSSProperties } from "react";
 
 export type Platform = "x" | "line" | "instagram";

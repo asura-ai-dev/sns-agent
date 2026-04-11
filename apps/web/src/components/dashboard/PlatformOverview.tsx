@@ -13,22 +13,17 @@
  */
 import Link from "next/link";
 import {
-  XLogo,
-  InstagramLogo,
-  ChatCircleDots,
   Link as LinkIcon,
   ArrowRight,
   CircleDashed,
 } from "@phosphor-icons/react/dist/ssr";
-import type { ComponentType } from "react";
+import {
+  PlatformIcon,
+  PLATFORM_VISUALS,
+  type Platform,
+} from "../settings/PlatformIcon";
 
-export type Platform = "x" | "line" | "instagram";
-
-type IconType = ComponentType<{
-  size?: number;
-  weight?: "thin" | "light" | "regular" | "bold" | "fill" | "duotone";
-  className?: string;
-}>;
+export type { Platform } from "../settings/PlatformIcon";
 
 export interface PlatformStats {
   platform: Platform;
@@ -47,41 +42,21 @@ export interface PlatformOverviewProps {
 // ───────────────────────────────────────────
 
 interface PlatformVisual {
-  label: string;
   bureau: string;
-  Icon: IconType;
-  accent: string; // rgb/hex
-  background: string;
-  foreground: string;
   meterColor: string;
 }
 
 const VISUALS: Record<Platform, PlatformVisual> = {
   x: {
-    label: "X",
     bureau: "the x bureau",
-    Icon: XLogo,
-    accent: "#111111",
-    background: "linear-gradient(135deg, #111111 0%, #2a2a2a 100%)",
-    foreground: "#ffffff",
     meterColor: "#111111",
   },
   line: {
-    label: "LINE",
     bureau: "the line desk",
-    Icon: ChatCircleDots,
-    accent: "#06C755",
-    background: "linear-gradient(135deg, #06C755 0%, #04a446 100%)",
-    foreground: "#ffffff",
     meterColor: "#06C755",
   },
   instagram: {
-    label: "Instagram",
     bureau: "the gram dispatch",
-    Icon: InstagramLogo,
-    accent: "#DD2A7B",
-    background: "linear-gradient(135deg, #F58529 0%, #DD2A7B 40%, #8134AF 75%, #515BD4 100%)",
-    foreground: "#ffffff",
     meterColor: "#DD2A7B",
   },
 };
@@ -191,7 +166,7 @@ function SuccessMeter({
 
 function PlatformCard({ stat, index }: { stat: PlatformStats; index: number }) {
   const visual = VISUALS[stat.platform];
-  const Icon = visual.Icon;
+  const platformVisual = PLATFORM_VISUALS[stat.platform];
   const isDisconnected = stat.accountCount === 0;
 
   return (
@@ -206,17 +181,7 @@ function PlatformCard({ stat, index }: { stat: PlatformStats; index: number }) {
 
       {/* header band */}
       <header className="relative flex items-start gap-4 px-5 pb-4 pt-5">
-        <span
-          aria-hidden
-          className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-sm"
-          style={{
-            background: visual.background,
-            color: visual.foreground,
-            boxShadow: `0 0 0 1px ${visual.accent}33, 0 6px 16px -8px ${visual.accent}66`,
-          }}
-        >
-          <Icon size={26} weight="bold" />
-        </span>
+        <PlatformIcon platform={stat.platform} size={48} variant="solid" />
         <div className="min-w-0 flex-1">
           <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-base-content/45">
             {visual.bureau}
@@ -225,7 +190,7 @@ function PlatformCard({ stat, index }: { stat: PlatformStats; index: number }) {
             className="mt-0.5 font-display text-2xl font-semibold leading-tight text-base-content"
             style={{ fontFamily: "'Fraunces', serif" }}
           >
-            {visual.label}
+            {platformVisual.label}
           </h3>
         </div>
         {/* issue number */}
@@ -286,7 +251,7 @@ function PlatformCard({ stat, index }: { stat: PlatformStats; index: number }) {
           >
             <span className="inline-flex items-center gap-1.5">
               <LinkIcon size={11} weight="bold" />
-              connect {visual.label.toLowerCase()} account
+              connect {platformVisual.label.toLowerCase()} account
             </span>
             <ArrowRight
               size={12}
