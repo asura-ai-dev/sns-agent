@@ -27,7 +27,7 @@ import {
   Copy,
   Export,
 } from "@phosphor-icons/react";
-import { SECTION_KICKERS } from "@/lib/i18n/labels";
+import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
 
 // ───────────────────────────────────────────
 // 型定義
@@ -302,11 +302,8 @@ export default function AuditPage() {
               className="mt-2 font-display text-4xl font-semibold leading-none tracking-tight text-base-content"
               style={{ fontFamily: "'Fraunces', serif", fontFeatureSettings: "'ss01', 'ss02'" }}
             >
-              Operations Ledger
+              {MASTHEAD_TITLES.settingsAudit}
             </h1>
-            <p className="mt-2 max-w-xl text-sm text-base-content/60">
-              全ての書き込み操作が追記のみで永続化されます。フィルタで絞り込み、行を選択すると詳細が開きます。
-            </p>
           </div>
           <div className="flex items-center gap-2">
             <div className="rounded-sm border border-base-300 bg-base-100 px-3 py-2 text-right font-mono text-[11px] leading-tight">

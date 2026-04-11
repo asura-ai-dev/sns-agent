@@ -6,6 +6,7 @@ import {
   GearSix,
   PencilSimple,
 } from "@phosphor-icons/react/dist/ssr";
+import { MASTHEAD_TITLES } from "@/lib/i18n/labels";
 
 const HELP_SECTIONS = [
   {
@@ -83,14 +84,8 @@ export default function HelpPage() {
               className="mt-2 font-display text-4xl font-semibold leading-[1.02] tracking-[-0.02em] text-base-content sm:text-5xl"
               style={{ fontFamily: "'Fraunces', serif", fontOpticalSizing: "auto" }}
             >
-              Help for Daily Operations
+              {MASTHEAD_TITLES.help}
             </h1>
-            <p
-              className="mt-2 max-w-2xl font-display text-sm italic leading-6 text-base-content/60"
-              style={{ fontFamily: "'Fraunces', serif" }}
-            >
-              主要画面の見方と使い方を、日本語の要点だけで静かに整理した案内ページです。
-            </p>
           </div>
           <p className="max-w-sm text-sm leading-7 text-base-content/65">
             最初に全体の流れを掴み、必要な画面だけ深く読むための簡潔なガイドです。

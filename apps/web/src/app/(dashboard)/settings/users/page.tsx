@@ -41,7 +41,7 @@ import { SettingsShell } from "@/components/settings/SettingsShell";
 import { ConfirmDialog } from "@/components/settings/ConfirmDialog";
 import { useCurrentRole } from "@/components/settings/useCurrentRole";
 import { RoleBadge, type Role } from "@/components/settings/RoleBadge";
-import { SECTION_KICKERS } from "@/lib/i18n/labels";
+import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
 
 // ───────────────────────────────────────────
 // 型
@@ -918,8 +918,8 @@ export default function UsersSettingsPage() {
     <SettingsShell
       activeSlug="users"
       eyebrow={SECTION_KICKERS.settingsUsers}
-      title="Members & Agents"
-      description="ワークスペースのメンバーとエージェント ID を管理します。ロール変更・招待・API キー発行は admin / owner のみ実行できます。"
+      title={MASTHEAD_TITLES.settingsUsers}
+      description=""
       actions={
         <>
           <div className="rounded-sm border border-base-300 bg-base-100 px-4 py-2.5 text-right leading-tight">

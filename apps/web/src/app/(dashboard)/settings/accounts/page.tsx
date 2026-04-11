@@ -40,7 +40,7 @@ import type { Platform } from "@/components/settings/PlatformIcon";
 import { ConfirmDialog } from "@/components/settings/ConfirmDialog";
 import { useCurrentRole } from "@/components/settings/useCurrentRole";
 import { RoleBadge } from "@/components/settings/RoleBadge";
-import { SECTION_KICKERS } from "@/lib/i18n/labels";
+import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
 
 // ───────────────────────────────────────────
 // 型
@@ -407,8 +407,8 @@ export default function AccountsSettingsPage() {
     <SettingsShell
       activeSlug="accounts"
       eyebrow={SECTION_KICKERS.settingsAccounts}
-      title="Connected Accounts"
-      description="SNS アカウントの接続状態と OAuth トークンの有効期限を管理します。期限切れの接続には再認証が必要です。"
+      title={MASTHEAD_TITLES.settingsAccounts}
+      description=""
       actions={
         <>
           <div className="rounded-sm border border-base-300 bg-base-100 px-4 py-2.5 text-right leading-tight">
