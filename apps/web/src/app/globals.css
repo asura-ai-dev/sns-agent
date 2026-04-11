@@ -60,7 +60,17 @@
   position: relative;
   transition:
     color 0.2s ease,
-    background-color 0.2s ease;
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.sidebar-nav-item:hover {
+  background: color-mix(in oklab, var(--color-base-200) 60%, transparent);
+}
+
+.sidebar-nav-item:focus-visible {
+  background: color-mix(in oklab, var(--color-base-200) 70%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-primary) 40%, transparent);
 }
 
 .sidebar-nav-item::before {

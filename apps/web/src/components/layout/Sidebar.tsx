@@ -36,7 +36,7 @@ interface SidebarContentProps {
 
 function SidebarContent({ pathname, onNavigate }: SidebarContentProps) {
   return (
-    <div className="flex h-full flex-col bg-secondary text-secondary-content">
+    <div className="flex h-full flex-col bg-base-100 text-base-content">
       {/* Brand */}
       <div className="flex h-16 items-center gap-2.5 px-5">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
@@ -56,7 +56,7 @@ function SidebarContent({ pathname, onNavigate }: SidebarContentProps) {
               href={item.href}
               onClick={onNavigate}
               data-active={active}
-              className="sidebar-nav-item flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-secondary-content/70 transition-colors hover:bg-white/5 hover:text-secondary-content"
+              className="sidebar-nav-item flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-base-content/70 transition-colors hover:bg-base-200/60 hover:text-base-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               <Icon size={22} weight={active ? "fill" : "regular"} />
               {item.label}
@@ -66,8 +66,8 @@ function SidebarContent({ pathname, onNavigate }: SidebarContentProps) {
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-white/10 px-5 py-4">
-        <p className="text-xs text-secondary-content/40">v1.0.0</p>
+      <div className="border-t border-base-300 px-5 py-4">
+        <p className="text-xs text-base-content/50">v1.0.0</p>
       </div>
     </div>
   );
@@ -77,7 +77,7 @@ function SidebarContent({ pathname, onNavigate }: SidebarContentProps) {
 export function SidebarDesktop() {
   const pathname = usePathname();
   return (
-    <aside className="hidden w-60 shrink-0 lg:block">
+    <aside className="hidden w-60 shrink-0 border-r border-base-300 lg:block">
       <div className="fixed inset-y-0 left-0 z-30 w-60">
         <SidebarContent pathname={pathname} />
       </div>
