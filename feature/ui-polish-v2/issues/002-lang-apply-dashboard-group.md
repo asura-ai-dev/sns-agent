@@ -11,6 +11,11 @@ files:
   - apps/web/src/app/(dashboard)/agents/page.tsx
   - apps/web/src/components/dashboard/SummaryCards.tsx
   - apps/web/src/components/dashboard/RecentActivity.tsx
+  - apps/web/src/components/skills/SkillsManager.tsx
+  - apps/web/src/components/chat/ConversationList.tsx
+  - apps/web/src/components/chat/ChatContainer.tsx
+  - apps/web/src/components/usage/UsageMasthead.tsx
+  - apps/web/src/components/usage/UsagePageView.tsx
 done_when:
   - 上記 4 ページで section eyebrow / kicker が英語になっている（Grep で `text-[0.65rem]` 系 kicker のうち英語単語が含まれる）
   - 上記 4 ページで主要なボタンラベル / empty state 説明 / エラーメッセージが日本語（非 ASCII 文字を含む）で表示される
