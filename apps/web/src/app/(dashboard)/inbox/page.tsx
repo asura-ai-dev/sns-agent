@@ -94,11 +94,11 @@ interface ApiError {
 
 type TabValue = "all" | Platform;
 
-const TABS: { value: TabValue; label: string }[] = [
+const TABS: { value: TabValue; label: string; platform?: Platform }[] = [
   { value: "all", label: "すべて" },
-  { value: "x", label: "X" },
-  { value: "line", label: "LINE" },
-  { value: "instagram", label: "Instagram" },
+  { value: "x", label: "X", platform: "x" },
+  { value: "line", label: "LINE", platform: "line" },
+  { value: "instagram", label: "Instagram", platform: "instagram" },
 ];
 
 // ───────────────────────────────────────────
@@ -355,14 +355,24 @@ function TabBar({ value, onChange }: { value: TabValue; onChange: (v: TabValue) 
             key={tab.value}
             type="button"
             onClick={() => onChange(tab.value)}
+            aria-label={`${tab.label} で絞り込み`}
+            aria-pressed={active}
+            title={tab.label}
             className={[
-              "relative min-w-[4.5rem] rounded-field px-3.5 py-1.5 text-xs font-medium transition-colors",
+              "relative inline-flex min-h-9 min-w-[4.5rem] items-center justify-center rounded-field px-3 py-1.5 text-xs font-medium transition-colors",
               active
                 ? "bg-secondary text-secondary-content shadow-sm"
                 : "text-base-content/60 hover:text-base-content",
             ].join(" ")}
           >
-            {tab.label}
+            {tab.platform ? (
+              <>
+                <PlatformIcon platform={tab.platform} variant="chip" size={18} />
+                <span className="sr-only">{tab.label}</span>
+              </>
+            ) : (
+              tab.label
+            )}
           </button>
         );
       })}
