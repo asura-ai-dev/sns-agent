@@ -12,7 +12,7 @@
 "use client";
 
 import { MagnifyingGlass, X } from "@phosphor-icons/react";
-import { PLATFORM_VISUALS } from "@/components/settings/PlatformIcon";
+import { PLATFORM_VISUALS, PlatformIcon } from "@/components/settings/PlatformIcon";
 import { SECTION_KICKERS } from "@/lib/i18n/labels";
 import { ALL_PLATFORMS, POST_STATUSES } from "./types";
 import type { Platform, PostListFilters, PostStatus } from "./types";
@@ -86,21 +86,20 @@ export function PostFilters({ value, onChange, disabled }: PostFiltersProps) {
                   type="button"
                   disabled={disabled}
                   onClick={() => togglePlatform(p)}
+                  aria-label={`${visual.label} で絞り込み`}
                   aria-pressed={active}
+                  title={visual.label}
                   className={[
-                    "group inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                    "group inline-flex items-center justify-center rounded-full border p-1 transition-colors",
                     active
-                      ? "border-base-content/60 bg-secondary text-secondary-content shadow-sm"
+                      ? "border-base-content/60 bg-base-100 shadow-sm"
                       : "border-base-300 bg-base-100 text-base-content/70 hover:border-base-content/30 hover:text-base-content",
+                    active ? "" : "opacity-75",
                     disabled ? "opacity-50" : "",
                   ].join(" ")}
                 >
-                  <span
-                    aria-hidden
-                    className="inline-block h-2 w-2 rounded-full"
-                    style={{ background: visual.background }}
-                  />
-                  {visual.label}
+                  <PlatformIcon platform={p} variant="chip" size={20} />
+                  <span className="sr-only">{visual.label}</span>
                 </button>
               );
             })}
