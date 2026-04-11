@@ -55,9 +55,18 @@ interface PostListProps {
   onPublish: (post: Post) => void;
   onDelete: (post: Post) => void;
   pendingId?: string | null;
+  compact?: boolean;
 }
 
-export function PostList({ posts, loading, error, onPublish, onDelete, pendingId }: PostListProps) {
+export function PostList({
+  posts,
+  loading,
+  error,
+  onPublish,
+  onDelete,
+  pendingId,
+  compact = false,
+}: PostListProps) {
   if (loading && posts.length === 0) {
     return <ListSkeleton />;
   }
@@ -91,7 +100,12 @@ export function PostList({ posts, loading, error, onPublish, onDelete, pendingId
   return (
     <>
       {/* Desktop: table */}
-      <div className="hidden overflow-hidden rounded-box border border-base-300 bg-base-100 md:block">
+      <div
+        className={[
+          "overflow-hidden rounded-box border border-base-300 bg-base-100",
+          compact ? "hidden" : "hidden md:block",
+        ].join(" ")}
+      >
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-base-300 bg-base-100/60 text-left text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-base-content/50">
@@ -117,7 +131,7 @@ export function PostList({ posts, loading, error, onPublish, onDelete, pendingId
       </div>
 
       {/* Mobile: cards */}
-      <ul className="space-y-3 md:hidden">
+      <ul className={compact ? "space-y-3" : "space-y-3 md:hidden"}>
         {posts.map((p) => (
           <li key={p.id}>
             <PostCard
@@ -357,7 +371,7 @@ function ListSkeleton() {
         {[0, 1, 2, 3].map((i) => (
           <li
             key={i}
-            className="h-16 animate-pulse rounded-field border border-base-200 bg-base-200/40"
+            className="h-16 animate-pulse rounded-field border border-base-200 bg-base-200/40 motion-reduce:animate-none"
           />
         ))}
       </ul>

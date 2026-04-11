@@ -12,14 +12,22 @@
  */
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowsClockwise, CaretLeft, CaretRight, Plus } from "@phosphor-icons/react";
 import { PostFilters } from "@/components/posts/PostFilters";
 import { PostList } from "@/components/posts/PostList";
 import { deletePostApi, fetchPosts, publishPostApi } from "@/components/posts/api";
-import type { Post, PostListFilters, PostListMeta } from "@/components/posts/types";
+import {
+  ALL_PLATFORMS,
+  type Platform,
+  type Post,
+  type PostListFilters,
+  type PostListMeta,
+} from "@/components/posts/types";
+import { PlatformIcon, PLATFORM_VISUALS } from "@/components/settings/PlatformIcon";
 import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
+import { usePlatformViewMode } from "@/lib/view-mode/usePlatformViewMode";
 
 const DEFAULT_FILTERS: PostListFilters = {
   platforms: [],
@@ -32,6 +40,15 @@ const DEFAULT_FILTERS: PostListFilters = {
 };
 
 export default function PostsPage() {
+  return (
+    <Suspense fallback={null}>
+      <PostsPageContent />
+    </Suspense>
+  );
+}
+
+function PostsPageContent() {
+  const { mode } = usePlatformViewMode("posts");
   const [filters, setFilters] = useState<PostListFilters>(DEFAULT_FILTERS);
   const [posts, setPosts] = useState<Post[]>([]);
   const [meta, setMeta] = useState<PostListMeta>({ page: 1, limit: 20, total: 0 });
@@ -110,6 +127,13 @@ export default function PostsPage() {
     if (!meta.total) return 1;
     return Math.max(1, Math.ceil(meta.total / meta.limit));
   }, [meta]);
+  const postsByPlatform = useMemo(() => {
+    const grouped: Record<Platform, Post[]> = { x: [], line: [], instagram: [] };
+    for (const post of posts) {
+      grouped[post.platform].push(post);
+    }
+    return grouped;
+  }, [posts]);
 
   const goToPage = (p: number) => {
     if (p < 1 || p > totalPages) return;
@@ -166,17 +190,59 @@ export default function PostsPage() {
       <PostFilters value={filters} onChange={setFilters} disabled={loading} />
 
       {/* ── List ───────────────────────────── */}
-      <PostList
-        posts={posts}
-        loading={loading}
-        error={error}
-        onPublish={handlePublish}
-        onDelete={handleDelete}
-        pendingId={pendingId}
-      />
+      <div className="transition-opacity duration-200 motion-reduce:transition-none">
+        {mode === "columns" ? (
+          <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory sm:snap-none">
+            {ALL_PLATFORMS.map((platform) => {
+              const columnPosts = postsByPlatform[platform];
+              const visual = PLATFORM_VISUALS[platform];
+
+              return (
+                <section
+                  key={platform}
+                  aria-label={`${visual.label} の投稿 ${columnPosts.length} 件`}
+                  className="snap-start shrink-0 min-w-[22rem] max-w-[28rem] flex-1 rounded-box border border-base-300 bg-base-100"
+                >
+                  <header className="flex items-center gap-3 border-b border-base-300 px-4 py-3">
+                    <PlatformIcon platform={platform} size={28} />
+                    <div className="min-w-0">
+                      <p className="font-display text-sm font-semibold text-base-content">
+                        {visual.label}
+                      </p>
+                      <p className="text-[0.65rem] uppercase tracking-[0.18em] text-base-content/50">
+                        {columnPosts.length} 件
+                      </p>
+                    </div>
+                  </header>
+                  <div className="p-4">
+                    <PostList
+                      posts={columnPosts}
+                      loading={loading}
+                      error={error}
+                      onPublish={handlePublish}
+                      onDelete={handleDelete}
+                      pendingId={pendingId}
+                      compact
+                    />
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        ) : (
+          <PostList
+            posts={posts}
+            loading={loading}
+            error={error}
+            onPublish={handlePublish}
+            onDelete={handleDelete}
+            pendingId={pendingId}
+          />
+        )}
+      </div>
 
       {/* ── Pagination ─────────────────────── */}
-      {meta.total > 0 && totalPages > 1 && (
+      {mode === "unified" && meta.total > 0 && totalPages > 1 && (
         <nav
           aria-label="ページネーション"
           className="flex flex-col items-center justify-between gap-3 border-t border-base-200 pt-4 sm:flex-row"
