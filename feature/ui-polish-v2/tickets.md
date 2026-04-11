@@ -8,9 +8,9 @@ GitHub issues: asura-ai-dev/sns-agent #1〜#16（ローカル ID == GH 番号）
 ## Phase 1: 基盤整備
 
 - [x] #001 [gh#1](https://github.com/asura-ai-dev/sns-agent/issues/1) 言語レイヤルール定義と共通辞書の整備
-- [ ] #002 [gh#2](https://github.com/asura-ai-dev/sns-agent/issues/2) 言語ルールを dashboard / usage / skills / agents に適用（depends_on: 001）
-- [ ] #003 [gh#3](https://github.com/asura-ai-dev/sns-agent/issues/3) 言語ルールを posts / calendar / inbox に適用（depends_on: 001）
-- [ ] #004 [gh#4](https://github.com/asura-ai-dev/sns-agent/issues/4) 言語ルールを settings 系 5 ページに適用（depends_on: 001）
+- [x] #002 [gh#2](https://github.com/asura-ai-dev/sns-agent/issues/2) 言語ルールを dashboard / usage / skills / agents に適用（depends_on: 001）
+- [x] #003 [gh#3](https://github.com/asura-ai-dev/sns-agent/issues/3) 言語ルールを posts / calendar / inbox に適用（depends_on: 001）
+- [x] #004 [gh#4](https://github.com/asura-ai-dev/sns-agent/issues/4) 言語ルールを settings 系 5 ページに適用（depends_on: 001）
 - [ ] #005 [gh#5](https://github.com/asura-ai-dev/sns-agent/issues/5) Sidebar を paper ベーストークンに差し替え
 
 ## Phase 2: 主要改善
