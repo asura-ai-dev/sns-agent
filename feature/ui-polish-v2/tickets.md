@@ -19,7 +19,7 @@ GitHub issues: asura-ai-dev/sns-agent #1〜#16（ローカル ID == GH 番号）
 - [x] #007 [gh#7](https://github.com/asura-ai-dev/sns-agent/issues/7) PostFilters のプラットフォームチップを PlatformIcon 化（depends_on: 006）
 - [x] #008 [gh#8](https://github.com/asura-ai-dev/sns-agent/issues/8) settings/accounts の接続ボタンとカードで PlatformIcon を統一（depends_on: 006）
 - [x] #009 [gh#9](https://github.com/asura-ai-dev/sns-agent/issues/9) Inbox のプラットフォーム絞り込みとスレッド行を PlatformIcon 化（depends_on: 006）
-- [ ] #010 [gh#10](https://github.com/asura-ai-dev/sns-agent/issues/10) dashboard PlatformOverview のシンボルを PlatformIcon に統一（depends_on: 006）
+- [x] #010 [gh#10](https://github.com/asura-ai-dev/sns-agent/issues/10) dashboard PlatformOverview のシンボルを PlatformIcon に統一（depends_on: 006）
 - [x] #011 [gh#11](https://github.com/asura-ai-dev/sns-agent/issues/11) Sidebar のホバー自動展開（collapsed / expanded 2 状態）（depends_on: 005）
 
 ## Phase 3: 新規機能
