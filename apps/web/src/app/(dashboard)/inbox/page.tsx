@@ -33,7 +33,7 @@ import {
 } from "@phosphor-icons/react";
 import { PlatformIcon, PLATFORM_VISUALS } from "@/components/settings/PlatformIcon";
 import type { Platform } from "@/components/settings/PlatformIcon";
-import { SECTION_KICKERS } from "@/lib/i18n/labels";
+import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
 
 // ───────────────────────────────────────────
 // 型
@@ -275,7 +275,7 @@ export default function InboxPage() {
             {SECTION_KICKERS.inbox}
           </p>
           <h1 className="mt-1 font-display text-3xl font-semibold leading-tight tracking-tight text-base-content">
-            会話を一箇所で読む
+            {MASTHEAD_TITLES.inbox}
           </h1>
         </div>
         <button

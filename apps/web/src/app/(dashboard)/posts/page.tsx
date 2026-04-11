@@ -19,7 +19,7 @@ import { PostFilters } from "@/components/posts/PostFilters";
 import { PostList } from "@/components/posts/PostList";
 import { deletePostApi, fetchPosts, publishPostApi } from "@/components/posts/api";
 import type { Post, PostListFilters, PostListMeta } from "@/components/posts/types";
-import { SECTION_KICKERS } from "@/lib/i18n/labels";
+import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
 
 const DEFAULT_FILTERS: PostListFilters = {
   platforms: [],
@@ -125,7 +125,7 @@ export default function PostsPage() {
             {SECTION_KICKERS.posts}
           </p>
           <h1 className="mt-1 font-display text-3xl font-semibold leading-tight tracking-tight text-base-content">
-            すべての SNS を一つの紙面で
+            {MASTHEAD_TITLES.posts}
           </h1>
           <p className="mt-1 text-sm text-base-content/60">
             {meta.total.toLocaleString()} 件の投稿 ·{" "}

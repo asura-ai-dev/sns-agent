@@ -45,7 +45,7 @@ import {
   startOfWeekMonday,
   toDatetimeLocalValue,
 } from "@/components/calendar/dateUtils";
-import { SECTION_KICKERS } from "@/lib/i18n/labels";
+import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
 
 // ───────────────────────────────────────────
 // API helpers
@@ -237,7 +237,7 @@ export default function CalendarPage() {
             {SECTION_KICKERS.calendar}
           </p>
           <h1 className="mt-1 font-display text-3xl font-semibold leading-tight tracking-tight text-base-content">
-            予約を一枚の暦で見渡す
+            {MASTHEAD_TITLES.calendar}
           </h1>
           <p className="mt-1 text-sm text-base-content/60">
             {titleText}

@@ -20,7 +20,7 @@ import {
   fetchUsageSummarySafe,
 } from "@/lib/api";
 import type { SocialAccount, Post, ScheduledJob } from "@/lib/api";
-import { SECTION_KICKERS } from "@/lib/i18n/labels";
+import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
 
 import { SummaryCards } from "@/components/dashboard/SummaryCards";
 import { PlatformOverview } from "@/components/dashboard/PlatformOverview";
@@ -285,14 +285,8 @@ export default async function DashboardPage() {
               className="font-display text-[44px] font-semibold leading-[1.02] tracking-[-0.02em] text-base-content sm:text-[56px]"
               style={{ fontFamily: "'Fraunces', serif", fontOpticalSizing: "auto" }}
             >
-              {SECTION_KICKERS.dashboard}
+              {MASTHEAD_TITLES.dashboard}
             </h1>
-            <p
-              className="mt-1 font-display text-sm italic leading-tight text-base-content/60"
-              style={{ fontFamily: "'Fraunces', serif", fontStyle: "italic" }}
-            >
-              投稿、予約、使用量、運用状況を毎日確認できるダッシュボードです。
-            </p>
           </div>
 
           <div className="flex items-center gap-6 pb-1 font-mono text-[10px] uppercase tracking-[0.2em] text-base-content/55">

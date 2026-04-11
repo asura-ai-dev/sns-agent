@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
 import { PostForm } from "@/components/posts/PostForm";
-import { SECTION_KICKERS } from "@/lib/i18n/labels";
+import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
 
 export default function NewPostPage() {
   return (
@@ -24,11 +24,8 @@ export default function NewPostPage() {
           {SECTION_KICKERS.compose}
         </p>
         <h1 className="mt-1 font-display text-3xl font-semibold leading-tight tracking-tight text-base-content">
-          新しい投稿を作成
+          {MASTHEAD_TITLES.postsNew}
         </h1>
-        <p className="mt-1 text-sm text-base-content/60">
-          SNS アカウントを選び、本文とメディアを入力してから下書き保存または即時投稿します。
-        </p>
       </div>
 
       <PostForm />
