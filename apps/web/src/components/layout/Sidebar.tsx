@@ -48,9 +48,7 @@ function SidebarContent({ pathname, onNavigate, collapsible = false }: SidebarCo
         <span
           className={[
             "font-display text-lg font-semibold tracking-tight",
-            collapsible
-              ? "sidebar-fade whitespace-nowrap opacity-100 lg:opacity-0 lg:group-hover/sidebar:opacity-100 lg:group-focus-within/sidebar:opacity-100"
-              : "",
+            collapsible ? "sidebar-collapsible-label sidebar-fade whitespace-nowrap opacity-100 lg:opacity-0" : "",
           ].join(" ")}
         >
           SNS Agent
@@ -74,9 +72,7 @@ function SidebarContent({ pathname, onNavigate, collapsible = false }: SidebarCo
               <span
                 className={[
                   "min-w-0 whitespace-nowrap",
-                  collapsible
-                    ? "sidebar-fade opacity-100 lg:opacity-0 lg:group-hover/sidebar:opacity-100 lg:group-focus-within/sidebar:opacity-100"
-                    : "",
+                  collapsible ? "sidebar-collapsible-label sidebar-fade opacity-100 lg:opacity-0" : "",
                 ].join(" ")}
               >
                 {item.label}
@@ -91,9 +87,7 @@ function SidebarContent({ pathname, onNavigate, collapsible = false }: SidebarCo
         <p
           className={[
             "text-xs text-base-content/50",
-            collapsible
-              ? "sidebar-fade whitespace-nowrap opacity-100 lg:opacity-0 lg:group-hover/sidebar:opacity-100 lg:group-focus-within/sidebar:opacity-100"
-              : "",
+            collapsible ? "sidebar-collapsible-label sidebar-fade whitespace-nowrap opacity-100 lg:opacity-0" : "",
           ].join(" ")}
         >
           v1.0.0
@@ -107,11 +101,12 @@ function SidebarContent({ pathname, onNavigate, collapsible = false }: SidebarCo
 export function SidebarDesktop() {
   const pathname = usePathname();
   return (
-    <aside className="group/sidebar hidden w-16 shrink-0 lg:block">
-      <div className="sidebar-expand fixed inset-y-0 left-0 z-30 w-16 overflow-hidden border-r border-base-300 bg-base-100 transition-[width] duration-200 ease-out group-hover/sidebar:w-60 group-focus-within/sidebar:w-60">
+    <>
+      <div aria-hidden="true" className="hidden w-16 shrink-0 lg:block" />
+      <aside className="sidebar-desktop-root sidebar-expand hidden overflow-hidden border-r border-base-300 bg-base-100 transition-[width] duration-200 ease-out lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 lg:block lg:w-16">
         <SidebarContent pathname={pathname} collapsible />
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 

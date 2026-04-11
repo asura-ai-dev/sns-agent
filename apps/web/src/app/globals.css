@@ -181,6 +181,18 @@
   }
 }
 
+@media (width >= 64rem) {
+  .sidebar-desktop-root:hover,
+  .sidebar-desktop-root:focus-within {
+    width: calc(var(--spacing) * 60);
+  }
+
+  .sidebar-desktop-root:hover .sidebar-collapsible-label,
+  .sidebar-desktop-root:focus-within .sidebar-collapsible-label {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sidebar-expand,
   .sidebar-fade {
