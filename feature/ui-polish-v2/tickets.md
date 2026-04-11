@@ -7,7 +7,7 @@ GitHub issues: asura-ai-dev/sns-agent #1〜#16（ローカル ID == GH 番号）
 
 ## Phase 1: 基盤整備
 
-- [ ] #001 [gh#1](https://github.com/asura-ai-dev/sns-agent/issues/1) 言語レイヤルール定義と共通辞書の整備
+- [x] #001 [gh#1](https://github.com/asura-ai-dev/sns-agent/issues/1) 言語レイヤルール定義と共通辞書の整備
 - [ ] #002 [gh#2](https://github.com/asura-ai-dev/sns-agent/issues/2) 言語ルールを dashboard / usage / skills / agents に適用（depends_on: 001）
 - [ ] #003 [gh#3](https://github.com/asura-ai-dev/sns-agent/issues/3) 言語ルールを posts / calendar / inbox に適用（depends_on: 001）
 - [ ] #004 [gh#4](https://github.com/asura-ai-dev/sns-agent/issues/4) 言語ルールを settings 系 5 ページに適用（depends_on: 001）
@@ -15,7 +15,7 @@ GitHub issues: asura-ai-dev/sns-agent #1〜#16（ローカル ID == GH 番号）
 
 ## Phase 2: 主要改善
 
-- [ ] #006 [gh#6](https://github.com/asura-ai-dev/sns-agent/issues/6) PlatformIcon にチップ用 variant を追加
+- [x] #006 [gh#6](https://github.com/asura-ai-dev/sns-agent/issues/6) PlatformIcon にチップ用 variant を追加
 - [ ] #007 [gh#7](https://github.com/asura-ai-dev/sns-agent/issues/7) PostFilters のプラットフォームチップを PlatformIcon 化（depends_on: 006）
 - [ ] #008 [gh#8](https://github.com/asura-ai-dev/sns-agent/issues/8) settings/accounts の接続ボタンとカードで PlatformIcon を統一（depends_on: 006）
 - [ ] #009 [gh#9](https://github.com/asura-ai-dev/sns-agent/issues/9) Inbox のプラットフォーム絞り込みとスレッド行を PlatformIcon 化（depends_on: 006）
@@ -26,7 +26,7 @@ GitHub issues: asura-ai-dev/sns-agent #1〜#16（ローカル ID == GH 番号）
 
 - [ ] #012 [gh#12](https://github.com/asura-ai-dev/sns-agent/issues/12) /help ページを作成し Web UI 主要機能セクションを追加（depends_on: 001, 005）
 - [ ] #013 [gh#13](https://github.com/asura-ai-dev/sns-agent/issues/13) /help ページに CLI リファレンスセクションを追加（depends_on: 012）
-- [ ] #014 [gh#14](https://github.com/asura-ai-dev/sns-agent/issues/14) Header にプラットフォーム表示モードトグルと状態フックを追加
+- [x] #014 [gh#14](https://github.com/asura-ai-dev/sns-agent/issues/14) Header にプラットフォーム表示モードトグルと状態フックを追加
 - [ ] #015 [gh#15](https://github.com/asura-ai-dev/sns-agent/issues/15) /posts に columns 表示モードを実装（depends_on: 007, 014）
 - [ ] #016 [gh#16](https://github.com/asura-ai-dev/sns-agent/issues/16) /inbox に columns 表示モードを実装（depends_on: 009, 014）
 
