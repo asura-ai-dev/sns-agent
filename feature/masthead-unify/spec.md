@@ -34,19 +34,19 @@
 
 ## 統一 masthead パターン
 
-全ページの masthead は以下の 3 要素で構成する：
+全ページの masthead は以下の 2 要素で構成する（+ 任意の英語 subheading 1 行）：
 
 1. **英語 kicker** — small caps, mono, letter-spacing、`SECTION_KICKERS.*` から取得
-2. **日本語 h1** — Fraunces, text-4xl 相当、ページの本題を短く要約（新設 `MASTHEAD_TITLES.*.ja`）
+2. **日本語 h1** — Fraunces, text-4xl 相当、ページの本題を短く要約（新設 `MASTHEAD_TITLES.*.ja`、短い名詞句）
 3. **英語 subheading（任意）** — Fraunces italic, text-sm, 副題（新設 `MASTHEAD_TITLES.*.en`）
 
-既存の「詩的日本語文言」（例:「すべての SNS を一つの紙面で」「予約を一枚の暦で見渡す」「会話を一箇所で読む」）は **保存する**。`MASTHEAD_TITLES.*.tagline`（optional、日本語）フィールドへ集約し、h1 の下に副題として配置する。`/help` / `/usage` / `/skills` / `/agents` など tagline を持たないページでは省略する。
+既存の「詩的日本語文言」（例:「すべての SNS を一つの紙面で」「予約を一枚の暦で見渡す」「会話を一箇所で読む」）は **破棄する**。masthead から日本語詩的副題は完全に除去し、情報密度を上げる。
 
-> **spec 判断**: tagline を捨てず保持する。理由は (a) ui-polish-v2 で確立した editorial トーンを削る方向の変更は背景と矛盾する、(b) h1（短い名詞句）と tagline（情感的な説明）は役割が異なるため共存させても冗長にならない、(c) 実装コストはフィールド追加のみで小さい。
+> **spec 判断**: tagline は保存しない。短い日本語 h1 + 英語 kicker の 2 要素でページの同一性を担保する。editorial トーンは Fraunces / hairline / paper base といった視覚要素で十分維持される。
 
 ### `/help` の扱い
 
-- `/help` 自体の masthead は上記統一パターンに揃える。`SECTION_KICKERS.help` を新設、`MASTHEAD_TITLES.help.ja = "ヘルプ"` 相当、tagline は既存の「主要画面の見方と…」を移植
+- `/help` 自体の masthead は上記統一パターンに揃える。`SECTION_KICKERS.help` を新設、`MASTHEAD_TITLES.help.ja = "ヘルプ"` 相当
 - `/help` 内の 6 セクション kicker（Reading Room, Queue Notes, Draft Method, Timing Ledger, Response Desk, Control Notes）は **`SECTION_KICKERS` には寄せず、`labels.ts` に新定数 `HELP_SECTIONS` として追加する**。理由は: これらはページ内セクション見出しであり、トップレベルのセクション kicker とは階層が違うため
   - `HELP_SECTIONS` は `{ key, kicker, titleJa, bodyJaList? }` のような構造だが、本 feature では最低限「6 セクションの kicker 英語文字列」を集約するに留める。body は既存コードに残して構わない
 
@@ -61,7 +61,6 @@
       kickerKey: "dashboard", // SECTION_KICKERS の key
       ja: "ダッシュボード", // 短い日本語 h1
       en: "Operations Ledger", // 英語 subheading（kicker と重複可）
-      tagline: "投稿、予約、使用量、運用状況を毎日確認できる",
     },
     // …
   } as const;
@@ -103,7 +102,7 @@
 
 - AC-1: `apps/web/src/lib/i18n/labels.ts` に `MASTHEAD_TITLES` が export されている
 - AC-2: `MASTHEAD_TITLES` は最低 13 ページ分（dashboard, posts, postsNew, calendar, inbox, usage, skills, agents, settingsAccounts, settingsUsers, settingsAudit, settingsLlm, settingsBudget, help）の key を含む
-- AC-3: 各 entry は `kickerKey`, `ja`, `en` を必ず含み、`tagline` は optional である
+- AC-3: 各 entry は `kickerKey`, `ja`, `en` の 3 フィールドを必ず含む（tagline は持たない）
 - AC-4: `NAV_LABELS` に `/help` の entry が追加されている
 - AC-5: `SECTION_KICKERS` に `help` の entry が追加されている
 - AC-6: `HELP_SECTIONS` が export され、6 個の kicker 文字列を含む（Reading Room / Queue Notes / Draft Method / Timing Ledger / Response Desk / Control Notes と一致）
@@ -112,17 +111,17 @@
 
 ### masthead 統一 (F2)
 
-- AC-9: dashboard / posts / posts/new / calendar / inbox の masthead から以下の hardcoded 日本語が除去されている
+- AC-9: dashboard / posts / posts/new / calendar / inbox の masthead から以下の hardcoded 日本語詩的副題が完全に除去されている
   - 「すべての SNS を一つの紙面で」
   - 「予約を一枚の暦で見渡す」
   - 「会話を一箇所で読む」
-  - （それぞれは `MASTHEAD_TITLES[*].tagline` として `labels.ts` に移動している）
+  - （これらはページ / コンポーネントから削除し、`labels.ts` にも復元しない）
 - AC-10: `/usage` の masthead が `MASTHEAD_TITLES.usage` を参照し、`UsageMasthead.tsx` から `"Treasury Bulletin"` 文字列リテラルが除去されている
 - AC-11: `/skills` の masthead が `MASTHEAD_TITLES.skills` を参照し、`page.tsx` の `title="Capabilities Gazette"` ハードコードが除去されている
 - AC-12: `/agents` の masthead が `MASTHEAD_TITLES.agents` を参照し、`ChatContainer.tsx` から `"The Wire Room"` 文字列リテラルが除去されている
 - AC-13: settings 5 ページ（accounts, users, audit, llm, budget）の `SettingsShell` 呼び出しが `title="..."` ハードコードではなく `MASTHEAD_TITLES[*]` を参照している
 - AC-14: `/help` の h1 masthead が `MASTHEAD_TITLES.help` を参照し、6 セクションの kicker は `HELP_SECTIONS` を参照している
-- AC-15: 全 13 ページで「英語 kicker → 日本語 h1 → 任意の英語 subheading or 日本語 tagline」の構造が共通して適用されている
+- AC-15: 全 13 ページで「英語 kicker → 日本語 h1」の 2 要素構造（+ 任意の英語 subheading）が共通して適用されている
 - AC-16: `pnpm --filter @sns-agent/web build` が成功する（masthead 差し替え後に lint / typecheck / build を通る）
 
 ### Sidebar 統一 (F3)

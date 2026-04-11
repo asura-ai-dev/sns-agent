@@ -9,12 +9,11 @@ files:
 done_when:
   - apps/web/src/lib/i18n/labels.ts に `export const MASTHEAD_TITLES` が存在する
   - MASTHEAD_TITLES に次の 14 key がすべて含まれる - dashboard, posts, postsNew, calendar, inbox, usage, skills, agents, settingsAccounts, settingsUsers, settingsAudit, settingsLlm, settingsBudget, help
-  - 各 MASTHEAD_TITLES entry が `kickerKey`, `ja`, `en` の 3 フィールドを必ず持ち、 `tagline` は optional で受け付ける型になっている
+  - 各 MASTHEAD_TITLES entry が `kickerKey`, `ja`, `en` の 3 フィールドを必ず持つ型になっている
   - `NAV_LABELS` に `{ href: "/help", en: "Help", ja: "ヘルプ" }` 相当の entry が追加されている
   - `SECTION_KICKERS` に `help` の entry（例 "Help Desk"）が追加されている
   - `HELP_SECTIONS` が export され、6 個の文字列 "Reading Room" "Queue Notes" "Draft Method" "Timing Ledger" "Response Desk" "Control Notes" を含む
   - 既存の `NAV_LABELS`, `SECTION_KICKERS`, `COMMON_ACTIONS` の既存 entry が全て維持されている (grep で旧 entry key が残存することを確認)
-  - 次の既存詩的日本語が `labels.ts` 内に `tagline` として移植されている - "すべての SNS を一つの紙面で", "予約を一枚の暦で見渡す", "会話を一箇所で読む"
   - `pnpm --filter @sns-agent/web typecheck` が成功する
 ---
 
@@ -23,6 +22,8 @@ done_when:
 `ui-polish-v2` #001 で `labels.ts` を導入したが、各ページの masthead / h1 の実文言は集約されておらず、ページファイルや `UsageMasthead.tsx` / `SettingsShell` 呼び出し側にハードコードされている。
 
 本 issue では、後続 #002〜#005 で masthead と Sidebar を差し替える前提として、**辞書ファイル 1 つだけ**に全 masthead 文言を集約する。
+
+既存の詩的 tagline（「すべての SNS を一つの紙面で」等）は **保存せず破棄する**。masthead は英語 kicker + 日本語短名詞 h1 + 英語 subheading の 3 要素のみとする。
 
 spec.md の F1 を参照。
 
@@ -36,10 +37,8 @@ export interface MastheadTitle {
   kickerKey: SectionKickerKey;
   /** 日本語 h1（短い名詞句、Fraunces 見出し用） */
   ja: string;
-  /** 英語 subheading（kicker と異なる説明。現行の "Operations Ledger" 等を流用） */
+  /** 英語 subheading（kicker と異なる説明） */
   en: string;
-  /** 任意の詩的な日本語タグライン（現行の「すべての SNS を一つの紙面で」等） */
-  tagline?: string;
 }
 
 export const MASTHEAD_TITLES = {
@@ -47,85 +46,71 @@ export const MASTHEAD_TITLES = {
     kickerKey: "dashboard",
     ja: "ダッシュボード",
     en: "Operations Ledger",
-    tagline: "投稿、予約、使用量、運用状況を毎日確認できる",
   },
   posts: {
     kickerKey: "posts",
     ja: "投稿",
     en: "Editorial Queue",
-    tagline: "すべての SNS を一つの紙面で",
   },
   postsNew: {
     kickerKey: "compose",
     ja: "新しい投稿",
     en: "Draft Desk",
-    tagline: "SNS を選び、本文とメディアを整えてから下書き保存または即時投稿",
   },
   calendar: {
     kickerKey: "calendar",
     ja: "カレンダー",
     en: "Publishing Calendar",
-    tagline: "予約を一枚の暦で見渡す",
   },
   inbox: {
     kickerKey: "inbox",
     ja: "受信トレイ",
     en: "Message Queue",
-    tagline: "会話を一箇所で読む",
   },
   usage: {
     kickerKey: "usage",
     ja: "使用量",
     en: "Treasury Bulletin",
-    tagline: "API 利用量、LLM トークン、推定コストの推移",
   },
   skills: {
     kickerKey: "skills",
     ja: "スキル",
     en: "Capabilities Gazette",
-    tagline: "SNS ごとの skills パッケージを生成・有効化して LLM から実行可能に",
   },
   agents: {
     kickerKey: "agents",
     ja: "チャット",
     en: "The Wire Room",
-    tagline: "SNS Agent と対話しながら依頼内容を整理・実行",
   },
   settingsAccounts: {
     kickerKey: "settingsAccounts",
     ja: "アカウント接続",
     en: "Connected Accounts",
-    tagline: "SNS アカウントの接続状態と OAuth トークンの有効期限を管理",
   },
   settingsUsers: {
     kickerKey: "settingsUsers",
     ja: "メンバーとエージェント",
     en: "Members & Agents",
-    tagline: "ワークスペースのメンバーとエージェント ID を管理",
   },
   settingsAudit: {
     kickerKey: "settingsAudit",
     ja: "監査ログ",
     en: "Operations Audit",
-    tagline: "書き込み操作を追記のみで永続化した台帳",
   },
   settingsLlm: {
     kickerKey: "settingsLlm",
     ja: "LLM ルーティング",
     en: "Dispatch Roster",
-    tagline: "プラットフォーム × アクションごとにモデルと優先度を登録",
   },
   settingsBudget: {
     kickerKey: "settingsBudget",
     ja: "予算ポリシー",
     en: "Allowances Register",
-    tagline: "ワークスペース・プラットフォーム・エンドポイント別の予算と超過時挙動",
   },
   help: {
     kickerKey: "help",
     ja: "ヘルプ",
     en: "Help Desk",
-    tagline: "主要画面の見方と使い方を日本語の要点で整理した案内",
   },
 } as const satisfies Record<string, MastheadTitle>;
 
@@ -196,6 +181,7 @@ export type HelpSectionKey = keyof typeof HELP_SECTIONS;
 - 既存 `NAV_LABELS` / `SECTION_KICKERS` / `COMMON_ACTIONS` の entry を削除・改名しない（追加のみ）
 - 本 issue ではページファイル・Sidebar・masthead コンポーネントを **一切触らない**。適用は #002〜#005 の責務
 - `COMMON_ACTIONS` の拡張や、他コンポーネントへの適用もしない
+- tagline フィールドは追加しない（要件から削除済み）
 
 ### 検証
 
