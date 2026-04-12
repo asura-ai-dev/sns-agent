@@ -6,17 +6,17 @@ clone → pnpm dev → 動作確認を迷わず完了できる状態にする。
 
 ## Phase 1: 基盤（並列可）
 
-- [ ] #003 Next.js rewrites で API proxy を設定
-- [ ] #004 style jsx 修正を main に反映
+- [ ] #003 [gh#22](https://github.com/asura-ai-dev/sns-agent/issues/22) Next.js rewrites で API proxy を設定
+- [ ] #004 [gh#19](https://github.com/asura-ai-dev/sns-agent/issues/19) style jsx 修正を main に反映
 
 ## Phase 2: セットアップ自動化
 
-- [ ] #001 .env 自動生成スクリプトの作成
-- [ ] #002 DB 初期化ワンコマンド化（depends_on: 001）
+- [ ] #001 [gh#20](https://github.com/asura-ai-dev/sns-agent/issues/20) .env 自動生成スクリプトの作成
+- [ ] #002 [gh#21](https://github.com/asura-ai-dev/sns-agent/issues/21) DB 初期化ワンコマンド化（depends_on: 001）
 
 ## Phase 3: ドキュメント
 
-- [ ] #005 docs/development.md にローカル開発手順を記載（depends_on: 001, 002, 003）
+- [ ] #005 [gh#23](https://github.com/asura-ai-dev/sns-agent/issues/23) docs/development.md にローカル開発手順を記載（depends_on: 001, 002, 003）
 
 ## 並列実行の可能性
 
