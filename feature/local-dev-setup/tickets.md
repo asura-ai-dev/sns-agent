@@ -16,7 +16,7 @@ clone → pnpm dev → 動作確認を迷わず完了できる状態にする。
 
 ## Phase 3: ドキュメント
 
-- [ ] #005 [gh#23](https://github.com/asura-ai-dev/sns-agent/issues/23) docs/development.md にローカル開発手順を記載（depends_on: 001, 002, 003）
+- [x] #005 [gh#23](https://github.com/asura-ai-dev/sns-agent/issues/23) docs/development.md にローカル開発手順を記載（depends_on: 001, 002, 003）
 
 ## 並列実行の可能性
 
