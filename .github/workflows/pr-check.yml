@@ -47,20 +47,30 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Detect feature path
+      - name: Detect feature paths
         id: feat
         run: |
-          path=$(bash scripts/ci/detect-feature.sh origin/${{ github.base_ref }})
-          echo "path=$path" >> $GITHUB_OUTPUT
-          echo "feature: $path"
+          paths=$(bash scripts/ci/detect-feature.sh origin/${{ github.base_ref }})
+          echo "paths<<EOF" >> $GITHUB_OUTPUT
+          echo "$paths" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "features: $paths"
 
       - name: Check commit refs
         run: bash scripts/ci/check-commit-refs.sh origin/${{ github.base_ref }}
 
       - name: Check tickets closed
-        if: steps.feat.outputs.path != ''
-        run: bash scripts/ci/check-tickets-closed.sh ${{ steps.feat.outputs.path }}
+        if: steps.feat.outputs.paths != ''
+        run: |
+          while IFS= read -r p; do
+            [ -z "$p" ] && continue
+            bash scripts/ci/check-tickets-closed.sh "$p"
+          done <<< "${{ steps.feat.outputs.paths }}"
 
       - name: Run feature verify (optional)
-        if: steps.feat.outputs.path != ''
-        run: bash scripts/ci/run-feature-verify.sh ${{ steps.feat.outputs.path }}
+        if: steps.feat.outputs.paths != ''
+        run: |
+          while IFS= read -r p; do
+            [ -z "$p" ] && continue
+            bash scripts/ci/run-feature-verify.sh "$p"
+          done <<< "${{ steps.feat.outputs.paths }}"
