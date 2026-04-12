@@ -11,7 +11,7 @@ clone → pnpm dev → 動作確認を迷わず完了できる状態にする。
 
 ## Phase 2: セットアップ自動化
 
-- [ ] #001 [gh#20](https://github.com/asura-ai-dev/sns-agent/issues/20) .env 自動生成スクリプトの作成
+- [x] #001 [gh#20](https://github.com/asura-ai-dev/sns-agent/issues/20) .env 自動生成スクリプトの作成
 - [ ] #002 [gh#21](https://github.com/asura-ai-dev/sns-agent/issues/21) DB 初期化ワンコマンド化（depends_on: 001）
 
 ## Phase 3: ドキュメント
