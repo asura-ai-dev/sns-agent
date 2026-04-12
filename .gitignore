@@ -34,6 +34,10 @@ pnpm-debug.log*
 .cache/
 .tmp/
 tmp/
+.superset/
+
+# Claude Code local state
+**/.claude/costs.jsonl
 
 # Database
 *.db

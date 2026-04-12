@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# 変更ファイルから feature/<name>/ パスを 1 つ特定する。
+# 変更ファイルから feature/<name>/ パスを特定する。
 # PR check / merge gate から呼ぶ。
 #
 # 出力:
-#   標準出力に feature path（例: feature/auth）を 1 行
+#   標準出力に feature path を改行区切り（複数 OK）
 #   見つからなければ空文字
 # 終了コード:
-#   0: 0 個 or 1 個発見（正常）
-#   1: 複数 feature にまたがる（異常）
+#   0: 常に成功（0 個でも複数でも正常）
 
 set -euo pipefail
 
@@ -25,12 +24,8 @@ count=$(echo "$features" | grep -c . || true)
 
 if [ "$count" -eq 0 ]; then
   echo ""
-  exit 0
-elif [ "$count" -eq 1 ]; then
-  echo "$features"
-  exit 0
 else
-  echo "ERROR: PR spans multiple features:" >&2
-  echo "$features" >&2
-  exit 1
+  echo "$features"
 fi
+
+exit 0
