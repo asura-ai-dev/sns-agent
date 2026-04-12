@@ -11,6 +11,7 @@
     "test": "echo \"No tests yet\"",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
+    "db:seed": "tsx src/seed.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
@@ -23,6 +24,7 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.0",
     "drizzle-kit": "^0.31.1",
+    "tsx": "^4.19.4",
     "typescript": "^5.8.3"
   }
 }

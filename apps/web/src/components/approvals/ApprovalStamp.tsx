@@ -30,7 +30,7 @@ export function ApprovalStamp({ state = "idle" }: { state?: StampState }) {
     >
       <div className="absolute inset-2 rounded-full border border-current opacity-40" />
       <span className="relative z-10">{label}</span>
-      <style jsx>{`
+      <style>{`
         .stamp-push {
           animation: stampPush 420ms cubic-bezier(0.2, 1.3, 0.4, 1) both;
         }

@@ -610,7 +610,7 @@ export default function AuditPage() {
       {selected && <DetailModal log={selected} onClose={() => setSelected(null)} />}
 
       {/* Local animations */}
-      <style jsx>{`
+      <style>{`
         @keyframes fadeInUp {
           from {
             opacity: 0;
@@ -747,7 +747,7 @@ function DetailModal({ log, onClose }: { log: AuditLog; onClose: () => void }) {
           </div>
         </div>
 
-        <style jsx>{`
+        <style>{`
           @keyframes modalIn {
             from {
               opacity: 0;

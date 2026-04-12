@@ -127,7 +127,7 @@ export function ConfirmDialog({
           </button>
         </div>
 
-        <style jsx>{`
+        <style>{`
           @keyframes dialogIn {
             from {
               opacity: 0;

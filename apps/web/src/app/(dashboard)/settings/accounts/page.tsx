@@ -247,7 +247,7 @@ function ConnectModal({
             );
           })}
         </div>
-        <style jsx>{`
+        <style>{`
           @keyframes connectIn {
             from {
               opacity: 0;
@@ -661,7 +661,7 @@ export default function AccountsSettingsPage() {
         loading={disconnectLoading}
       />
 
-      <style jsx>{`
+      <style>{`
         @keyframes fadeInUp {
           from {
             opacity: 0;
