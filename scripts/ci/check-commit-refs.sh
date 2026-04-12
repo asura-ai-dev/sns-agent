@@ -26,7 +26,7 @@ fi
 
 bad=""
 while IFS= read -r line; do
-  if echo "$line" | grep -qE '\(#[0-9]+\)|Merge |Revert '; then
+  if echo "$line" | grep -qE '\(#[0-9]+\)|Merge |Revert |^[0-9a-f]+ (chore|fix|docs|ci|build|style)\b'; then
     continue
   fi
   bad="$bad$line"$'\n'
