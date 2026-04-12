@@ -6,6 +6,7 @@
 
 - `requirements.md`: プロダクト要件定義書
 - `architecture.md`: システムアーキテクチャ定義
+- `development.md`: ローカル開発手順
 
 ## Purpose
 
