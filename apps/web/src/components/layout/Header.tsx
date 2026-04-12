@@ -180,7 +180,7 @@ export function Header() {
         onReject={handleReject}
       />
 
-      <style jsx>{`
+      <style>{`
         .bell-btn[data-pending="true"] {
           animation: bellWobble 3.4s ease-in-out infinite;
         }

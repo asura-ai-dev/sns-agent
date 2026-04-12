@@ -112,7 +112,7 @@ export function ApprovalListItem({ request, index, onApprove, onReject, onOpenDe
         </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         .approval-item {
           opacity: 0;
           transform: translateY(4px);

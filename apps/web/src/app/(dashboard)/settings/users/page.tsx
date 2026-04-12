@@ -403,7 +403,7 @@ function InviteUserModal({
           </button>
         </div>
 
-        <style jsx>{`
+        <style>{`
           @keyframes inviteIn {
             from {
               opacity: 0;
@@ -654,7 +654,7 @@ function CreateAgentModal({
           )}
         </div>
 
-        <style jsx>{`
+        <style>{`
           @keyframes agentIn {
             from {
               opacity: 0;
@@ -1200,7 +1200,7 @@ export default function UsersSettingsPage() {
         onCancel={() => setPendingRoleChange(null)}
       />
 
-      <style jsx>{`
+      <style>{`
         @keyframes fadeInUp {
           from {
             opacity: 0;
