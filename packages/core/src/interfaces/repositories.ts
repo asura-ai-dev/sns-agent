@@ -195,6 +195,7 @@ export interface AuditLogFilterOptions {
   actorType?: string;
   action?: string;
   resourceType?: string;
+  resourceId?: string;
   platform?: string;
   startDate?: Date;
   endDate?: Date;

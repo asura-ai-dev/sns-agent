@@ -5,6 +5,7 @@
  * プレビュー・送信を担当する。このページは見出しと戻る動線だけ担当。
  */
 import Link from "next/link";
+import { Suspense } from "react";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
 import { PostForm } from "@/components/posts/PostForm";
 import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
@@ -28,7 +29,15 @@ export default function NewPostPage() {
         </h1>
       </div>
 
-      <PostForm />
+      <Suspense
+        fallback={
+          <div className="rounded-box border border-base-300 bg-base-100 p-5 text-sm text-base-content/60">
+            投稿フォームを読み込んでいます…
+          </div>
+        }
+      >
+        <PostForm />
+      </Suspense>
     </div>
   );
 }

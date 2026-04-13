@@ -41,6 +41,53 @@ export interface PostDto {
   publishedAt: string | null;
 }
 
+export interface ScheduleNotificationTargetDto {
+  type: "post_creator" | "workspace_admin";
+  actorId: string | null;
+  label: string;
+  reason: string;
+}
+
+export interface ScheduleExecutionLogDto {
+  id: string;
+  action: string;
+  status: "succeeded" | "retrying" | "failed";
+  createdAt: string;
+  actorId: string;
+  actorType: "user" | "agent" | "system";
+  message: string;
+  error: string | null;
+  willRetry: boolean;
+  retryable: boolean | null;
+  retryRule: "retryable" | "non_retryable" | "exhausted" | "not_applicable";
+  classificationReason: string | null;
+  attemptCount: number | null;
+  maxAttempts: number | null;
+  nextRetryAt: string | null;
+  notificationTarget: ScheduleNotificationTargetDto | null;
+}
+
+export interface ScheduleOperationalDetailDto {
+  post: {
+    id: string;
+    status: string;
+    platform: Platform;
+    socialAccountId: string;
+    contentText: string | null;
+    createdBy: string | null;
+  } | null;
+  retryPolicy: {
+    maxAttempts: number;
+    backoffSeconds: number[];
+    retryableRule: string;
+    nonRetryableRule: string;
+  };
+  notificationTarget: ScheduleNotificationTargetDto;
+  latestExecution: ScheduleExecutionLogDto | null;
+  executionLogs: ScheduleExecutionLogDto[];
+  recommendedAction: string;
+}
+
 /**
  * 月/週グリッドの 1 セルに表示する結合エントリ。
  * `post` は最初は null でも描画可能（fallback 時や取得失敗時）。

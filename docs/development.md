@@ -147,15 +147,19 @@ pnpm --filter @sns-agent/cli exec sns post create --platform x --account <ACCOUN
 
 予約投稿ジョブを管理します。
 
-- 主な用途: 予約作成、一覧確認、時刻更新、キャンセル
-- 主なサブコマンド: `list`, `create`, `show`, `update`, `cancel`
+- 主な用途: 予約作成、一覧確認、時刻更新、キャンセル、実行ログ確認
+- 主なサブコマンド: `list`, `create`, `show`, `logs`, `update`, `cancel`
 
 例:
 
 ```bash
 pnpm --filter @sns-agent/cli exec sns schedule list --api-key <YOUR_API_KEY>
 pnpm --filter @sns-agent/cli exec sns schedule create --post <POST_ID> --at 2026-04-20T09:00:00+09:00 --api-key <YOUR_API_KEY>
+pnpm --filter @sns-agent/cli exec sns schedule show <SCHEDULE_ID> --api-key <YOUR_API_KEY>
+pnpm --filter @sns-agent/cli exec sns schedule logs <SCHEDULE_ID> --api-key <YOUR_API_KEY>
 ```
+
+Web UI では `/calendar` の予約詳細モーダルから、同じ実行ログと確認担当を確認できます。
 
 ### `inbox`
 

@@ -133,6 +133,7 @@ export {
   cancelSchedule,
   listSchedules,
   getSchedule,
+  getScheduleOperationalView,
   executeJob,
   findExecutableJobs,
   dispatchDueJobs,
@@ -147,6 +148,9 @@ export type {
   ExecuteJobResult,
   DispatchDueJobsItem,
   DispatchDueJobsResult,
+  ScheduleNotificationTarget,
+  ScheduleExecutionLog,
+  ScheduleOperationalView,
 } from "./usecases/schedule.js";
 
 export {

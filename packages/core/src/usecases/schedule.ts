@@ -9,8 +9,21 @@
  */
 import type { Platform } from "@sns-agent/config";
 import type { Post, ScheduledJob } from "../domain/entities.js";
-import type { PostRepository, ScheduledJobRepository } from "../interfaces/repositories.js";
-import { NotFoundError, ValidationError } from "../errors/domain-error.js";
+import type {
+  AuditLogRepository,
+  PostRepository,
+  ScheduledJobRepository,
+} from "../interfaces/repositories.js";
+import {
+  AuthorizationError,
+  BudgetExceededError,
+  DomainError,
+  NotFoundError,
+  ProviderError,
+  RateLimitError,
+  ValidationError,
+} from "../errors/domain-error.js";
+import { recordAudit } from "./audit.js";
 import { publishPost } from "./post.js";
 import type { PostUsecaseDeps } from "./post.js";
 
@@ -21,6 +34,7 @@ import type { PostUsecaseDeps } from "./post.js";
 export interface ScheduleUsecaseDeps {
   scheduledJobRepo: ScheduledJobRepository;
   postRepo: PostRepository;
+  auditRepo?: AuditLogRepository;
   /**
    * publishPost 呼び出しに必要な投稿ユースケース依存。
    * executeJob から `publishPost(postUsecaseDeps, workspaceId, postId)` を呼ぶ。
@@ -94,12 +108,331 @@ export interface DispatchDueJobsResult {
   jobs: DispatchDueJobsItem[];
 }
 
+export interface ScheduleNotificationTarget {
+  type: "post_creator" | "workspace_admin";
+  actorId: string | null;
+  label: string;
+  reason: string;
+}
+
+export interface ScheduleExecutionLog {
+  id: string;
+  action: string;
+  status: "succeeded" | "retrying" | "failed";
+  createdAt: Date;
+  actorId: string;
+  actorType: "user" | "agent" | "system";
+  message: string;
+  error: string | null;
+  willRetry: boolean;
+  retryable: boolean | null;
+  retryRule: "retryable" | "non_retryable" | "exhausted" | "not_applicable";
+  classificationReason: string | null;
+  attemptCount: number | null;
+  maxAttempts: number | null;
+  nextRetryAt: Date | null;
+  notificationTarget: ScheduleNotificationTarget | null;
+}
+
+export interface ScheduleOperationalView {
+  post: {
+    id: string;
+    status: Post["status"];
+    platform: Platform;
+    socialAccountId: string;
+    contentText: string | null;
+    createdBy: string | null;
+  } | null;
+  retryPolicy: {
+    maxAttempts: number;
+    backoffSeconds: number[];
+    retryableRule: string;
+    nonRetryableRule: string;
+  };
+  notificationTarget: ScheduleNotificationTarget;
+  latestExecution: ScheduleExecutionLog | null;
+  executionLogs: ScheduleExecutionLog[];
+  recommendedAction: string;
+}
+
 // ───────────────────────────────────────────
 // ヘルパー
 // ───────────────────────────────────────────
 
 function nowFn(deps: ScheduleUsecaseDeps): Date {
   return deps.now ? deps.now() : new Date();
+}
+
+function buildNotificationTarget(post: Post | null): ScheduleNotificationTarget {
+  if (post?.createdBy) {
+    return {
+      type: "post_creator",
+      actorId: post.createdBy,
+      label: `投稿作成者 (${post.createdBy})`,
+      reason: "まず投稿内容と接続アカウントの状態を確認してほしいため",
+    };
+  }
+
+  return {
+    type: "workspace_admin",
+    actorId: null,
+    label: "ワークスペース運用担当 / admin",
+    reason: "作成者情報が残っていないため、運用担当が確認する前提にするため",
+  };
+}
+
+function asText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+function parseDateLike(value: unknown): Date | null {
+  if (value instanceof Date) return value;
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function normalizeErrorMessage(message: string): string {
+  return message.replace(/^Failed to publish post:\s*/i, "").trim();
+}
+
+function isPermanentProviderError(err: ProviderError): boolean {
+  const raw = `${err.message} ${JSON.stringify(err.details ?? {})}`.toLowerCase();
+  const patterns = [
+    /invalid .*credential/,
+    /invalid .*token/,
+    /invalid x credentials/,
+    /failed to decrypt account credentials/,
+    /access_token missing/,
+    /unauthorized/,
+    /forbidden/,
+    /pkce verifier not found/,
+    /state is required/,
+    /unsupported platform/,
+    /not active/,
+    /only draft posts can be published/,
+    /post validation failed/,
+  ];
+  return patterns.some((pattern) => pattern.test(raw));
+}
+
+function classifyExecutionError(err: unknown): {
+  retryable: boolean;
+  retryRule: "retryable" | "non_retryable";
+  reason: string;
+  errorCode: string | null;
+} {
+  if (err instanceof RateLimitError) {
+    return {
+      retryable: true,
+      retryRule: "retryable",
+      reason: "X 側の一時的なレート制限のため、時間を空けて再試行します。",
+      errorCode: err.code,
+    };
+  }
+
+  if (err instanceof ValidationError) {
+    return {
+      retryable: false,
+      retryRule: "non_retryable",
+      reason: "入力内容または投稿状態に問題があるため、自動再試行では直りません。",
+      errorCode: err.code,
+    };
+  }
+
+  if (err instanceof NotFoundError) {
+    return {
+      retryable: false,
+      retryRule: "non_retryable",
+      reason: "必要な投稿または関連データが見つからないため、自動再試行では直りません。",
+      errorCode: err.code,
+    };
+  }
+
+  if (err instanceof AuthorizationError || err instanceof BudgetExceededError) {
+    return {
+      retryable: false,
+      retryRule: "non_retryable",
+      reason: "権限または運用ルールの制約が原因のため、自動再試行では直りません。",
+      errorCode: err.code,
+    };
+  }
+
+  if (err instanceof ProviderError) {
+    if (isPermanentProviderError(err)) {
+      return {
+        retryable: false,
+        retryRule: "non_retryable",
+        reason: "認証情報や接続設定の問題と判断できるため、自動再試行は行いません。",
+        errorCode: err.code,
+      };
+    }
+
+    return {
+      retryable: true,
+      retryRule: "retryable",
+      reason: "外部 API 側の一時障害の可能性があるため、自動再試行します。",
+      errorCode: err.code,
+    };
+  }
+
+  if (err instanceof DomainError) {
+    return {
+      retryable: false,
+      retryRule: "non_retryable",
+      reason: "ドメイン上の制約違反のため、自動再試行では直りません。",
+      errorCode: err.code,
+    };
+  }
+
+  return {
+    retryable: true,
+    retryRule: "retryable",
+    reason: "ネットワークや一時障害の可能性がある不明エラーとして扱い、自動再試行します。",
+    errorCode: null,
+  };
+}
+
+async function recordScheduleExecutionLog(
+  deps: ScheduleUsecaseDeps,
+  args: {
+    job: ScheduledJob;
+    post: Post | null;
+    status: "succeeded" | "retrying" | "failed";
+    message: string;
+    error: string | null;
+    willRetry: boolean;
+    retryable: boolean | null;
+    retryRule: "retryable" | "non_retryable" | "exhausted" | "not_applicable";
+    classificationReason: string | null;
+    notificationTarget: ScheduleNotificationTarget | null;
+  },
+): Promise<void> {
+  if (!deps.auditRepo) return;
+
+  try {
+    await recordAudit(deps.auditRepo, {
+      workspaceId: args.job.workspaceId,
+      actorId: "scheduler",
+      actorType: "system",
+      action: `schedule.execution.${args.status}`,
+      resourceType: "schedule",
+      resourceId: args.job.id,
+      platform: args.post?.platform ?? null,
+      socialAccountId: args.post?.socialAccountId ?? null,
+      inputSummary: {
+        jobId: args.job.id,
+        postId: args.job.postId,
+        status: args.status,
+      },
+      resultSummary: {
+        jobId: args.job.id,
+        postId: args.job.postId,
+        status: args.status,
+        message: args.message,
+        error: args.error,
+        willRetry: args.willRetry,
+        retryable: args.retryable,
+        retryRule: args.retryRule,
+        classificationReason: args.classificationReason,
+        attemptCount: args.job.attemptCount,
+        maxAttempts: args.job.maxAttempts,
+        nextRetryAt: args.job.nextRetryAt ? args.job.nextRetryAt.toISOString() : null,
+        notificationTarget: args.notificationTarget,
+      },
+      estimatedCostUsd: null,
+      requestId: null,
+    });
+  } catch (err) {
+    console.error("[schedule.audit] failed to record execution log", err);
+  }
+}
+
+function mapExecutionLog(log: {
+  id: string;
+  action: string;
+  actorId: string;
+  actorType: "user" | "agent" | "system";
+  resultSummary: unknown;
+  createdAt: Date;
+}): ScheduleExecutionLog | null {
+  if (!log.action.startsWith("schedule.execution.")) return null;
+
+  const result =
+    log.resultSummary && typeof log.resultSummary === "object"
+      ? (log.resultSummary as Record<string, unknown>)
+      : {};
+  const status = log.action.replace("schedule.execution.", "");
+  if (status !== "succeeded" && status !== "retrying" && status !== "failed") {
+    return null;
+  }
+
+  const notificationRaw =
+    result.notificationTarget && typeof result.notificationTarget === "object"
+      ? (result.notificationTarget as Record<string, unknown>)
+      : null;
+
+  return {
+    id: log.id,
+    action: log.action,
+    status,
+    createdAt: log.createdAt,
+    actorId: log.actorId,
+    actorType: log.actorType,
+    message: asText(result.message) ?? status,
+    error: asText(result.error),
+    willRetry: result.willRetry === true,
+    retryable:
+      typeof result.retryable === "boolean" ? (result.retryable as boolean) : status === "retrying",
+    retryRule:
+      result.retryRule === "retryable" ||
+      result.retryRule === "non_retryable" ||
+      result.retryRule === "exhausted" ||
+      result.retryRule === "not_applicable"
+        ? (result.retryRule as ScheduleExecutionLog["retryRule"])
+        : "not_applicable",
+    classificationReason: asText(result.classificationReason),
+    attemptCount: typeof result.attemptCount === "number" ? (result.attemptCount as number) : null,
+    maxAttempts: typeof result.maxAttempts === "number" ? (result.maxAttempts as number) : null,
+    nextRetryAt: parseDateLike(result.nextRetryAt),
+    notificationTarget: notificationRaw
+      ? {
+          type:
+            notificationRaw.type === "post_creator" ? "post_creator" : "workspace_admin",
+          actorId: asText(notificationRaw.actorId),
+          label: asText(notificationRaw.label) ?? "ワークスペース運用担当 / admin",
+          reason: asText(notificationRaw.reason) ?? "",
+        }
+      : null,
+  };
+}
+
+function buildRecommendedAction(
+  job: ScheduledJob,
+  latestExecution: ScheduleExecutionLog | null,
+  notificationTarget: ScheduleNotificationTarget,
+): string {
+  if (job.status === "succeeded") {
+    return "対応は不要です。投稿は正常に完了しています。";
+  }
+
+  if (latestExecution?.willRetry && latestExecution.nextRetryAt) {
+    return `${latestExecution.nextRetryAt.toLocaleString("ja-JP")} に自動再試行されます。継続して失敗した場合は ${notificationTarget.label} が確認してください。`;
+  }
+
+  if (job.status === "retrying") {
+    return "自動再試行待ちです。次回実行予定時刻を確認し、それでも失敗が続く場合は運用担当が接続状態を確認してください。";
+  }
+
+  if (job.status === "failed") {
+    return `${notificationTarget.label} が「認証状態 / 接続アカウント / 投稿内容」を確認してください。自動では再試行しません。`;
+  }
+
+  if (job.status === "pending") {
+    return "予定時刻になると scheduler が自動実行します。手動確認したい場合は CLI の run-due を使えます。";
+  }
+
+  return "現在の状態を確認し、必要なら実行ログから原因を追跡してください。";
 }
 
 async function loadOwnedPost(
@@ -304,6 +637,63 @@ export async function getSchedule(
   return loadOwnedJob(deps.scheduledJobRepo, workspaceId, jobId);
 }
 
+export async function getScheduleOperationalView(
+  deps: ScheduleUsecaseDeps,
+  workspaceId: string,
+  jobId: string,
+): Promise<ScheduleOperationalView> {
+  const job = await loadOwnedJob(deps.scheduledJobRepo, workspaceId, jobId);
+  const post = await deps.postRepo.findById(job.postId);
+  const ownedPost = post && post.workspaceId === workspaceId ? post : null;
+  const notificationTarget = buildNotificationTarget(ownedPost);
+
+  let executionLogs: ScheduleExecutionLog[] = [];
+  if (deps.auditRepo) {
+    const rawLogs = await deps.auditRepo.findByWorkspace(workspaceId, {
+      resourceType: "schedule",
+      resourceId: job.id,
+      limit: 20,
+    });
+    executionLogs = rawLogs
+      .map((log) =>
+        mapExecutionLog({
+          id: log.id,
+          action: log.action,
+          actorId: log.actorId,
+          actorType: log.actorType,
+          resultSummary: log.resultSummary,
+          createdAt: log.createdAt,
+        }),
+      )
+      .filter((log): log is ScheduleExecutionLog => log !== null);
+  }
+
+  const latestExecution = executionLogs[0] ?? null;
+
+  return {
+    post: ownedPost
+      ? {
+          id: ownedPost.id,
+          status: ownedPost.status,
+          platform: ownedPost.platform,
+          socialAccountId: ownedPost.socialAccountId,
+          contentText: ownedPost.contentText,
+          createdBy: ownedPost.createdBy,
+        }
+      : null,
+    retryPolicy: {
+      maxAttempts: job.maxAttempts,
+      backoffSeconds: [...RETRY_BACKOFF_SECONDS],
+      retryableRule: "一時的な API 障害・ネットワーク障害・レート制限は自動再試行します。",
+      nonRetryableRule: "入力不備・認証不備・存在しない投稿 / アカウントは自動再試行しません。",
+    },
+    notificationTarget,
+    latestExecution,
+    executionLogs,
+    recommendedAction: buildRecommendedAction(job, latestExecution, notificationTarget),
+  };
+}
+
 // ───────────────────────────────────────────
 // ユースケース: executeJob
 // ───────────────────────────────────────────
@@ -347,12 +737,13 @@ export async function executeJob(
   // 3. publishPost を呼ぶ
   // executeJob は予約実行経路。Post の status は scheduled なので、
   // publishPost が期待する draft に戻してから呼ぶ。
+  const post = await deps.postRepo.findById(runningJob.postId);
+  const notificationTarget = buildNotificationTarget(post);
   try {
-    const post = await deps.postRepo.findById(runningJob.postId);
     if (!post) {
-      throw new Error(`Post not found: ${runningJob.postId}`);
+      throw new NotFoundError("Post", runningJob.postId);
     }
-    if (post.status === "scheduled") {
+    if (post.status === "scheduled" || post.status === "failed" || post.status === "publishing") {
       await deps.postRepo.update(post.id, { status: "draft" });
     }
 
@@ -371,12 +762,27 @@ export async function executeJob(
       nextRetryAt: null,
     });
 
+    await recordScheduleExecutionLog(deps, {
+      job: succeeded,
+      post,
+      status: "succeeded",
+      message: "予約投稿は正常に完了しました。",
+      error: null,
+      willRetry: false,
+      retryable: null,
+      retryRule: "not_applicable",
+      classificationReason: null,
+      notificationTarget: null,
+    });
+
     return { job: succeeded, post: published, willRetry: false };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
+    const classification = classifyExecutionError(err);
+    const shouldRetry = classification.retryable && attemptCount < runningJob.maxAttempts;
 
     // 4b. 失敗 - 再試行判定
-    if (attemptCount < runningJob.maxAttempts) {
+    if (shouldRetry) {
       const backoffSec =
         RETRY_BACKOFF_SECONDS[Math.min(attemptCount - 1, RETRY_BACKOFF_SECONDS.length - 1)];
       const nextRetryAt = new Date(nowFn(deps).getTime() + backoffSec * 1000);
@@ -386,6 +792,19 @@ export async function executeJob(
         lastError: errorMessage,
         nextRetryAt,
         lockedAt: null,
+      });
+
+      await recordScheduleExecutionLog(deps, {
+        job: retrying,
+        post,
+        status: "retrying",
+        message: "一時的な障害として扱い、自動再試行を予定しました。",
+        error: normalizeErrorMessage(errorMessage),
+        willRetry: true,
+        retryable: true,
+        retryRule: classification.retryRule,
+        classificationReason: classification.reason,
+        notificationTarget,
       });
       return { job: retrying, error: errorMessage, willRetry: true };
     }
@@ -400,7 +819,24 @@ export async function executeJob(
     });
 
     // Post も failed に
-    await deps.postRepo.update(runningJob.postId, { status: "failed" });
+    if (post) {
+      await deps.postRepo.update(runningJob.postId, { status: "failed" });
+    }
+
+    await recordScheduleExecutionLog(deps, {
+      job: failed,
+      post,
+      status: "failed",
+      message: classification.retryable
+        ? "再試行上限に達したため、永続失敗として停止しました。"
+        : "自動では解消しないエラーのため、再試行せず停止しました。",
+      error: normalizeErrorMessage(errorMessage),
+      willRetry: false,
+      retryable: classification.retryable,
+      retryRule: classification.retryable ? "exhausted" : classification.retryRule,
+      classificationReason: classification.reason,
+      notificationTarget,
+    });
 
     return { job: failed, error: errorMessage, willRetry: false };
   }

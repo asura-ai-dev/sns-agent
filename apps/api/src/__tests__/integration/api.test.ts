@@ -200,6 +200,9 @@ describe("c. schedule flow", () => {
     const got = await req("GET", `/api/schedules/${scheduledJobId}`, seed.editorApiKey);
     expect(got.status).toBe(200);
     expect((got.body.data as { status: string }).status).toBe("succeeded");
+    expect(((got.body.detail as { executionLogs?: unknown[] })?.executionLogs ?? []).length).toBe(
+      1,
+    );
   });
 });
 

@@ -21,11 +21,20 @@ import {
   cancelSchedule,
   listSchedules,
   getSchedule,
+  getScheduleOperationalView,
   dispatchDueJobs,
   ValidationError,
 } from "@sns-agent/core";
-import type { DispatchDueJobsResult, ScheduledJob, ScheduleUsecaseDeps } from "@sns-agent/core";
+import type {
+  DispatchDueJobsResult,
+  ScheduledJob,
+  ScheduleExecutionLog,
+  ScheduleNotificationTarget,
+  ScheduleOperationalView,
+  ScheduleUsecaseDeps,
+} from "@sns-agent/core";
 import {
+  DrizzleAuditLogRepository,
   DrizzleScheduledJobRepository,
   DrizzlePostRepository,
   DrizzleAccountRepository,
@@ -56,6 +65,7 @@ function buildDeps(db: AppVariables["db"]): ScheduleUsecaseDeps {
   return {
     scheduledJobRepo,
     postRepo,
+    auditRepo: new DrizzleAuditLogRepository(db),
     postUsecaseDeps: {
       postRepo,
       accountRepo,
@@ -98,6 +108,51 @@ function serializeDispatchResult(result: DispatchDueJobsResult): Record<string, 
     retrying: result.retrying,
     failed: result.failed,
     jobs: result.jobs,
+  };
+}
+
+function serializeNotificationTarget(
+  target: ScheduleNotificationTarget,
+): Record<string, unknown> {
+  return {
+    type: target.type,
+    actorId: target.actorId,
+    label: target.label,
+    reason: target.reason,
+  };
+}
+
+function serializeExecutionLog(log: ScheduleExecutionLog): Record<string, unknown> {
+  return {
+    id: log.id,
+    action: log.action,
+    status: log.status,
+    createdAt: log.createdAt,
+    actorId: log.actorId,
+    actorType: log.actorType,
+    message: log.message,
+    error: log.error,
+    willRetry: log.willRetry,
+    retryable: log.retryable,
+    retryRule: log.retryRule,
+    classificationReason: log.classificationReason,
+    attemptCount: log.attemptCount,
+    maxAttempts: log.maxAttempts,
+    nextRetryAt: log.nextRetryAt,
+    notificationTarget: log.notificationTarget
+      ? serializeNotificationTarget(log.notificationTarget)
+      : null,
+  };
+}
+
+function serializeOperationalView(detail: ScheduleOperationalView): Record<string, unknown> {
+  return {
+    post: detail.post,
+    retryPolicy: detail.retryPolicy,
+    notificationTarget: serializeNotificationTarget(detail.notificationTarget),
+    latestExecution: detail.latestExecution ? serializeExecutionLog(detail.latestExecution) : null,
+    executionLogs: detail.executionLogs.map(serializeExecutionLog),
+    recommendedAction: detail.recommendedAction,
   };
 }
 
@@ -224,7 +279,11 @@ schedules.get("/:id", requirePermission("schedule:read"), async (c) => {
   const id = c.req.param("id");
 
   const job = await getSchedule(deps, actor.workspaceId, id);
-  return c.json({ data: serializeJob(job) });
+  const detail = await getScheduleOperationalView(deps, actor.workspaceId, id);
+  return c.json({
+    data: serializeJob(job),
+    detail: serializeOperationalView(detail),
+  });
 });
 
 // ───────────────────────────────────────────

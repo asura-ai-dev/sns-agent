@@ -27,7 +27,7 @@ import {
 import { PlatformIcon, PLATFORM_VISUALS } from "@/components/settings/PlatformIcon";
 import { getStatusStyle } from "./statusStyles";
 import { formatDateTimeJa, toDatetimeLocalValue } from "./dateUtils";
-import type { CalendarEntry } from "./types";
+import type { CalendarEntry, ScheduleOperationalDetailDto } from "./types";
 
 interface Props {
   entry: CalendarEntry | null;
@@ -38,6 +38,8 @@ interface Props {
 }
 
 type Mode = "view" | "reschedule" | "confirm-cancel";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 const PHASE_ICON: Record<string, typeof WarningCircle> = {
   queued: Clock,
@@ -53,6 +55,9 @@ export function ScheduleDetailModal({ entry, open, onClose, onReschedule, onCanc
   const [draftDatetime, setDraftDatetime] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<ScheduleOperationalDetailDto | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   // open / close 制御
   useEffect(() => {
@@ -68,6 +73,47 @@ export function ScheduleDetailModal({ entry, open, onClose, onReschedule, onCanc
     } else if (!open && dlg.open) {
       dlg.close();
     }
+  }, [open, entry]);
+
+  useEffect(() => {
+    if (!open || !entry) {
+      setDetail(null);
+      setDetailError(null);
+      setDetailLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const loadDetail = async () => {
+      setDetailLoading(true);
+      setDetailError(null);
+      try {
+        const res = await fetch(`${API_BASE}/api/schedules/${encodeURIComponent(entry.job.id)}`, {
+          credentials: "include",
+        });
+        if (!res.ok) {
+          throw new Error(`failed to fetch schedule detail (${res.status})`);
+        }
+        const body = (await res.json()) as { detail?: ScheduleOperationalDetailDto };
+        if (!cancelled) {
+          setDetail(body.detail ?? null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setDetail(null);
+          setDetailError(err instanceof Error ? err.message : "詳細の取得に失敗しました");
+        }
+      } finally {
+        if (!cancelled) {
+          setDetailLoading(false);
+        }
+      }
+    };
+
+    void loadDetail();
+    return () => {
+      cancelled = true;
+    };
   }, [open, entry]);
 
   if (!entry) {
@@ -125,6 +171,7 @@ export function ScheduleDetailModal({ entry, open, onClose, onReschedule, onCanc
   };
 
   const canMutate = job.status === "pending" || job.status === "retrying";
+  const executionLogs = detail?.executionLogs ?? [];
 
   return (
     <dialog
@@ -231,6 +278,11 @@ export function ScheduleDetailModal({ entry, open, onClose, onReschedule, onCanc
                     直近のエラー: {job.lastError}
                   </p>
                 ) : null}
+                {detail?.latestExecution?.classificationReason ? (
+                  <p className="mt-2 rounded-sm border border-warning/30 bg-warning/5 px-3 py-2 text-[0.7rem] text-base-content/75">
+                    判定理由: {detail.latestExecution.classificationReason}
+                  </p>
+                ) : null}
               </div>
             ) : null}
 
@@ -263,6 +315,116 @@ export function ScheduleDetailModal({ entry, open, onClose, onReschedule, onCanc
                 </p>
               </div>
             ) : null}
+
+            <div>
+              <dt className="font-sans text-[10px] font-semibold uppercase tracking-[0.18em] text-base-content/50">
+                Operation guide
+              </dt>
+              <dd className="mt-1.5 space-y-2">
+                {detailLoading ? (
+                  <p className="rounded-sm border border-dashed border-base-300 bg-base-200/30 px-3 py-2 text-xs text-base-content/55">
+                    実行ログを読み込み中です…
+                  </p>
+                ) : null}
+                {detailError ? (
+                  <p className="rounded-sm border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-base-content/75">
+                    {detailError}
+                  </p>
+                ) : null}
+                {detail ? (
+                  <>
+                    <div className="rounded-sm border border-base-300 bg-base-200/30 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-base-content/45">
+                        再試行ルール
+                      </p>
+                      <p className="mt-1 text-sm text-base-content/80">
+                        {detail.retryPolicy.retryableRule}
+                      </p>
+                      <p className="mt-1 text-xs text-base-content/55">
+                        再試行しない条件: {detail.retryPolicy.nonRetryableRule}
+                      </p>
+                    </div>
+
+                    <div className="rounded-sm border border-base-300 bg-base-200/30 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-base-content/45">
+                        確認担当
+                      </p>
+                      <p className="mt-1 font-display text-sm font-semibold text-base-content">
+                        {detail.notificationTarget.label}
+                      </p>
+                      <p className="mt-1 text-xs text-base-content/55">
+                        {detail.notificationTarget.reason}
+                      </p>
+                    </div>
+
+                    <div className="rounded-sm border border-primary/20 bg-primary/5 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/80">
+                        次にやること
+                      </p>
+                      <p className="mt-1 text-sm text-base-content/80">
+                        {detail.recommendedAction}
+                      </p>
+                    </div>
+                  </>
+                ) : null}
+              </dd>
+            </div>
+
+            <div>
+              <dt className="font-sans text-[10px] font-semibold uppercase tracking-[0.18em] text-base-content/50">
+                Execution log
+              </dt>
+              <dd className="mt-1.5">
+                {executionLogs.length === 0 ? (
+                  <p className="rounded-sm border border-dashed border-base-300 bg-base-200/30 px-3 py-2 text-xs text-base-content/55">
+                    まだ実行ログはありません。予定時刻になると、ここに「成功 / 再試行 / 失敗」の履歴が出ます。
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {executionLogs.map((log) => (
+                      <div
+                        key={log.id}
+                        className="rounded-sm border border-base-300 bg-base-200/30 px-4 py-3"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-base-content/45">
+                            {formatDateTimeJa(new Date(log.createdAt))}
+                          </span>
+                          <span className="rounded-full border border-base-300 px-2 py-0.5 text-[0.68rem] text-base-content/70">
+                            {log.status}
+                          </span>
+                          <span className="text-[0.68rem] text-base-content/50">
+                            試行{" "}
+                            {log.attemptCount !== null && log.maxAttempts !== null
+                              ? `${log.attemptCount}/${log.maxAttempts}`
+                              : "—"}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm text-base-content/80">{log.message}</p>
+                        {log.error ? (
+                          <p className="mt-1 text-xs text-error">原因: {log.error}</p>
+                        ) : null}
+                        {log.classificationReason ? (
+                          <p className="mt-1 text-xs text-base-content/60">
+                            判定理由: {log.classificationReason}
+                          </p>
+                        ) : null}
+                        {log.nextRetryAt ? (
+                          <p className="mt-1 text-xs text-base-content/60">
+                            次回再試行: {formatDateTimeJa(new Date(log.nextRetryAt))}
+                          </p>
+                        ) : null}
+                        {log.notificationTarget ? (
+                          <p className="mt-1 text-xs text-base-content/60">
+                            確認先: {log.notificationTarget.label}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </dd>
+            </div>
           </dl>
 
           {error ? (

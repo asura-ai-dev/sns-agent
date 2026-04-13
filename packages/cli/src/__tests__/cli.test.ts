@@ -281,6 +281,101 @@ beforeAll(async () => {
     },
     {
       method: "GET",
+      path: /^\/api\/schedules\/[^/]+$/,
+      respond: () => ({
+        status: 200,
+        body: {
+          data: {
+            id: "job-1",
+            workspaceId: "ws-1",
+            postId: "post-1",
+            scheduledAt: new Date("2026-04-20T09:00:00+09:00").toISOString(),
+            status: "failed",
+            lockedAt: null,
+            startedAt: new Date("2026-04-20T09:00:01+09:00").toISOString(),
+            completedAt: new Date("2026-04-20T09:00:03+09:00").toISOString(),
+            attemptCount: 3,
+            maxAttempts: 3,
+            lastError: "Invalid X credentials",
+            nextRetryAt: null,
+            createdAt: new Date("2026-04-19T09:00:00+09:00").toISOString(),
+          },
+          detail: {
+            post: {
+              id: "post-1",
+              status: "failed",
+              platform: "x",
+              socialAccountId: "sa-1",
+              contentText: "mock scheduled post",
+              createdBy: "user-1",
+            },
+            retryPolicy: {
+              maxAttempts: 3,
+              backoffSeconds: [30, 120, 480],
+              retryableRule: "temporary failures are retried automatically",
+              nonRetryableRule: "validation/auth/resource issues stop immediately",
+            },
+            notificationTarget: {
+              type: "post_creator",
+              actorId: "user-1",
+              label: "投稿作成者 (user-1)",
+              reason: "owner should inspect credentials",
+            },
+            latestExecution: {
+              id: "log-1",
+              action: "schedule.execution.failed",
+              status: "failed",
+              createdAt: new Date("2026-04-20T09:00:03+09:00").toISOString(),
+              actorId: "scheduler",
+              actorType: "system",
+              message: "stopped without retry",
+              error: "Invalid X credentials",
+              willRetry: false,
+              retryable: false,
+              retryRule: "non_retryable",
+              classificationReason: "auth issue",
+              attemptCount: 3,
+              maxAttempts: 3,
+              nextRetryAt: null,
+              notificationTarget: {
+                type: "post_creator",
+                actorId: "user-1",
+                label: "投稿作成者 (user-1)",
+                reason: "owner should inspect credentials",
+              },
+            },
+            executionLogs: [
+              {
+                id: "log-1",
+                action: "schedule.execution.failed",
+                status: "failed",
+                createdAt: new Date("2026-04-20T09:00:03+09:00").toISOString(),
+                actorId: "scheduler",
+                actorType: "system",
+                message: "stopped without retry",
+                error: "Invalid X credentials",
+                willRetry: false,
+                retryable: false,
+                retryRule: "non_retryable",
+                classificationReason: "auth issue",
+                attemptCount: 3,
+                maxAttempts: 3,
+                nextRetryAt: null,
+                notificationTarget: {
+                  type: "post_creator",
+                  actorId: "user-1",
+                  label: "投稿作成者 (user-1)",
+                  reason: "owner should inspect credentials",
+                },
+              },
+            ],
+            recommendedAction: "投稿作成者が認証状態を確認してください。",
+          },
+        },
+      }),
+    },
+    {
+      method: "GET",
       path: /^\/api\/usage(\?|$)/,
       respond: () => ({
         status: 200,
@@ -443,6 +538,41 @@ describe("CLI integration", () => {
     expect(
       routeHits.some((h) => h.method === "POST" && h.url.startsWith("/api/schedules/run-due")),
     ).toBe(true);
+  });
+
+  it("e-2. `sns schedule show job-1` fetches enriched schedule detail", async () => {
+    const res = await runCli([
+      "--api-url",
+      `http://127.0.0.1:${mockPort}`,
+      "--api-key",
+      "test",
+      "schedule",
+      "show",
+      "job-1",
+    ]);
+    expect(res.exitCode).toBe(0);
+    expect(routeHits.some((h) => h.method === "GET" && h.url === "/api/schedules/job-1")).toBe(
+      true,
+    );
+    expect(res.stdout).toContain("Operations");
+    expect(res.stdout).toContain("Execution logs");
+  });
+
+  it("e-3. `sns schedule logs job-1 --json` returns execution logs", async () => {
+    const res = await runCli([
+      "--api-url",
+      `http://127.0.0.1:${mockPort}`,
+      "--api-key",
+      "test",
+      "--json",
+      "schedule",
+      "logs",
+      "job-1",
+    ]);
+    expect(res.exitCode).toBe(0);
+    const parsed = JSON.parse(res.stdout) as { data: Array<{ status: string }> };
+    expect(Array.isArray(parsed.data)).toBe(true);
+    expect(parsed.data[0]?.status).toBe("failed");
   });
 
   it("f. unknown command exits with code 1", async () => {

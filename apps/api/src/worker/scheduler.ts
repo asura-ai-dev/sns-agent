@@ -14,6 +14,7 @@
 import { dispatchDueJobs, POLL_BATCH_SIZE } from "@sns-agent/core";
 import type { ScheduleUsecaseDeps } from "@sns-agent/core";
 import {
+  DrizzleAuditLogRepository,
   DrizzleScheduledJobRepository,
   DrizzlePostRepository,
   DrizzleAccountRepository,
@@ -64,6 +65,7 @@ function buildScheduleDeps(db: DbClient): ScheduleUsecaseDeps {
   return {
     scheduledJobRepo,
     postRepo,
+    auditRepo: new DrizzleAuditLogRepository(db),
     postUsecaseDeps: {
       postRepo,
       accountRepo,
