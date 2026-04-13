@@ -7,11 +7,15 @@
  *
  * design.md セクション 1.1 に準拠。
  */
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import * as schema from "./schema/index.js";
 
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+
+const PKG_DIR = dirname(fileURLToPath(import.meta.url));
 
 export type DbClient = BetterSQLite3Database<typeof schema>;
 
@@ -34,7 +38,8 @@ export function getDb(databaseUrl?: string): DbClient {
   }
 
   if (url.startsWith("file:")) {
-    const filePath = url.replace(/^file:/, "");
+    const raw = url.replace(/^file:/, "");
+    const filePath = raw.startsWith("/") ? raw : resolve(PKG_DIR, "..", raw);
     const sqlite = new Database(filePath);
     sqlite.pragma("journal_mode = WAL");
     sqlite.pragma("foreign_keys = ON");

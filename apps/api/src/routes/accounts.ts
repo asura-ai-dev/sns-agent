@@ -83,7 +83,7 @@ accounts.post("/", requirePermission("account:connect"), async (c) => {
   }
 
   const result = await initiateConnection(deps, actor.workspaceId, body.platform as Platform);
-  return c.json({ data: result });
+  return c.json({ data: { authorizationUrl: result.authUrl } });
 });
 
 // ───────────────────────────────────────────

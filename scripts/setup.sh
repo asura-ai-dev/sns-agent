@@ -21,9 +21,19 @@ else
 
   cp "$ENV_EXAMPLE" "$ENV_FILE"
 
-  sed "s/^ENCRYPTION_KEY=$/ENCRYPTION_KEY=$ENCRYPTION_KEY/" "$ENV_FILE" >"$TMP_FILE"
+  DB_PATH="$ROOT_DIR/packages/db/dev.db"
+  sed -e "s/^ENCRYPTION_KEY=$/ENCRYPTION_KEY=$ENCRYPTION_KEY/" \
+      -e "s|^DATABASE_URL=file:./dev.db|DATABASE_URL=file:$DB_PATH|" \
+      "$ENV_FILE" >"$TMP_FILE"
   mv "$TMP_FILE" "$ENV_FILE"
   trap - EXIT
+
+  {
+    echo ""
+    echo "# Web UI セッション（ローカル開発用 owner ユーザー）"
+    echo "SNS_AGENT_API_KEY=sns-agent-dev-key-00000000"
+    echo "SNS_AGENT_SESSION_USER_ID=user-owner-00000000"
+  } >> "$ENV_FILE"
 
   echo "Created $ENV_FILE"
 fi
