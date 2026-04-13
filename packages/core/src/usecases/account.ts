@@ -204,11 +204,8 @@ export async function handleOAuthCallback(
     throw new ProviderError(`Provider ${platform} did not return account information`);
   }
 
-  // トークンは既に provider から暗号化済みで返ってくる想定だが、
-  // 念のため credentials を暗号化して保存する
-  const credentialsEncrypted = result.account.credentialsEncrypted.startsWith("eyJ")
-    ? encrypt(result.account.credentialsEncrypted, deps.encryptionKey)
-    : result.account.credentialsEncrypted;
+  // credentials を暗号化して保存する
+  const credentialsEncrypted = encrypt(result.account.credentialsEncrypted, deps.encryptionKey);
 
   // DB に保存
   const account = await deps.accountRepo.create({
