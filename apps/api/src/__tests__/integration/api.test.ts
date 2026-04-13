@@ -99,11 +99,10 @@ describe("a. accounts flow", () => {
       platform: "x",
     });
     expect(res.status).toBe(200);
-    // usecase returns { authUrl } (not authorizationUrl)
-    const data = res.body.data as { authUrl?: string };
+    const data = res.body.data as { authorizationUrl?: string };
     expect(data).toBeDefined();
-    expect(typeof data.authUrl).toBe("string");
-    expect(data.authUrl).toContain("mock-oauth.example.com");
+    expect(typeof data.authorizationUrl).toBe("string");
+    expect(data.authorizationUrl).toContain("mock-oauth.example.com");
   });
 });
 
