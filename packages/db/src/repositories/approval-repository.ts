@@ -21,6 +21,7 @@ function rowToEntity(row: typeof approvalRequests.$inferSelect): ApprovalRequest
     workspaceId: row.workspaceId,
     resourceType: row.resourceType,
     resourceId: row.resourceId,
+    payload: row.payload ? JSON.parse(row.payload) : null,
     requestedBy: row.requestedBy,
     requestedAt: row.requestedAt,
     status: row.status as ApprovalStatus,
@@ -101,6 +102,7 @@ export class DrizzleApprovalRepository implements ApprovalRepository {
       workspaceId: req.workspaceId,
       resourceType: req.resourceType,
       resourceId: req.resourceId,
+      payload: req.payload == null ? null : JSON.stringify(req.payload),
       requestedBy: req.requestedBy,
       requestedAt: req.requestedAt,
       status: req.status,
@@ -119,6 +121,9 @@ export class DrizzleApprovalRepository implements ApprovalRepository {
     if (data.reason !== undefined) patch.reason = data.reason;
     if (data.resourceType !== undefined) patch.resourceType = data.resourceType;
     if (data.resourceId !== undefined) patch.resourceId = data.resourceId;
+    if (data.payload !== undefined) {
+      patch.payload = data.payload == null ? null : JSON.stringify(data.payload);
+    }
     if (data.requestedAt !== undefined) patch.requestedAt = data.requestedAt;
     if (data.requestedBy !== undefined) patch.requestedBy = data.requestedBy;
 

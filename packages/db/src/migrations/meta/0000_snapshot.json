@@ -101,6 +101,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "payload": {
+          "name": "payload",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "requested_by": {
           "name": "requested_by",
           "type": "text",

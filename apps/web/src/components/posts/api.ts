@@ -10,6 +10,7 @@ import type {
   Platform,
   Post,
   PostListFilters,
+  PostProviderMetadata,
   PostListResponse,
   PostSocialAccount,
 } from "./types";
@@ -151,6 +152,7 @@ export interface CreatePostInput {
   socialAccountId: string;
   contentText: string;
   contentMedia: MediaAttachment[];
+  providerMetadata?: PostProviderMetadata | null;
   publishNow: boolean;
   idempotencyKey?: string | null;
 }
@@ -167,6 +169,7 @@ export async function createPostApi(input: CreatePostInput): Promise<ApiResult<P
         socialAccountId: input.socialAccountId,
         contentText: input.contentText,
         contentMedia: input.contentMedia.length > 0 ? input.contentMedia : null,
+        providerMetadata: input.providerMetadata ?? null,
         publishNow: input.publishNow,
       }),
     });

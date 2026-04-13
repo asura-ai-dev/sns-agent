@@ -6,6 +6,7 @@
  */
 
 import type { Platform } from "@sns-agent/config";
+import type { PostProviderMetadata } from "@sns-agent/core";
 
 // ───────────────────────────────────────────
 // core エンティティの re-export
@@ -13,6 +14,7 @@ import type { Platform } from "@sns-agent/config";
 export type {
   SocialAccount,
   Post,
+  PostProviderMetadata,
   ScheduledJob,
   UsageRecord,
   MediaAttachment,
@@ -73,6 +75,7 @@ export interface CreatePostInput {
   platform: Platform;
   contentText?: string;
   contentMedia?: { type: "image" | "video"; url: string; mimeType: string }[];
+  providerMetadata?: PostProviderMetadata | null;
   /** true で即時投稿、false/省略で下書き */
   publish?: boolean;
 }
@@ -80,6 +83,7 @@ export interface CreatePostInput {
 export interface UpdatePostInput {
   contentText?: string;
   contentMedia?: { type: "image" | "video"; url: string; mimeType: string }[];
+  providerMetadata?: PostProviderMetadata | null;
 }
 
 // ───────────────────────────────────────────

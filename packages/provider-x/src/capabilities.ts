@@ -5,7 +5,7 @@
  * - textPost: true
  * - imagePost: true
  * - videoPost: true
- * - threadPost: false   // v1 ではスレッド非対応
+ * - threadPost: true
  * - directMessage: true
  * - commentReply: true
  * - broadcast: false
@@ -18,7 +18,7 @@ export const X_CAPABILITIES: ProviderCapabilities = {
   textPost: true,
   imagePost: true,
   videoPost: true,
-  threadPost: false,
+  threadPost: true,
   directMessage: true,
   commentReply: true,
   broadcast: false,

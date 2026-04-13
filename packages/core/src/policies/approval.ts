@@ -23,7 +23,8 @@ export type ApprovalAction =
   | "post:publish"
   | "post:delete"
   | "budget:exceed-continue"
-  | "line:broadcast";
+  | "line:broadcast"
+  | "inbox:reply";
 
 /**
  * 承認判定のためのコンテキスト。
@@ -49,6 +50,8 @@ export interface ApprovalPolicyConfig {
   agentPostDeleteRequiresApproval: boolean;
   /** LINE broadcast を承認必須にするか */
   lineBroadcastRequiresApproval: boolean;
+  /** agent ロールの inbox reply を承認必須にするか */
+  agentInboxReplyRequiresApproval: boolean;
   /** admin/owner を承認スキップ対象にするか（false で全員承認を受ける） */
   adminBypass: boolean;
 }
@@ -61,6 +64,7 @@ export const DEFAULT_APPROVAL_POLICY: ApprovalPolicyConfig = {
   agentPostPublishRequiresApproval: true,
   agentPostDeleteRequiresApproval: true,
   lineBroadcastRequiresApproval: true,
+  agentInboxReplyRequiresApproval: true,
   adminBypass: true,
 };
 
@@ -107,6 +111,13 @@ export function requiresApproval(
   if (action === "post:delete") {
     if (actorRole === "agent") {
       return config.agentPostDeleteRequiresApproval;
+    }
+    return false;
+  }
+
+  if (action === "inbox:reply") {
+    if (actorRole === "agent") {
+      return config.agentInboxReplyRequiresApproval;
     }
     return false;
   }

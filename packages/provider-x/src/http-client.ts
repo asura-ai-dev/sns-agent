@@ -38,10 +38,14 @@ export interface XApiRequestOptions {
   path: string;
   /** Bearer アクセストークン */
   accessToken?: string;
+  /** クエリ文字列 */
+  query?: Record<string, string | number | boolean | undefined>;
   /** JSON ボディ。Content-Type: application/json で送信される */
   json?: unknown;
   /** application/x-www-form-urlencoded 形式のボディ。OAuth トークン交換等で使用 */
   form?: Record<string, string>;
+  /** multipart/form-data。media upload で使用 */
+  formData?: FormData;
   /** 追加ヘッダ */
   headers?: Record<string, string>;
 }
@@ -63,20 +67,23 @@ export class XApiClient {
   }
 
   async request<T>(opts: XApiRequestOptions): Promise<XApiResponse<T>> {
-    const url = opts.path.startsWith("http") ? opts.path : `${this.baseUrl}${opts.path}`;
+    const rawUrl = opts.path.startsWith("http") ? opts.path : `${this.baseUrl}${opts.path}`;
+    const url = buildUrl(rawUrl, opts.query);
     const headers: Record<string, string> = { ...opts.headers };
 
     if (opts.accessToken) {
       headers["Authorization"] = `Bearer ${opts.accessToken}`;
     }
 
-    let body: string | undefined;
+    let body: string | FormData | undefined;
     if (opts.json !== undefined) {
       headers["Content-Type"] = "application/json";
       body = JSON.stringify(opts.json);
     } else if (opts.form !== undefined) {
       headers["Content-Type"] = "application/x-www-form-urlencoded";
       body = new URLSearchParams(opts.form).toString();
+    } else if (opts.formData !== undefined) {
+      body = opts.formData;
     }
 
     let response: Response;
@@ -161,4 +168,18 @@ function extractErrorMessage(body: unknown): string | null {
     if (typeof first.detail === "string") return first.detail;
   }
   return null;
+}
+
+function buildUrl(
+  rawUrl: string,
+  query?: Record<string, string | number | boolean | undefined>,
+): string {
+  if (!query) return rawUrl;
+
+  const url = new URL(rawUrl);
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined) continue;
+    url.searchParams.set(key, String(value));
+  }
+  return url.toString();
 }
