@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "next build",
-    "dev": "next dev",
+    "dev": "node --env-file=../../.env ./node_modules/next/dist/bin/next dev",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "echo \"No tests yet\"",
@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",
+    "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "typescript": "^5.8.3"

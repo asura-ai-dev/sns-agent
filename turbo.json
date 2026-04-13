@@ -1,5 +1,15 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "API_PORT",
+    "DATABASE_URL",
+    "ENABLE_SCHEDULER",
+    "NEXT_PUBLIC_API_BASE_URL",
+    "NEXT_PUBLIC_SNS_AGENT_API_URL",
+    "SNS_AGENT_API_KEY",
+    "SNS_AGENT_API_URL",
+    "WEB_URL"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

@@ -40,6 +40,8 @@ export interface SnsAgentClientOptions {
   baseUrl: string;
   /** API キー (Authorization: Bearer <apiKey>) */
   apiKey: string;
+  /** セッションユーザー ID（Web UI 用。指定すると X-Session-User-Id ヘッダを送信） */
+  sessionUserId?: string;
   /** カスタム fetch 実装（テスト用） */
   fetch?: typeof globalThis.fetch;
 }
@@ -131,6 +133,7 @@ export interface BudgetResource {
 export class SnsAgentClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
+  private readonly sessionUserId?: string;
   private readonly _fetch: typeof globalThis.fetch;
 
   public readonly accounts: AccountsResource;
@@ -140,9 +143,9 @@ export class SnsAgentClient {
   public readonly budget: BudgetResource;
 
   constructor(options: SnsAgentClientOptions) {
-    // 末尾のスラッシュを除去
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.apiKey = options.apiKey;
+    this.sessionUserId = options.sessionUserId;
     this._fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
 
     // リソース別メソッドをバインド
@@ -223,9 +226,14 @@ export class SnsAgentClient {
 
   private _headers(opts?: { idempotency?: boolean }): Record<string, string> {
     const h: Record<string, string> = {
-      Authorization: `Bearer ${this.apiKey}`,
       "Content-Type": "application/json",
     };
+    if (this.apiKey) {
+      h["Authorization"] = `Bearer ${this.apiKey}`;
+    }
+    if (this.sessionUserId) {
+      h["X-Session-User-Id"] = this.sessionUserId;
+    }
     if (opts?.idempotency) {
       h["X-Idempotency-Key"] = generateIdempotencyKey();
     }

@@ -47,9 +47,19 @@ function resolveBaseUrl(): string {
 }
 
 function resolveApiKey(): string {
-  // During local development an empty key is acceptable — the API middleware
-  // may be configured to bypass auth in dev mode.
-  return process.env.SNS_AGENT_API_KEY ?? "";
+  return process.env.SNS_AGENT_API_KEY ?? "sns-agent-dev-key-00000000";
+}
+
+function resolveSessionUserId(): string {
+  return process.env.SNS_AGENT_SESSION_USER_ID ?? "user-owner-00000000";
+}
+
+function resolveAuthHeaders(): Record<string, string> {
+  const h: Record<string, string> = {};
+  const apiKey = resolveApiKey();
+  if (apiKey) h["Authorization"] = `Bearer ${apiKey}`;
+  h["X-Session-User-Id"] = resolveSessionUserId();
+  return h;
 }
 
 // ───────────────────────────────────────────
@@ -67,6 +77,7 @@ export function getApiClient(): SnsAgentClient {
   cachedClient = new SnsAgentClient({
     baseUrl: resolveBaseUrl(),
     apiKey: resolveApiKey(),
+    sessionUserId: resolveSessionUserId(),
   });
   return cachedClient;
 }
@@ -239,11 +250,10 @@ export interface LlmRouteDto {
 export function fetchLlmRoutesSafe(): Promise<FetchResult<LlmRouteDto[]>> {
   return guard<LlmRouteDto[]>(async () => {
     const baseUrl = resolveBaseUrl();
-    const apiKey = resolveApiKey();
     const res = await fetch(`${baseUrl}/api/llm/routes`, {
       method: "GET",
       headers: {
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        ...resolveAuthHeaders(),
       },
       cache: "no-store",
     });
@@ -279,11 +289,10 @@ export interface SkillPackageDto {
 export function fetchSkillPackagesSafe(): Promise<FetchResult<SkillPackageDto[]>> {
   return guard<SkillPackageDto[]>(async () => {
     const baseUrl = resolveBaseUrl();
-    const apiKey = resolveApiKey();
     const res = await fetch(`${baseUrl}/api/skills`, {
       method: "GET",
       headers: {
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        ...resolveAuthHeaders(),
       },
       cache: "no-store",
     });
