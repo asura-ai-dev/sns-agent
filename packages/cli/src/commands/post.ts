@@ -3,7 +3,7 @@
  *
  * - sns post list [--platform <p>] [--status <s>] [--limit <n>] [--json]
  * - sns post create --platform <p> --account <name|id> (--text "..." | --file <path>)
- *                   [--media <path>]... [--publish] [--json]
+ *                   [--media <path>]... [--publish | --at <ISO>] [--json]
  * - sns post show <id> [--json]
  * - sns post delete <id>
  * - sns post publish <id>
@@ -156,6 +156,18 @@ function parsePositiveInt(value: string | undefined, name: string): number | und
   return n;
 }
 
+/** ISO 8601 日時の緩めのバリデーション */
+function validateIsoDate(value: string, name: string): string {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) {
+    throw Object.assign(
+      new Error(`--${name} must be a valid ISO 8601 date-time (e.g. 2026-04-12T09:00:00+09:00)`),
+      { code: "VALID_DATE" },
+    );
+  }
+  return value;
+}
+
 export function registerPostCommand(program: Command): void {
   const post = program.command("post").description("Manage posts (drafts, publish, delete)");
 
@@ -190,7 +202,7 @@ export function registerPostCommand(program: Command): void {
   // ---- create ----
   post
     .command("create")
-    .description("Create a post (draft by default, add --publish for immediate publishing)")
+    .description("Create a post (draft by default, add --publish or --at for delivery)")
     .option("--platform <platform>", "Target platform (x | line | instagram) (required)")
     .option("--account <name|id>", "SNS account name or id (required)")
     .option("--text <text>", "Post body text")
@@ -199,6 +211,7 @@ export function registerPostCommand(program: Command): void {
       return previous ? [...previous, value] : [value];
     })
     .option("--publish", "Publish immediately (omit for draft)")
+    .option("--at <iso>", "Schedule for future publishing (ISO 8601)")
     .action(
       async (
         subOpts: {
@@ -208,6 +221,7 @@ export function registerPostCommand(program: Command): void {
           file?: string;
           media?: string[];
           publish?: boolean;
+          at?: string;
         },
         cmd: Command,
       ) => {
@@ -227,6 +241,11 @@ export function registerPostCommand(program: Command): void {
               code: "VALID_CONFLICT",
             });
           }
+          if (subOpts.publish && subOpts.at) {
+            throw Object.assign(new Error("--publish and --at are mutually exclusive"), {
+              code: "VALID_CONFLICT",
+            });
+          }
 
           let contentText: string | undefined = subOpts.text;
           if (subOpts.file) {
@@ -241,6 +260,7 @@ export function registerPostCommand(program: Command): void {
 
           const socialAccountId = await resolveAccountId(ctx, accountValue, platform);
           const contentMedia = await buildMediaAttachments(subOpts.media);
+          const scheduledAt = subOpts.at ? validateIsoDate(subOpts.at, "at") : undefined;
 
           const input: CreatePostInput = {
             socialAccountId,
@@ -250,8 +270,24 @@ export function registerPostCommand(program: Command): void {
           if (contentMedia.length > 0) input.contentMedia = contentMedia;
           if (subOpts.publish) input.publish = true;
 
-          const res = await ctx.client.posts.create(input);
-          ctx.formatter.data(res.data, {
+          const postRes = await ctx.client.posts.create(input);
+
+          if (scheduledAt) {
+            const scheduleRes = await ctx.client.schedules.create({
+              postId: postRes.data.id,
+              scheduledAt,
+            });
+            ctx.formatter.data(
+              {
+                post: postRes.data,
+                schedule: scheduleRes.data,
+              },
+              { title: "Post scheduled" },
+            );
+            return;
+          }
+
+          ctx.formatter.data(postRes.data, {
             title: subOpts.publish ? "Post published" : "Draft created",
           });
         });

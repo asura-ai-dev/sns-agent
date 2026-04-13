@@ -180,5 +180,39 @@ export async function createPostApi(input: CreatePostInput): Promise<ApiResult<P
   }
 }
 
+// ───────────────────────────────────────────
+// 予約作成
+// ───────────────────────────────────────────
+
+interface ScheduleJobResponse {
+  data: {
+    id: string;
+    postId: string;
+    scheduledAt: string;
+    status: string;
+  };
+}
+
+export async function createScheduleApi(
+  postId: string,
+  scheduledAt: string,
+): Promise<ApiResult<ScheduleJobResponse["data"]>> {
+  try {
+    const res = await fetch(`${API_BASE}/api/schedules`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId, scheduledAt }),
+    });
+    if (!res.ok && res.status !== 201) {
+      return await parseError(res);
+    }
+    const body = (await res.json()) as ScheduleJobResponse;
+    return { ok: true, value: body.data };
+  } catch (err) {
+    return networkFailure(err);
+  }
+}
+
 // Re-export helper used by tests / stories
 export type { Platform };

@@ -47,6 +47,9 @@ function buildConditions(
   if (options?.resourceType) {
     conditions.push(eq(auditLogs.resourceType, options.resourceType));
   }
+  if (options?.resourceId) {
+    conditions.push(eq(auditLogs.resourceId, options.resourceId));
+  }
   if (options?.platform) {
     conditions.push(eq(auditLogs.platform, options.platform));
   }

@@ -101,6 +101,31 @@ export interface UpdateScheduleInput {
   scheduledAt?: string; // ISO 8601
 }
 
+export interface RunDueSchedulesInput {
+  limit?: number;
+}
+
+export interface RunDueSchedulesJobResult {
+  id: string;
+  postId: string;
+  beforeStatus: string;
+  afterStatus: string;
+  willRetry: boolean;
+  recoveredStaleLock: boolean;
+  error?: string;
+}
+
+export interface RunDueSchedulesResult {
+  processedAt: string;
+  scanned: number;
+  processed: number;
+  skipped: number;
+  succeeded: number;
+  retrying: number;
+  failed: number;
+  jobs: RunDueSchedulesJobResult[];
+}
+
 // ───────────────────────────────────────────
 // Usage
 // ───────────────────────────────────────────

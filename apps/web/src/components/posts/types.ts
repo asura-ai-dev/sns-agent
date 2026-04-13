@@ -30,6 +30,9 @@ export interface PostScheduleInfo {
   id: string;
   scheduledAt: string;
   status: "pending" | "locked" | "running" | "succeeded" | "failed" | "retrying";
+  nextRetryAt?: string | null;
+  lastError?: string | null;
+  lastExecutedAt?: string | null;
 }
 
 export interface Post {

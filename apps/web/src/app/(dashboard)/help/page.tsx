@@ -88,7 +88,7 @@ const CLI_REFERENCE = [
     command: "schedule",
     description:
       "予約投稿の一覧確認と時刻調整に使います。公開の間隔を維持したいときに、直近の予定を落ち着いて見直せます。",
-    examples: ["sns schedule list", "sns schedule create --post 9f2c2b1a --at 2026-04-12T09:00:00+09:00"],
+    examples: ["sns schedule list", "sns schedule show 9f2c2b1a", "sns schedule logs 9f2c2b1a"],
   },
   {
     command: "inbox",

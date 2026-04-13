@@ -92,10 +92,16 @@ export interface ScheduledJobRepository {
   update(id: string, data: Partial<ScheduledJob>): Promise<ScheduledJob>;
   /**
    * ジョブをアトミックにロックする。
-   * pending 状態のジョブを locked に遷移し、locked_at を設定する。
+   * pending / retrying / 期限切れ locked 状態のジョブを locked に遷移し、locked_at を設定する。
    * 既にロックされている場合は null を返す。
    */
-  lockJob(id: string): Promise<ScheduledJob | null>;
+  lockJob(
+    id: string,
+    options?: {
+      now?: Date;
+      lockTimeoutMs?: number;
+    },
+  ): Promise<ScheduledJob | null>;
   /**
    * 指定した post_id 群に紐づく予約ジョブを返す。
    * 投稿一覧の schedule 情報（scheduledAt, status）を埋めるために使う。
@@ -189,6 +195,7 @@ export interface AuditLogFilterOptions {
   actorType?: string;
   action?: string;
   resourceType?: string;
+  resourceId?: string;
   platform?: string;
   startDate?: Date;
   endDate?: Date;

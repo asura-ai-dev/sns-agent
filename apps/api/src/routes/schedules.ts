@@ -5,11 +5,12 @@
  * design.md セクション 4.2 に準拠。
  *
  * RBAC:
- * - GET   /api/schedules      → post:read
- * - POST  /api/schedules      → post:publish
- * - GET   /api/schedules/:id  → post:read
- * - PATCH /api/schedules/:id  → post:publish
- * - DELETE /api/schedules/:id → post:publish
+ * - GET   /api/schedules          → schedule:read
+ * - POST  /api/schedules          → schedule:create
+ * - POST  /api/schedules/run-due  → schedule:update
+ * - GET   /api/schedules/:id      → schedule:read
+ * - PATCH /api/schedules/:id      → schedule:update
+ * - DELETE /api/schedules/:id     → schedule:delete
  */
 import { Hono } from "hono";
 import { JOB_STATUSES } from "@sns-agent/config";
@@ -20,10 +21,20 @@ import {
   cancelSchedule,
   listSchedules,
   getSchedule,
+  getScheduleOperationalView,
+  dispatchDueJobs,
   ValidationError,
 } from "@sns-agent/core";
-import type { ScheduledJob, ScheduleUsecaseDeps } from "@sns-agent/core";
+import type {
+  DispatchDueJobsResult,
+  ScheduledJob,
+  ScheduleExecutionLog,
+  ScheduleNotificationTarget,
+  ScheduleOperationalView,
+  ScheduleUsecaseDeps,
+} from "@sns-agent/core";
 import {
+  DrizzleAuditLogRepository,
   DrizzleScheduledJobRepository,
   DrizzlePostRepository,
   DrizzleAccountRepository,
@@ -54,6 +65,7 @@ function buildDeps(db: AppVariables["db"]): ScheduleUsecaseDeps {
   return {
     scheduledJobRepo,
     postRepo,
+    auditRepo: new DrizzleAuditLogRepository(db),
     postUsecaseDeps: {
       postRepo,
       accountRepo,
@@ -86,10 +98,74 @@ function serializeJob(job: ScheduledJob): Record<string, unknown> {
   };
 }
 
+function serializeDispatchResult(result: DispatchDueJobsResult): Record<string, unknown> {
+  return {
+    processedAt: result.processedAt,
+    scanned: result.scanned,
+    processed: result.processed,
+    skipped: result.skipped,
+    succeeded: result.succeeded,
+    retrying: result.retrying,
+    failed: result.failed,
+    jobs: result.jobs,
+  };
+}
+
+function serializeNotificationTarget(
+  target: ScheduleNotificationTarget,
+): Record<string, unknown> {
+  return {
+    type: target.type,
+    actorId: target.actorId,
+    label: target.label,
+    reason: target.reason,
+  };
+}
+
+function serializeExecutionLog(log: ScheduleExecutionLog): Record<string, unknown> {
+  return {
+    id: log.id,
+    action: log.action,
+    status: log.status,
+    createdAt: log.createdAt,
+    actorId: log.actorId,
+    actorType: log.actorType,
+    message: log.message,
+    error: log.error,
+    willRetry: log.willRetry,
+    retryable: log.retryable,
+    retryRule: log.retryRule,
+    classificationReason: log.classificationReason,
+    attemptCount: log.attemptCount,
+    maxAttempts: log.maxAttempts,
+    nextRetryAt: log.nextRetryAt,
+    notificationTarget: log.notificationTarget
+      ? serializeNotificationTarget(log.notificationTarget)
+      : null,
+  };
+}
+
+function serializeOperationalView(detail: ScheduleOperationalView): Record<string, unknown> {
+  return {
+    post: detail.post,
+    retryPolicy: detail.retryPolicy,
+    notificationTarget: serializeNotificationTarget(detail.notificationTarget),
+    latestExecution: detail.latestExecution ? serializeExecutionLog(detail.latestExecution) : null,
+    executionLogs: detail.executionLogs.map(serializeExecutionLog),
+    recommendedAction: detail.recommendedAction,
+  };
+}
+
 function parseDateOrUndefined(value: string | undefined): Date | undefined {
   if (!value) return undefined;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
+function parseIntOrUndefined(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const n = Number.parseInt(value, 10);
+  return Number.isNaN(n) ? undefined : n;
 }
 
 function parseDateStrict(value: unknown, field: string): Date {
@@ -106,7 +182,7 @@ function parseDateStrict(value: unknown, field: string): Date {
 // ───────────────────────────────────────────
 // GET /api/schedules - 一覧
 // ───────────────────────────────────────────
-schedules.get("/", requirePermission("post:read"), async (c) => {
+schedules.get("/", requirePermission("schedule:read"), async (c) => {
   const actor = c.get("actor");
   const db = c.get("db");
   const deps = buildDeps(db);
@@ -115,6 +191,7 @@ schedules.get("/", requirePermission("post:read"), async (c) => {
   const postIdQ = c.req.query("postId");
   const fromQ = c.req.query("from");
   const toQ = c.req.query("to");
+  const limitQ = c.req.query("limit");
 
   if (statusQ && !JOB_STATUSES.includes(statusQ as JobStatus)) {
     throw new ValidationError(
@@ -127,6 +204,7 @@ schedules.get("/", requirePermission("post:read"), async (c) => {
     postId: postIdQ,
     from: parseDateOrUndefined(fromQ),
     to: parseDateOrUndefined(toQ),
+    limit: parseIntOrUndefined(limitQ),
   });
 
   return c.json({
@@ -138,7 +216,7 @@ schedules.get("/", requirePermission("post:read"), async (c) => {
 // ───────────────────────────────────────────
 // POST /api/schedules - 予約作成
 // ───────────────────────────────────────────
-schedules.post("/", requirePermission("post:publish"), async (c) => {
+schedules.post("/", requirePermission("schedule:create"), async (c) => {
   const actor = c.get("actor");
   const db = c.get("db");
   const deps = buildDeps(db);
@@ -165,22 +243,53 @@ schedules.post("/", requirePermission("post:publish"), async (c) => {
 });
 
 // ───────────────────────────────────────────
+// POST /api/schedules/run-due - 期限到来ジョブを即時実行
+// ───────────────────────────────────────────
+schedules.post("/run-due", requirePermission("schedule:update"), async (c) => {
+  const actor = c.get("actor");
+  const db = c.get("db");
+  const deps = buildDeps(db);
+
+  let body: { limit?: number } = {};
+  try {
+    body = await c.req.json<{ limit?: number }>();
+  } catch {
+    body = {};
+  }
+
+  const limit = body.limit ?? parseIntOrUndefined(c.req.query("limit"));
+  if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
+    throw new ValidationError("limit must be a positive integer");
+  }
+
+  const result = await dispatchDueJobs(deps, { limit });
+  return c.json({
+    data: serializeDispatchResult(result),
+    meta: { workspaceId: actor.workspaceId },
+  });
+});
+
+// ───────────────────────────────────────────
 // GET /api/schedules/:id - 詳細
 // ───────────────────────────────────────────
-schedules.get("/:id", requirePermission("post:read"), async (c) => {
+schedules.get("/:id", requirePermission("schedule:read"), async (c) => {
   const actor = c.get("actor");
   const db = c.get("db");
   const deps = buildDeps(db);
   const id = c.req.param("id");
 
   const job = await getSchedule(deps, actor.workspaceId, id);
-  return c.json({ data: serializeJob(job) });
+  const detail = await getScheduleOperationalView(deps, actor.workspaceId, id);
+  return c.json({
+    data: serializeJob(job),
+    detail: serializeOperationalView(detail),
+  });
 });
 
 // ───────────────────────────────────────────
 // PATCH /api/schedules/:id - 予約日時変更
 // ───────────────────────────────────────────
-schedules.patch("/:id", requirePermission("post:publish"), async (c) => {
+schedules.patch("/:id", requirePermission("schedule:update"), async (c) => {
   const actor = c.get("actor");
   const db = c.get("db");
   const deps = buildDeps(db);
@@ -196,7 +305,7 @@ schedules.patch("/:id", requirePermission("post:publish"), async (c) => {
 // ───────────────────────────────────────────
 // DELETE /api/schedules/:id - キャンセル
 // ───────────────────────────────────────────
-schedules.delete("/:id", requirePermission("post:publish"), async (c) => {
+schedules.delete("/:id", requirePermission("schedule:delete"), async (c) => {
   const actor = c.get("actor");
   const db = c.get("db");
   const deps = buildDeps(db);

@@ -5,9 +5,10 @@
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import type { Platform } from "@sns-agent/config";
-import type { Post, ScheduledJob, SocialAccount } from "../../domain/entities.js";
+import type { AuditLog, Post, ScheduledJob, SocialAccount } from "../../domain/entities.js";
 import type {
   AccountRepository,
+  AuditLogRepository,
   PostRepository,
   ScheduledJobRepository,
 } from "../../interfaces/repositories.js";
@@ -19,9 +20,12 @@ import {
   cancelSchedule,
   listSchedules,
   getSchedule,
+  getScheduleOperationalView,
   executeJob,
   findExecutableJobs,
   RETRY_BACKOFF_SECONDS,
+  LOCK_TIMEOUT_MS,
+  dispatchDueJobs,
 } from "../schedule.js";
 import type { ScheduleUsecaseDeps } from "../schedule.js";
 import type { PostUsecaseDeps } from "../post.js";
@@ -216,11 +220,21 @@ function makeJobRepo(initial: ScheduledJob[] = []): ScheduledJobRepository & {
       store.set(id, u);
       return { ...u };
     },
-    lockJob: async (id) => {
+    lockJob: async (id, options) => {
       const j = store.get(id);
       if (!j) return null;
-      if (j.status !== "pending" && j.status !== "retrying") return null;
-      const locked = { ...j, status: "locked" as const, lockedAt: new Date() };
+      const now = options?.now ?? new Date();
+      const staleBefore =
+        options?.lockTimeoutMs !== undefined
+          ? new Date(now.getTime() - options.lockTimeoutMs)
+          : null;
+      const canRecoverLocked =
+        j.status === "locked" &&
+        j.lockedAt !== null &&
+        staleBefore !== null &&
+        j.lockedAt <= staleBefore;
+      if (j.status !== "pending" && j.status !== "retrying" && !canRecoverLocked) return null;
+      const locked = { ...j, status: "locked" as const, lockedAt: now };
       store.set(id, locked);
       return { ...locked };
     },
@@ -290,19 +304,75 @@ function makeProvider(
   };
 }
 
+class InMemoryAuditRepo implements AuditLogRepository {
+  logs: AuditLog[] = [];
+
+  async create(log: Omit<AuditLog, "id">): Promise<AuditLog> {
+    const created: AuditLog = {
+      ...log,
+      id: `audit-${this.logs.length + 1}`,
+    };
+    this.logs.unshift(created);
+    return created;
+  }
+
+  async findByWorkspace(
+    workspaceId: string,
+    options?: {
+      actorId?: string;
+      actorType?: string;
+      action?: string;
+      resourceType?: string;
+      resourceId?: string;
+      platform?: string;
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<AuditLog[]> {
+    let result = this.logs.filter((log) => log.workspaceId === workspaceId);
+    if (options?.actorId) result = result.filter((log) => log.actorId === options.actorId);
+    if (options?.actorType) result = result.filter((log) => log.actorType === options.actorType);
+    if (options?.action) result = result.filter((log) => log.action === options.action);
+    if (options?.resourceType) {
+      result = result.filter((log) => log.resourceType === options.resourceType);
+    }
+    if (options?.resourceId) result = result.filter((log) => log.resourceId === options.resourceId);
+    if (options?.platform) result = result.filter((log) => log.platform === options.platform);
+    if (options?.startDate) result = result.filter((log) => log.createdAt >= options.startDate!);
+    if (options?.endDate) result = result.filter((log) => log.createdAt <= options.endDate!);
+    if (options?.offset) result = result.slice(options.offset);
+    if (options?.limit) result = result.slice(0, options.limit);
+    return result.map((log) => ({ ...log }));
+  }
+
+  async countByWorkspace(
+    workspaceId: string,
+    options?: Omit<
+      Parameters<AuditLogRepository["findByWorkspace"]>[1],
+      "limit" | "offset"
+    >,
+  ): Promise<number> {
+    const logs = await this.findByWorkspace(workspaceId, options);
+    return logs.length;
+  }
+}
+
 function makeDeps(
   accounts: SocialAccount[] = [makeAccount()],
   posts: Post[] = [],
   jobs: ScheduledJob[] = [],
   providerOpts: { publishSuccess?: boolean; publishError?: string; publishThrows?: boolean } = {},
   now: () => Date = () => new Date("2026-04-10T00:00:00Z"),
-): ScheduleUsecaseDeps {
+): ScheduleUsecaseDeps & { auditRepo: InMemoryAuditRepo } {
   const providers = new Map<Platform, SocialProvider>();
   providers.set("x", makeProvider(providerOpts));
 
   const postRepo = makePostRepo(posts);
   const accountRepo = makeAccountRepo(accounts);
   const scheduledJobRepo = makeJobRepo(jobs);
+  const auditRepo = new InMemoryAuditRepo();
 
   const postUsecaseDeps: PostUsecaseDeps = {
     postRepo,
@@ -314,6 +384,7 @@ function makeDeps(
   return {
     scheduledJobRepo,
     postRepo,
+    auditRepo,
     postUsecaseDeps,
     now,
   };
@@ -413,6 +484,24 @@ describe("updateSchedule", () => {
     await expect(
       updateSchedule(deps, "ws-1", job.id, new Date("2026-04-10T15:00:00Z")),
     ).rejects.toThrow(ValidationError);
+  });
+
+  it("allows reschedule from retrying and resets it to pending", async () => {
+    const post = makePost();
+    const deps = makeDeps(undefined, [post]);
+    const job = await schedulePost(deps, {
+      workspaceId: "ws-1",
+      postId: post.id,
+      scheduledAt: new Date("2026-04-10T12:00:00Z"),
+    });
+    await deps.scheduledJobRepo.update(job.id, {
+      status: "retrying",
+      nextRetryAt: new Date("2026-04-10T12:01:00Z"),
+    });
+
+    const updated = await updateSchedule(deps, "ws-1", job.id, new Date("2026-04-10T15:00:00Z"));
+    expect(updated.status).toBe("pending");
+    expect(updated.nextRetryAt).toBeNull();
   });
 });
 
@@ -602,6 +691,38 @@ describe("executeJob", () => {
     expect(result).toBeNull();
   });
 
+  it("recovers a stale locked job and completes it", async () => {
+    const now = new Date("2026-04-10T12:00:00Z");
+    const post = makePost({ status: "scheduled" });
+    const deps = makeDeps(
+      undefined,
+      [post],
+      [
+        {
+          id: "job-1",
+          workspaceId: "ws-1",
+          postId: post.id,
+          scheduledAt: new Date("2026-04-10T11:00:00Z"),
+          status: "locked",
+          lockedAt: new Date(now.getTime() - LOCK_TIMEOUT_MS - 60_000),
+          startedAt: new Date("2026-04-10T11:50:00Z"),
+          completedAt: null,
+          attemptCount: 1,
+          maxAttempts: 3,
+          lastError: null,
+          nextRetryAt: null,
+          createdAt: new Date("2026-04-10T10:00:00Z"),
+        },
+      ],
+      {},
+      () => now,
+    );
+
+    const result = await executeJob(deps, "job-1");
+    expect(result).not.toBeNull();
+    expect(result!.job.status).toBe("succeeded");
+  });
+
   it("increments attemptCount on each retry invocation", async () => {
     const post = makePost();
     const deps = makeDeps(undefined, [post], [], { publishThrows: true });
@@ -625,6 +746,70 @@ describe("executeJob", () => {
     const r3 = await executeJob(deps, job.id);
     expect(r3!.job.attemptCount).toBe(3);
     expect(r3!.job.status).toBe("failed");
+  });
+
+  it("stops immediately for non-retryable validation errors", async () => {
+    const post = makePost();
+    const deps = makeDeps(undefined, [post]);
+    const job = await schedulePost(deps, {
+      workspaceId: "ws-1",
+      postId: post.id,
+      scheduledAt: new Date("2026-04-10T12:00:00Z"),
+    });
+
+    await deps.postRepo.update(post.id, { status: "published" });
+
+    const result = await executeJob(deps, job.id);
+    expect(result).not.toBeNull();
+    expect(result!.job.status).toBe("failed");
+    expect(result!.willRetry).toBe(false);
+
+    expect(deps.auditRepo.logs[0]?.action).toBe("schedule.execution.failed");
+    expect(
+      (deps.auditRepo.logs[0]?.resultSummary as { retryRule?: string }).retryRule,
+    ).toBe("non_retryable");
+  });
+
+  it("resets failed posts back to draft before retrying a transient failure", async () => {
+    const post = makePost();
+    const deps = makeDeps(undefined, [post], [], { publishThrows: true });
+    const job = await schedulePost(deps, {
+      workspaceId: "ws-1",
+      postId: post.id,
+      scheduledAt: new Date("2026-04-10T12:00:00Z"),
+    });
+
+    const first = await executeJob(deps, job.id);
+    expect(first!.job.status).toBe("retrying");
+
+    const provider = deps.postUsecaseDeps.providers.get("x");
+    if (!provider) throw new Error("provider not found");
+    provider.publishPost = async () => ({
+      success: true,
+      platformPostId: "ext-post-2",
+      publishedAt: new Date("2026-04-10T00:02:00Z"),
+    });
+
+    const second = await executeJob(deps, job.id);
+    expect(second!.job.status).toBe("succeeded");
+    expect(second!.post?.status).toBe("published");
+  });
+
+  it("builds operational view from recorded execution logs", async () => {
+    const post = makePost();
+    const deps = makeDeps(undefined, [post], [], { publishSuccess: false, publishError: "boom" });
+    const job = await schedulePost(deps, {
+      workspaceId: "ws-1",
+      postId: post.id,
+      scheduledAt: new Date("2026-04-10T12:00:00Z"),
+    });
+
+    await executeJob(deps, job.id);
+
+    const detail = await getScheduleOperationalView(deps, "ws-1", job.id);
+    expect(detail.executionLogs.length).toBe(1);
+    expect(detail.latestExecution?.status).toBe("retrying");
+    expect(detail.notificationTarget.label).toContain("投稿作成者");
   });
 });
 
@@ -725,5 +910,41 @@ describe("findExecutableJobs", () => {
 
     const jobs = await findExecutableJobs(deps, 10);
     expect(jobs.length).toBe(0);
+  });
+});
+
+describe("dispatchDueJobs", () => {
+  it("returns execution summary for due jobs", async () => {
+    const now = new Date("2026-04-10T12:00:00Z");
+    const post = makePost({ status: "scheduled" });
+    const deps = makeDeps(
+      undefined,
+      [post],
+      [
+        {
+          id: "job-1",
+          workspaceId: "ws-1",
+          postId: post.id,
+          scheduledAt: new Date("2026-04-10T11:30:00Z"),
+          status: "pending",
+          lockedAt: null,
+          startedAt: null,
+          completedAt: null,
+          attemptCount: 0,
+          maxAttempts: 3,
+          lastError: null,
+          nextRetryAt: null,
+          createdAt: new Date("2026-04-10T10:00:00Z"),
+        },
+      ],
+      {},
+      () => now,
+    );
+
+    const result = await dispatchDueJobs(deps, { limit: 10 });
+    expect(result.scanned).toBe(1);
+    expect(result.processed).toBe(1);
+    expect(result.succeeded).toBe(1);
+    expect(result.jobs[0].afterStatus).toBe("succeeded");
   });
 });

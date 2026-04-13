@@ -133,8 +133,10 @@ export {
   cancelSchedule,
   listSchedules,
   getSchedule,
+  getScheduleOperationalView,
   executeJob,
   findExecutableJobs,
+  dispatchDueJobs,
   RETRY_BACKOFF_SECONDS,
   LOCK_TIMEOUT_MS,
   POLL_BATCH_SIZE,
@@ -144,6 +146,11 @@ export type {
   SchedulePostInput,
   ListSchedulesFilters,
   ExecuteJobResult,
+  DispatchDueJobsItem,
+  DispatchDueJobsResult,
+  ScheduleNotificationTarget,
+  ScheduleExecutionLog,
+  ScheduleOperationalView,
 } from "./usecases/schedule.js";
 
 export {

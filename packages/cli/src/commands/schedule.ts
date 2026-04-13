@@ -16,6 +16,7 @@ import type {
   ApiResponse,
   CreateScheduleInput,
   ListSchedulesParams,
+  RunDueSchedulesResult,
   ScheduledJob,
   UpdateScheduleInput,
 } from "@sns-agent/sdk";
@@ -30,6 +31,67 @@ const LIST_COLUMNS: Array<[string, string]> = [
   ["ATTEMPTS", "attemptCount"],
   ["NEXT RETRY", "nextRetryAt"],
 ];
+
+const EXECUTION_LOG_COLUMNS: Array<[string, string]> = [
+  ["AT", "createdAt"],
+  ["STATUS", "status"],
+  ["RETRY", "retryDecision"],
+  ["ATTEMPT", "attemptLabel"],
+  ["MESSAGE", "message"],
+  ["NEXT RETRY", "nextRetryAt"],
+  ["CONFIRM", "confirmTarget"],
+];
+
+interface ScheduleNotificationTargetResponse {
+  type: "post_creator" | "workspace_admin";
+  actorId: string | null;
+  label: string;
+  reason: string;
+}
+
+interface ScheduleExecutionLogResponse {
+  id: string;
+  action: string;
+  status: "succeeded" | "retrying" | "failed";
+  createdAt: string;
+  actorId: string;
+  actorType: "user" | "agent" | "system";
+  message: string;
+  error: string | null;
+  willRetry: boolean;
+  retryable: boolean | null;
+  retryRule: "retryable" | "non_retryable" | "exhausted" | "not_applicable";
+  classificationReason: string | null;
+  attemptCount: number | null;
+  maxAttempts: number | null;
+  nextRetryAt: string | null;
+  notificationTarget: ScheduleNotificationTargetResponse | null;
+}
+
+interface ScheduleOperationalDetailResponse {
+  post: {
+    id: string;
+    status: string;
+    platform: string;
+    socialAccountId: string;
+    contentText: string | null;
+    createdBy: string | null;
+  } | null;
+  retryPolicy: {
+    maxAttempts: number;
+    backoffSeconds: number[];
+    retryableRule: string;
+    nonRetryableRule: string;
+  };
+  notificationTarget: ScheduleNotificationTargetResponse;
+  latestExecution: ScheduleExecutionLogResponse | null;
+  executionLogs: ScheduleExecutionLogResponse[];
+  recommendedAction: string;
+}
+
+interface ScheduleDetailResponse extends ApiResponse<ScheduledJob> {
+  detail?: ScheduleOperationalDetailResponse;
+}
 
 /** 親コマンドからグローバルオプションを拾う */
 function getGlobalOpts(cmd: Command): GlobalOptions {
@@ -62,6 +124,34 @@ function validateIsoDate(value: string, name: string): string {
     );
   }
   return value;
+}
+
+async function fetchScheduleDetail(
+  apiGet: <T>(path: string) => Promise<T>,
+  id: string,
+): Promise<ScheduleDetailResponse> {
+  return apiGet<ScheduleDetailResponse>(`/api/schedules/${id}`);
+}
+
+function toExecutionLogRows(detail: ScheduleOperationalDetailResponse | undefined) {
+  return (detail?.executionLogs ?? []).map((log) => ({
+    createdAt: log.createdAt,
+    status: log.status,
+    retryDecision: log.willRetry
+      ? "auto retry"
+      : log.retryRule === "non_retryable"
+        ? "stop"
+        : log.retryRule === "exhausted"
+          ? "max reached"
+          : "-",
+    attemptLabel:
+      log.attemptCount !== null && log.maxAttempts !== null
+        ? `${log.attemptCount}/${log.maxAttempts}`
+        : "-",
+    message: log.error ? `${log.message} (${log.error})` : log.message,
+    nextRetryAt: log.nextRetryAt ?? "-",
+    confirmTarget: log.notificationTarget?.label ?? "-",
+  }));
 }
 
 export function registerScheduleCommand(program: Command): void {
@@ -112,13 +202,60 @@ export function registerScheduleCommand(program: Command): void {
   // ---- show ----
   schedule
     .command("show <id>")
-    .description("Show schedule details")
+    .description("Show schedule details and operational guidance")
     .action(async (id: string, _subOpts: Record<string, unknown>, cmd: Command) => {
       const globals = getGlobalOpts(cmd);
       await runCommand(globals, async (ctx) => {
-        // SDK に get メソッドが無いため汎用 client.get を使用
-        const res = await ctx.client.get<ApiResponse<ScheduledJob>>(`/api/schedules/${id}`);
+        const res = await fetchScheduleDetail(ctx.client.get.bind(ctx.client), id);
+        if (ctx.json) {
+          ctx.formatter.data(res, { title: `Schedule ${id}` });
+          return;
+        }
+
         ctx.formatter.data(res.data, { title: `Schedule ${id}` });
+
+        if (res.detail) {
+          ctx.formatter.data(
+            {
+              retryRule: res.detail.retryPolicy.retryableRule,
+              noRetryRule: res.detail.retryPolicy.nonRetryableRule,
+              confirmTarget: res.detail.notificationTarget.label,
+              confirmReason: res.detail.notificationTarget.reason,
+              recommendedAction: res.detail.recommendedAction,
+            },
+            { title: "Operations" },
+          );
+
+          const logRows = toExecutionLogRows(res.detail);
+          ctx.formatter.data(logRows, {
+            title: "Execution logs",
+            columns: EXECUTION_LOG_COLUMNS,
+            emptyMessage: "No execution logs recorded yet.",
+          });
+        }
+      });
+    });
+
+  // ---- logs ----
+  schedule
+    .command("logs <id>")
+    .description("Show execution logs for a scheduled job")
+    .action(async (id: string, _subOpts: Record<string, unknown>, cmd: Command) => {
+      const globals = getGlobalOpts(cmd);
+      await runCommand(globals, async (ctx) => {
+        const res = await fetchScheduleDetail(ctx.client.get.bind(ctx.client), id);
+        const logs = res.detail?.executionLogs ?? [];
+
+        if (ctx.json) {
+          ctx.formatter.data(logs, { title: `Schedule logs ${id}` });
+          return;
+        }
+
+        ctx.formatter.data(toExecutionLogRows(res.detail), {
+          title: `Schedule logs ${id}`,
+          columns: EXECUTION_LOG_COLUMNS,
+          emptyMessage: "No execution logs recorded yet.",
+        });
       });
     });
 
@@ -146,6 +283,32 @@ export function registerScheduleCommand(program: Command): void {
         const input: UpdateScheduleInput = { scheduledAt };
         const res = await ctx.client.schedules.update(id, input);
         ctx.formatter.data(res.data, { title: `Updated schedule ${id}` });
+      });
+    });
+
+  // ---- run-due ----
+  schedule
+    .command("run-due")
+    .description("Run due scheduled jobs once (manual dispatcher tick)")
+    .option("--limit <n>", "Maximum number of due jobs to execute in this run")
+    .action(async (subOpts: { limit?: string }, cmd: Command) => {
+      const globals = getGlobalOpts(cmd);
+      await runCommand(globals, async (ctx) => {
+        const limit =
+          subOpts.limit !== undefined
+            ? Number.parseInt(requireStr(subOpts.limit, "limit"), 10)
+            : undefined;
+        if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
+          throw Object.assign(new Error("--limit must be a positive integer"), {
+            code: "VALID_LIMIT",
+          });
+        }
+
+        const res = await ctx.client.schedules.runDue(limit ? { limit } : undefined);
+        const data = res.data as RunDueSchedulesResult;
+        ctx.formatter.data(data, {
+          title: `Due jobs run complete (${data.processed}/${data.scanned})`,
+        });
       });
     });
 }
