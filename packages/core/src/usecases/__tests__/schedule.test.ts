@@ -22,6 +22,8 @@ import {
   executeJob,
   findExecutableJobs,
   RETRY_BACKOFF_SECONDS,
+  LOCK_TIMEOUT_MS,
+  dispatchDueJobs,
 } from "../schedule.js";
 import type { ScheduleUsecaseDeps } from "../schedule.js";
 import type { PostUsecaseDeps } from "../post.js";
@@ -216,11 +218,21 @@ function makeJobRepo(initial: ScheduledJob[] = []): ScheduledJobRepository & {
       store.set(id, u);
       return { ...u };
     },
-    lockJob: async (id) => {
+    lockJob: async (id, options) => {
       const j = store.get(id);
       if (!j) return null;
-      if (j.status !== "pending" && j.status !== "retrying") return null;
-      const locked = { ...j, status: "locked" as const, lockedAt: new Date() };
+      const now = options?.now ?? new Date();
+      const staleBefore =
+        options?.lockTimeoutMs !== undefined
+          ? new Date(now.getTime() - options.lockTimeoutMs)
+          : null;
+      const canRecoverLocked =
+        j.status === "locked" &&
+        j.lockedAt !== null &&
+        staleBefore !== null &&
+        j.lockedAt <= staleBefore;
+      if (j.status !== "pending" && j.status !== "retrying" && !canRecoverLocked) return null;
+      const locked = { ...j, status: "locked" as const, lockedAt: now };
       store.set(id, locked);
       return { ...locked };
     },
@@ -414,6 +426,24 @@ describe("updateSchedule", () => {
       updateSchedule(deps, "ws-1", job.id, new Date("2026-04-10T15:00:00Z")),
     ).rejects.toThrow(ValidationError);
   });
+
+  it("allows reschedule from retrying and resets it to pending", async () => {
+    const post = makePost();
+    const deps = makeDeps(undefined, [post]);
+    const job = await schedulePost(deps, {
+      workspaceId: "ws-1",
+      postId: post.id,
+      scheduledAt: new Date("2026-04-10T12:00:00Z"),
+    });
+    await deps.scheduledJobRepo.update(job.id, {
+      status: "retrying",
+      nextRetryAt: new Date("2026-04-10T12:01:00Z"),
+    });
+
+    const updated = await updateSchedule(deps, "ws-1", job.id, new Date("2026-04-10T15:00:00Z"));
+    expect(updated.status).toBe("pending");
+    expect(updated.nextRetryAt).toBeNull();
+  });
 });
 
 // ───────────────────────────────────────────
@@ -602,6 +632,38 @@ describe("executeJob", () => {
     expect(result).toBeNull();
   });
 
+  it("recovers a stale locked job and completes it", async () => {
+    const now = new Date("2026-04-10T12:00:00Z");
+    const post = makePost({ status: "scheduled" });
+    const deps = makeDeps(
+      undefined,
+      [post],
+      [
+        {
+          id: "job-1",
+          workspaceId: "ws-1",
+          postId: post.id,
+          scheduledAt: new Date("2026-04-10T11:00:00Z"),
+          status: "locked",
+          lockedAt: new Date(now.getTime() - LOCK_TIMEOUT_MS - 60_000),
+          startedAt: new Date("2026-04-10T11:50:00Z"),
+          completedAt: null,
+          attemptCount: 1,
+          maxAttempts: 3,
+          lastError: null,
+          nextRetryAt: null,
+          createdAt: new Date("2026-04-10T10:00:00Z"),
+        },
+      ],
+      {},
+      () => now,
+    );
+
+    const result = await executeJob(deps, "job-1");
+    expect(result).not.toBeNull();
+    expect(result!.job.status).toBe("succeeded");
+  });
+
   it("increments attemptCount on each retry invocation", async () => {
     const post = makePost();
     const deps = makeDeps(undefined, [post], [], { publishThrows: true });
@@ -725,5 +787,41 @@ describe("findExecutableJobs", () => {
 
     const jobs = await findExecutableJobs(deps, 10);
     expect(jobs.length).toBe(0);
+  });
+});
+
+describe("dispatchDueJobs", () => {
+  it("returns execution summary for due jobs", async () => {
+    const now = new Date("2026-04-10T12:00:00Z");
+    const post = makePost({ status: "scheduled" });
+    const deps = makeDeps(
+      undefined,
+      [post],
+      [
+        {
+          id: "job-1",
+          workspaceId: "ws-1",
+          postId: post.id,
+          scheduledAt: new Date("2026-04-10T11:30:00Z"),
+          status: "pending",
+          lockedAt: null,
+          startedAt: null,
+          completedAt: null,
+          attemptCount: 0,
+          maxAttempts: 3,
+          lastError: null,
+          nextRetryAt: null,
+          createdAt: new Date("2026-04-10T10:00:00Z"),
+        },
+      ],
+      {},
+      () => now,
+    );
+
+    const result = await dispatchDueJobs(deps, { limit: 10 });
+    expect(result.scanned).toBe(1);
+    expect(result.processed).toBe(1);
+    expect(result.succeeded).toBe(1);
+    expect(result.jobs[0].afterStatus).toBe("succeeded");
   });
 });

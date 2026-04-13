@@ -63,6 +63,9 @@ pnpm dev
 
 フロントエンドから `/api/*` にアクセスした場合は、Next.js の rewrite により API サーバーへ転送されます。
 
+予約投稿を指定時刻に自動実行したい場合は、`.env` で `ENABLE_SCHEDULER=true` を設定してください。
+この設定を有効にすると、API プロセス内の scheduler が常時動作し、10 秒ごとに期限到来ジョブを拾って実行します。
+
 ## 4. 動作確認
 
 ブラウザでは最低限、以下の画面が開けることを確認してください。
@@ -85,7 +88,7 @@ curl http://localhost:3001/api/health
 レスポンス例:
 
 ```json
-{"status":"ok"}
+{ "status": "ok" }
 ```
 
 Web 側の rewrite 経由でも確認できます。
@@ -137,6 +140,7 @@ pnpm --filter @sns-agent/cli exec sns accounts connect x --api-key <YOUR_API_KEY
 ```bash
 pnpm --filter @sns-agent/cli exec sns post list --api-key <YOUR_API_KEY>
 pnpm --filter @sns-agent/cli exec sns post create --platform x --account <ACCOUNT_ID> --text "hello" --api-key <YOUR_API_KEY>
+pnpm --filter @sns-agent/cli exec sns post create --platform x --account <ACCOUNT_ID> --text "tomorrow" --at 2026-04-20T09:00:00+09:00 --api-key <YOUR_API_KEY>
 ```
 
 ### `schedule`

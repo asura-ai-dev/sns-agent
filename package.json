@@ -8,7 +8,9 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "scheduler:run-due": "pnpm --filter @sns-agent/api scheduler:run-due",
+    "scheduler:cron": "pnpm --filter @sns-agent/api scheduler:cron"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

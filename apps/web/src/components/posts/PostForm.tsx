@@ -13,7 +13,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   FloppyDisk,
   PaperPlaneTilt,
@@ -25,11 +25,12 @@ import {
   CaretDown,
 } from "@phosphor-icons/react";
 import { PlatformIcon, PLATFORM_VISUALS } from "@/components/settings/PlatformIcon";
+import { toDatetimeLocalValue } from "@/components/calendar/dateUtils";
 import { COMMON_ACTIONS, SECTION_KICKERS } from "@/lib/i18n/labels";
 import { CharacterCounter } from "./CharacterCounter";
 import { PostPreview } from "./PostPreview";
 import { PLATFORM_LIMITS, getCounterZone } from "./platformLimits";
-import { createPostApi, fetchConnectedAccounts, type ApiFailure } from "./api";
+import { createPostApi, createScheduleApi, fetchConnectedAccounts, type ApiFailure } from "./api";
 import type { MediaAttachment, Platform, PostSocialAccount } from "./types";
 
 // ───────────────────────────────────────────
@@ -80,12 +81,37 @@ function validate(
   return { canDraft, canPublish, errors, warnings };
 }
 
+function normalizeScheduledAtInput(value: string | null): string {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return toDatetimeLocalValue(parsed);
+}
+
+function getScheduleValidationMessage(value: string): string | null {
+  if (!value) return "予約日時を入力してください";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "予約日時の形式が正しくありません";
+  if (parsed.getTime() <= Date.now()) return "予約日時は現在より未来を指定してください";
+  return null;
+}
+
+function formatScheduledAtLabel(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${parsed.getFullYear()}/${pad(parsed.getMonth() + 1)}/${pad(parsed.getDate())} ${pad(
+    parsed.getHours(),
+  )}:${pad(parsed.getMinutes())}`;
+}
+
 // ───────────────────────────────────────────
 // PostForm
 // ───────────────────────────────────────────
 
 export function PostForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [accounts, setAccounts] = useState<PostSocialAccount[] | null>(null);
   const [accountsError, setAccountsError] = useState<string | null>(null);
@@ -94,10 +120,18 @@ export function PostForm() {
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [text, setText] = useState("");
   const [media, setMedia] = useState<MediaAttachment[]>([]);
-  const [submitting, setSubmitting] = useState<"draft" | "publish" | null>(null);
+  const [scheduledAt, setScheduledAt] = useState("");
+  const [submitting, setSubmitting] = useState<"draft" | "publish" | "schedule" | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [lastSuccess, setLastSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const preset = normalizeScheduledAtInput(searchParams.get("scheduledAt"));
+    if (preset) {
+      setScheduledAt((current) => current || preset);
+    }
+  }, [searchParams]);
 
   // ───────── Fetch accounts ─────────
   useEffect(() => {
@@ -132,6 +166,11 @@ export function PostForm() {
     () => validate(selectedAccount, text, media),
     [selectedAccount, text, media],
   );
+  const scheduleValidation = useMemo(
+    () => getScheduleValidationMessage(scheduledAt),
+    [scheduledAt],
+  );
+  const canSchedule = report.canPublish && scheduleValidation === null;
 
   // ───────── Media handling ─────────
   const handleFiles = useCallback((files: FileList | null) => {
@@ -163,12 +202,13 @@ export function PostForm() {
   }, []);
 
   // ───────── Submit ─────────
-  const submit = async (publishNow: boolean) => {
+  const submit = async (mode: "draft" | "publish" | "schedule") => {
     if (!selectedAccount) return;
-    if (publishNow && !report.canPublish) return;
-    if (!publishNow && !report.canDraft) return;
+    if (mode === "publish" && !report.canPublish) return;
+    if (mode === "draft" && !report.canDraft) return;
+    if (mode === "schedule" && !canSchedule) return;
 
-    setSubmitting(publishNow ? "publish" : "draft");
+    setSubmitting(mode);
     setSubmitError(null);
     setLastSuccess(null);
 
@@ -181,18 +221,31 @@ export function PostForm() {
         mimeType: m.mimeType ?? null,
         name: m.name ?? null,
       })),
-      publishNow,
+      publishNow: mode === "publish",
     });
-
-    setSubmitting(null);
 
     if (!res.ok) {
       setSubmitError((res as ApiFailure).error.message);
+      setSubmitting(null);
       return;
     }
 
-    setLastSuccess(publishNow ? "投稿を公開しました" : "下書きを保存しました");
-    // 成功後は一覧に戻る
+    if (mode === "schedule") {
+      const scheduledIso = new Date(scheduledAt).toISOString();
+      const scheduleRes = await createScheduleApi(res.value.id, scheduledIso);
+      if (!scheduleRes.ok) {
+        setSubmitError(`${scheduleRes.error.message}（投稿自体は下書きとして保存されています）`);
+        setSubmitting(null);
+        return;
+      }
+      setLastSuccess(`${formatScheduledAtLabel(scheduledAt)} に予約しました`);
+      setSubmitting(null);
+      setTimeout(() => router.push("/calendar"), 600);
+      return;
+    }
+
+    setSubmitting(null);
+    setLastSuccess(mode === "publish" ? "投稿を公開しました" : "下書きを保存しました");
     setTimeout(() => router.push("/posts"), 600);
   };
 
@@ -335,6 +388,48 @@ export function PostForm() {
           )}
         </div>
 
+        {/* Schedule */}
+        <div className="rounded-box border border-base-300 bg-base-100 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-base-content/50">
+                予約投稿
+              </p>
+              <p className="mt-1 text-sm text-base-content/70">
+                カレンダーから来た場合は日時が自動入力されます。ここで変えれば、その時刻で予約されます。
+              </p>
+            </div>
+            {scheduledAt ? (
+              <span className="rounded-field border border-primary/30 bg-primary/5 px-2 py-1 text-[0.65rem] font-medium text-primary">
+                {formatScheduledAtLabel(scheduledAt)}
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            <label
+              htmlFor="post-scheduled-at"
+              className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-base-content/50"
+            >
+              日時指定
+            </label>
+            <input
+              id="post-scheduled-at"
+              type="datetime-local"
+              value={scheduledAt}
+              onChange={(e) => setScheduledAt(e.target.value)}
+              className="w-full rounded-field border border-base-300 bg-base-100 px-3 py-2 text-sm text-base-content focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/15"
+            />
+            <p className="text-xs text-base-content/50">
+              空欄なら下書き保存か即時投稿、入力すると「予約投稿」ボタンが使えます。
+            </p>
+            {scheduleValidation ? (
+              <div className="rounded-field border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning-content">
+                {scheduleValidation}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
         {/* Validation */}
         <ValidationBlock report={report} />
 
@@ -346,14 +441,14 @@ export function PostForm() {
             ) : lastSuccess ? (
               <span className="text-primary">{lastSuccess}</span>
             ) : (
-              "下書き保存 or 即時投稿を選択してください"
+              "下書き保存・予約投稿・即時投稿から選べます"
             )}
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
               disabled={!report.canDraft || submitting !== null}
-              onClick={() => submit(false)}
+              onClick={() => submit("draft")}
               data-testid="post-submit-draft"
               className="inline-flex items-center gap-2 rounded-field border border-base-300 bg-base-100 px-4 py-2 text-sm font-medium text-base-content transition-colors hover:border-base-content/40 disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -362,8 +457,18 @@ export function PostForm() {
             </button>
             <button
               type="button"
+              disabled={!canSchedule || submitting !== null}
+              onClick={() => submit("schedule")}
+              data-testid="post-submit-schedule"
+              className="inline-flex items-center gap-2 rounded-field border border-primary/30 bg-primary/5 px-4 py-2 text-sm font-semibold text-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <FloppyDisk size={14} weight="bold" />
+              {submitting === "schedule" ? "予約中…" : "予約投稿"}
+            </button>
+            <button
+              type="button"
               disabled={!report.canPublish || submitting !== null}
-              onClick={() => submit(true)}
+              onClick={() => submit("publish")}
               data-testid="post-submit-publish"
               className="inline-flex items-center gap-2 rounded-field bg-primary px-4 py-2 text-sm font-semibold text-primary-content shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -375,7 +480,10 @@ export function PostForm() {
       </section>
 
       {/* ────────── Preview ────────── */}
-      <aside aria-label={SECTION_KICKERS.compose} className="space-y-3 lg:sticky lg:top-4 lg:self-start">
+      <aside
+        aria-label={SECTION_KICKERS.compose}
+        className="space-y-3 lg:sticky lg:top-4 lg:self-start"
+      >
         <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-base-content/50">
           Preview
         </p>
@@ -415,7 +523,8 @@ function AccountSelect({
           desk wire offline · using local fallback
         </p>
         <p className="mt-1 text-xs text-base-content/70">
-          アカウント一覧を取得できませんでした <span className="font-mono text-[10px] text-base-content/50">· {error}</span>
+          アカウント一覧を取得できませんでした{" "}
+          <span className="font-mono text-[10px] text-base-content/50">· {error}</span>
         </p>
       </div>
     );

@@ -146,6 +146,9 @@ describe("b. post draft→publish flow", () => {
 // c. 予約投稿フロー
 // ───────────────────────────────────────────
 describe("c. schedule flow", () => {
+  let scheduledPostId: string;
+  let scheduledJobId: string;
+
   it("creates a draft and schedules it", async () => {
     const draft = await req("POST", "/api/posts", seed.editorApiKey, {
       socialAccountId: seed.socialAccountId,
@@ -163,11 +166,40 @@ describe("c. schedule flow", () => {
     const job = sched.body.data as { id: string; status: string; postId: string };
     expect(job.status).toBe("pending");
     expect(job.postId).toBe(draftData.id);
+    scheduledPostId = draftData.id;
+    scheduledJobId = job.id;
 
     // GET /api/schedules/:id
     const got = await req("GET", `/api/schedules/${job.id}`, seed.editorApiKey);
     expect(got.status).toBe(200);
     expect((got.body.data as { id: string }).id).toBe(job.id);
+  });
+
+  it("POST /api/schedules/run-due executes due jobs manually", async () => {
+    const dueUnix = Math.floor((Date.now() - 60_000) / 1000);
+    ctx.sqlite
+      .prepare("UPDATE scheduled_jobs SET scheduled_at = ?, status = 'pending' WHERE id = ?")
+      .run(dueUnix, scheduledJobId);
+    ctx.sqlite.prepare("UPDATE posts SET status = 'scheduled' WHERE id = ?").run(scheduledPostId);
+
+    const run = await req("POST", "/api/schedules/run-due", seed.editorApiKey, {
+      limit: 5,
+    });
+    expect(run.status).toBe(200);
+    const data = run.body.data as {
+      processed: number;
+      succeeded: number;
+      jobs: Array<{ id: string; afterStatus: string }>;
+    };
+    expect(data.processed).toBeGreaterThanOrEqual(1);
+    expect(data.succeeded).toBeGreaterThanOrEqual(1);
+    expect(
+      data.jobs.some((job) => job.id === scheduledJobId && job.afterStatus === "succeeded"),
+    ).toBe(true);
+
+    const got = await req("GET", `/api/schedules/${scheduledJobId}`, seed.editorApiKey);
+    expect(got.status).toBe(200);
+    expect((got.body.data as { status: string }).status).toBe("succeeded");
   });
 });
 

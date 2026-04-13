@@ -248,6 +248,38 @@ beforeAll(async () => {
       },
     },
     {
+      method: "POST",
+      path: "/api/schedules/run-due",
+      respond: (_req, body) => {
+        const parsed = body ? (JSON.parse(body) as Record<string, unknown>) : {};
+        return {
+          status: 200,
+          body: {
+            data: {
+              processedAt: new Date().toISOString(),
+              scanned: 1,
+              processed: 1,
+              skipped: 0,
+              succeeded: 1,
+              retrying: 0,
+              failed: 0,
+              jobs: [
+                {
+                  id: "job-1",
+                  postId: "post-1",
+                  beforeStatus: "pending",
+                  afterStatus: "succeeded",
+                  willRetry: false,
+                  recoveredStaleLock: false,
+                },
+              ],
+              requestedLimit: parsed.limit ?? null,
+            },
+          },
+        };
+      },
+    },
+    {
       method: "GET",
       path: /^\/api\/usage(\?|$)/,
       respond: () => ({
@@ -331,6 +363,33 @@ describe("CLI integration", () => {
     expect(routeHits.some((h) => h.method === "POST" && h.url.startsWith("/api/posts"))).toBe(true);
   });
 
+  it("b-2. `sns post create --at` creates a draft and schedules it", async () => {
+    const futureAt = new Date(Date.now() + 86400000).toISOString();
+    const res = await runCli([
+      "--api-url",
+      `http://127.0.0.1:${mockPort}`,
+      "--api-key",
+      "test",
+      "--json",
+      "post",
+      "create",
+      "--platform",
+      "x",
+      "--account",
+      "0123456789abcdef0123456789abcdef",
+      "--text",
+      "Scheduled from CLI test",
+      "--at",
+      futureAt,
+    ]);
+
+    expect(res.exitCode).toBe(0);
+    expect(routeHits.some((h) => h.method === "POST" && h.url.startsWith("/api/posts"))).toBe(true);
+    expect(routeHits.some((h) => h.method === "POST" && h.url.startsWith("/api/schedules"))).toBe(
+      true,
+    );
+  });
+
   it("c. `sns schedule create` creates a schedule", async () => {
     const futureAt = new Date(Date.now() + 86400000).toISOString();
     const res = await runCli([
@@ -368,7 +427,25 @@ describe("CLI integration", () => {
     expect(routeHits.some((h) => h.method === "GET" && h.url.startsWith("/api/usage"))).toBe(true);
   });
 
-  it("e. unknown command exits with code 1", async () => {
+  it("e. `sns schedule run-due --limit 2` triggers manual dispatcher run", async () => {
+    const res = await runCli([
+      "--api-url",
+      `http://127.0.0.1:${mockPort}`,
+      "--api-key",
+      "test",
+      "--json",
+      "schedule",
+      "run-due",
+      "--limit",
+      "2",
+    ]);
+    expect(res.exitCode).toBe(0);
+    expect(
+      routeHits.some((h) => h.method === "POST" && h.url.startsWith("/api/schedules/run-due")),
+    ).toBe(true);
+  });
+
+  it("f. unknown command exits with code 1", async () => {
     const res = await runCli([
       "--api-url",
       `http://127.0.0.1:${mockPort}`,

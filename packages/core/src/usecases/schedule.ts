@@ -60,6 +60,7 @@ export interface ListSchedulesFilters {
   postId?: string;
   from?: Date;
   to?: Date;
+  limit?: number;
 }
 
 export interface ExecuteJobResult {
@@ -70,6 +71,27 @@ export interface ExecuteJobResult {
   error?: string;
   /** true なら次回 polling で retry 対象になる */
   willRetry: boolean;
+}
+
+export interface DispatchDueJobsItem {
+  id: string;
+  postId: string;
+  beforeStatus: ScheduledJob["status"];
+  afterStatus: ScheduledJob["status"] | "skipped";
+  willRetry: boolean;
+  recoveredStaleLock: boolean;
+  error?: string;
+}
+
+export interface DispatchDueJobsResult {
+  processedAt: Date;
+  scanned: number;
+  processed: number;
+  skipped: number;
+  succeeded: number;
+  retrying: number;
+  failed: number;
+  jobs: DispatchDueJobsItem[];
 }
 
 // ───────────────────────────────────────────
@@ -175,13 +197,18 @@ export async function updateSchedule(
   }
 
   const job = await loadOwnedJob(deps.scheduledJobRepo, workspaceId, jobId);
-  if (job.status !== "pending") {
+  if (job.status !== "pending" && job.status !== "retrying") {
     throw new ValidationError(
-      `Only pending jobs can be rescheduled (current status: ${job.status})`,
+      `Only pending or retrying jobs can be rescheduled (current status: ${job.status})`,
     );
   }
 
-  return deps.scheduledJobRepo.update(jobId, { scheduledAt });
+  return deps.scheduledJobRepo.update(jobId, {
+    scheduledAt,
+    status: "pending",
+    nextRetryAt: null,
+    lockedAt: null,
+  });
 }
 
 // ───────────────────────────────────────────
@@ -245,7 +272,7 @@ export async function listSchedules(
   const repo = deps.scheduledJobRepo as ScheduledJobRepository & {
     findByWorkspace?: (
       wsId: string,
-      opts?: { status?: ScheduledJob["status"]; postId?: string },
+      opts?: { status?: ScheduledJob["status"]; postId?: string; limit?: number },
     ) => Promise<ScheduledJob[]>;
   };
 
@@ -254,6 +281,7 @@ export async function listSchedules(
     jobs = await repo.findByWorkspace(workspaceId, {
       status: filters.status,
       postId: filters.postId,
+      limit: filters.limit,
     });
   } else {
     // フォールバック: findPendingJobs + filter
@@ -300,7 +328,10 @@ export async function executeJob(
   const now = nowFn(deps);
 
   // 1. atomic lock
-  const locked = await deps.scheduledJobRepo.lockJob(jobId);
+  const locked = await deps.scheduledJobRepo.lockJob(jobId, {
+    now,
+    lockTimeoutMs: LOCK_TIMEOUT_MS,
+  });
   if (!locked) {
     return null;
   }
@@ -365,6 +396,7 @@ export async function executeJob(
       lastError: errorMessage,
       completedAt: nowFn(deps),
       lockedAt: null,
+      nextRetryAt: null,
     });
 
     // Post も failed に
@@ -410,6 +442,76 @@ export async function findExecutableJobs(
 
   // フォールバック: pending のみ
   return deps.scheduledJobRepo.findPendingJobs(limit);
+}
+
+/**
+ * 期限到来ジョブを 1 バッチ実行する。
+ *
+ * アーキテクチャ上の役割:
+ * - cron entrypoint
+ * - API 手動実行
+ * - 常駐 worker の 1 tick
+ *
+ * のすべてがこの関数を共有することで、運用経路ごとの差をなくす。
+ */
+export async function dispatchDueJobs(
+  deps: ScheduleUsecaseDeps,
+  options: { limit?: number } = {},
+): Promise<DispatchDueJobsResult> {
+  const processedAt = nowFn(deps);
+  const candidates = await findExecutableJobs(deps, options.limit ?? POLL_BATCH_SIZE);
+
+  const result: DispatchDueJobsResult = {
+    processedAt,
+    scanned: candidates.length,
+    processed: 0,
+    skipped: 0,
+    succeeded: 0,
+    retrying: 0,
+    failed: 0,
+    jobs: [],
+  };
+
+  const staleBefore = new Date(processedAt.getTime() - LOCK_TIMEOUT_MS);
+
+  for (const candidate of candidates) {
+    const execution = await executeJob(deps, candidate.id);
+    if (!execution) {
+      result.skipped += 1;
+      result.jobs.push({
+        id: candidate.id,
+        postId: candidate.postId,
+        beforeStatus: candidate.status,
+        afterStatus: "skipped",
+        willRetry: false,
+        recoveredStaleLock:
+          candidate.status === "locked" &&
+          candidate.lockedAt !== null &&
+          candidate.lockedAt <= staleBefore,
+      });
+      continue;
+    }
+
+    result.processed += 1;
+    if (execution.job.status === "succeeded") result.succeeded += 1;
+    if (execution.job.status === "retrying") result.retrying += 1;
+    if (execution.job.status === "failed") result.failed += 1;
+
+    result.jobs.push({
+      id: execution.job.id,
+      postId: execution.job.postId,
+      beforeStatus: candidate.status,
+      afterStatus: execution.job.status,
+      willRetry: execution.willRetry,
+      recoveredStaleLock:
+        candidate.status === "locked" &&
+        candidate.lockedAt !== null &&
+        candidate.lockedAt <= staleBefore,
+      error: execution.error,
+    });
+  }
+
+  return result;
 }
 
 // Platform 型の再エクスポート抑制（未使用警告回避用）

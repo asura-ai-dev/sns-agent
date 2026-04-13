@@ -16,6 +16,7 @@ import type {
   ApiResponse,
   CreateScheduleInput,
   ListSchedulesParams,
+  RunDueSchedulesResult,
   ScheduledJob,
   UpdateScheduleInput,
 } from "@sns-agent/sdk";
@@ -146,6 +147,32 @@ export function registerScheduleCommand(program: Command): void {
         const input: UpdateScheduleInput = { scheduledAt };
         const res = await ctx.client.schedules.update(id, input);
         ctx.formatter.data(res.data, { title: `Updated schedule ${id}` });
+      });
+    });
+
+  // ---- run-due ----
+  schedule
+    .command("run-due")
+    .description("Run due scheduled jobs once (manual dispatcher tick)")
+    .option("--limit <n>", "Maximum number of due jobs to execute in this run")
+    .action(async (subOpts: { limit?: string }, cmd: Command) => {
+      const globals = getGlobalOpts(cmd);
+      await runCommand(globals, async (ctx) => {
+        const limit =
+          subOpts.limit !== undefined
+            ? Number.parseInt(requireStr(subOpts.limit, "limit"), 10)
+            : undefined;
+        if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
+          throw Object.assign(new Error("--limit must be a positive integer"), {
+            code: "VALID_LIMIT",
+          });
+        }
+
+        const res = await ctx.client.schedules.runDue(limit ? { limit } : undefined);
+        const data = res.data as RunDueSchedulesResult;
+        ctx.formatter.data(data, {
+          title: `Due jobs run complete (${data.processed}/${data.scanned})`,
+        });
       });
     });
 }

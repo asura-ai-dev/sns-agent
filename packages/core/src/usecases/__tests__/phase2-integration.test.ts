@@ -203,11 +203,21 @@ function makeJobRepo(): ScheduledJobRepository {
       store.set(id, u);
       return { ...u };
     },
-    lockJob: async (id) => {
+    lockJob: async (id, options) => {
       const j = store.get(id);
       if (!j) return null;
-      if (j.status !== "pending" && j.status !== "retrying") return null;
-      const locked = { ...j, status: "locked" as const, lockedAt: new Date() };
+      const now = options?.now ?? new Date();
+      const staleBefore =
+        options?.lockTimeoutMs !== undefined
+          ? new Date(now.getTime() - options.lockTimeoutMs)
+          : null;
+      const canRecoverLocked =
+        j.status === "locked" &&
+        j.lockedAt !== null &&
+        staleBefore !== null &&
+        j.lockedAt <= staleBefore;
+      if (j.status !== "pending" && j.status !== "retrying" && !canRecoverLocked) return null;
+      const locked = { ...j, status: "locked" as const, lockedAt: now };
       store.set(id, locked);
       return { ...locked };
     },

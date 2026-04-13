@@ -6,6 +6,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "node --watch --env-file=../../.env --import tsx src/index.ts",
+    "scheduler:run-due": "node --env-file=../../.env --import tsx src/run-scheduler-once.ts",
+    "scheduler:cron": "node --env-file=../../.env --import tsx src/run-scheduler-once.ts",
     "lint": "echo \"Lint via root\"",
     "test": "vitest run"
   },

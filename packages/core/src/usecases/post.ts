@@ -122,8 +122,12 @@ export interface PostListItem extends Post {
   } | null;
   /** 予約ジョブが存在する場合のスケジュール情報 */
   schedule: {
+    id: string;
     scheduledAt: Date;
     status: ScheduledJob["status"];
+    nextRetryAt: Date | null;
+    lastError: string | null;
+    lastExecutedAt: Date | null;
   } | null;
 }
 
@@ -693,15 +697,29 @@ export async function listPosts(
   );
 
   // 4. scheduled_jobs の一括取得 (scheduled_at 降順で返る想定)
-  const scheduleByPost = new Map<string, { scheduledAt: Date; status: ScheduledJob["status"] }>();
+  const scheduleByPost = new Map<
+    string,
+    {
+      id: string;
+      scheduledAt: Date;
+      status: ScheduledJob["status"];
+      nextRetryAt: Date | null;
+      lastError: string | null;
+      lastExecutedAt: Date | null;
+    }
+  >();
   if (deps.scheduledJobRepo && postIds.length > 0) {
     const jobs = await deps.scheduledJobRepo.findByPostIds(postIds);
     // scheduled_at 降順の先頭 = 最新ジョブを採用する
     for (const job of jobs) {
       if (!scheduleByPost.has(job.postId)) {
         scheduleByPost.set(job.postId, {
+          id: job.id,
           scheduledAt: job.scheduledAt,
           status: job.status,
+          nextRetryAt: job.nextRetryAt,
+          lastError: job.lastError,
+          lastExecutedAt: job.completedAt ?? job.startedAt ?? null,
         });
       }
     }

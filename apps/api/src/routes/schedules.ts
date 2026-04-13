@@ -5,11 +5,12 @@
  * design.md セクション 4.2 に準拠。
  *
  * RBAC:
- * - GET   /api/schedules      → post:read
- * - POST  /api/schedules      → post:publish
- * - GET   /api/schedules/:id  → post:read
- * - PATCH /api/schedules/:id  → post:publish
- * - DELETE /api/schedules/:id → post:publish
+ * - GET   /api/schedules          → schedule:read
+ * - POST  /api/schedules          → schedule:create
+ * - POST  /api/schedules/run-due  → schedule:update
+ * - GET   /api/schedules/:id      → schedule:read
+ * - PATCH /api/schedules/:id      → schedule:update
+ * - DELETE /api/schedules/:id     → schedule:delete
  */
 import { Hono } from "hono";
 import { JOB_STATUSES } from "@sns-agent/config";
@@ -20,9 +21,10 @@ import {
   cancelSchedule,
   listSchedules,
   getSchedule,
+  dispatchDueJobs,
   ValidationError,
 } from "@sns-agent/core";
-import type { ScheduledJob, ScheduleUsecaseDeps } from "@sns-agent/core";
+import type { DispatchDueJobsResult, ScheduledJob, ScheduleUsecaseDeps } from "@sns-agent/core";
 import {
   DrizzleScheduledJobRepository,
   DrizzlePostRepository,
@@ -86,10 +88,29 @@ function serializeJob(job: ScheduledJob): Record<string, unknown> {
   };
 }
 
+function serializeDispatchResult(result: DispatchDueJobsResult): Record<string, unknown> {
+  return {
+    processedAt: result.processedAt,
+    scanned: result.scanned,
+    processed: result.processed,
+    skipped: result.skipped,
+    succeeded: result.succeeded,
+    retrying: result.retrying,
+    failed: result.failed,
+    jobs: result.jobs,
+  };
+}
+
 function parseDateOrUndefined(value: string | undefined): Date | undefined {
   if (!value) return undefined;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
+function parseIntOrUndefined(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const n = Number.parseInt(value, 10);
+  return Number.isNaN(n) ? undefined : n;
 }
 
 function parseDateStrict(value: unknown, field: string): Date {
@@ -106,7 +127,7 @@ function parseDateStrict(value: unknown, field: string): Date {
 // ───────────────────────────────────────────
 // GET /api/schedules - 一覧
 // ───────────────────────────────────────────
-schedules.get("/", requirePermission("post:read"), async (c) => {
+schedules.get("/", requirePermission("schedule:read"), async (c) => {
   const actor = c.get("actor");
   const db = c.get("db");
   const deps = buildDeps(db);
@@ -115,6 +136,7 @@ schedules.get("/", requirePermission("post:read"), async (c) => {
   const postIdQ = c.req.query("postId");
   const fromQ = c.req.query("from");
   const toQ = c.req.query("to");
+  const limitQ = c.req.query("limit");
 
   if (statusQ && !JOB_STATUSES.includes(statusQ as JobStatus)) {
     throw new ValidationError(
@@ -127,6 +149,7 @@ schedules.get("/", requirePermission("post:read"), async (c) => {
     postId: postIdQ,
     from: parseDateOrUndefined(fromQ),
     to: parseDateOrUndefined(toQ),
+    limit: parseIntOrUndefined(limitQ),
   });
 
   return c.json({
@@ -138,7 +161,7 @@ schedules.get("/", requirePermission("post:read"), async (c) => {
 // ───────────────────────────────────────────
 // POST /api/schedules - 予約作成
 // ───────────────────────────────────────────
-schedules.post("/", requirePermission("post:publish"), async (c) => {
+schedules.post("/", requirePermission("schedule:create"), async (c) => {
   const actor = c.get("actor");
   const db = c.get("db");
   const deps = buildDeps(db);
@@ -165,9 +188,36 @@ schedules.post("/", requirePermission("post:publish"), async (c) => {
 });
 
 // ───────────────────────────────────────────
+// POST /api/schedules/run-due - 期限到来ジョブを即時実行
+// ───────────────────────────────────────────
+schedules.post("/run-due", requirePermission("schedule:update"), async (c) => {
+  const actor = c.get("actor");
+  const db = c.get("db");
+  const deps = buildDeps(db);
+
+  let body: { limit?: number } = {};
+  try {
+    body = await c.req.json<{ limit?: number }>();
+  } catch {
+    body = {};
+  }
+
+  const limit = body.limit ?? parseIntOrUndefined(c.req.query("limit"));
+  if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
+    throw new ValidationError("limit must be a positive integer");
+  }
+
+  const result = await dispatchDueJobs(deps, { limit });
+  return c.json({
+    data: serializeDispatchResult(result),
+    meta: { workspaceId: actor.workspaceId },
+  });
+});
+
+// ───────────────────────────────────────────
 // GET /api/schedules/:id - 詳細
 // ───────────────────────────────────────────
-schedules.get("/:id", requirePermission("post:read"), async (c) => {
+schedules.get("/:id", requirePermission("schedule:read"), async (c) => {
   const actor = c.get("actor");
   const db = c.get("db");
   const deps = buildDeps(db);
@@ -180,7 +230,7 @@ schedules.get("/:id", requirePermission("post:read"), async (c) => {
 // ───────────────────────────────────────────
 // PATCH /api/schedules/:id - 予約日時変更
 // ───────────────────────────────────────────
-schedules.patch("/:id", requirePermission("post:publish"), async (c) => {
+schedules.patch("/:id", requirePermission("schedule:update"), async (c) => {
   const actor = c.get("actor");
   const db = c.get("db");
   const deps = buildDeps(db);
@@ -196,7 +246,7 @@ schedules.patch("/:id", requirePermission("post:publish"), async (c) => {
 // ───────────────────────────────────────────
 // DELETE /api/schedules/:id - キャンセル
 // ───────────────────────────────────────────
-schedules.delete("/:id", requirePermission("post:publish"), async (c) => {
+schedules.delete("/:id", requirePermission("schedule:delete"), async (c) => {
   const actor = c.get("actor");
   const db = c.get("db");
   const deps = buildDeps(db);

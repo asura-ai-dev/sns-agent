@@ -18,6 +18,8 @@ import type {
   ListPostsParams,
   ListSchedulesParams,
   Post,
+  RunDueSchedulesInput,
+  RunDueSchedulesResult,
   ScheduledJob,
   SocialAccount,
   UpdateBudgetPolicyDto,
@@ -97,7 +99,8 @@ export interface SchedulesResource {
   list(params?: ListSchedulesParams): Promise<ApiResponse<ScheduledJob[]>>;
   create(input: CreateScheduleInput): Promise<ApiResponse<ScheduledJob>>;
   update(id: string, input: UpdateScheduleInput): Promise<ApiResponse<ScheduledJob>>;
-  cancel(id: string): Promise<ApiResponse<{ success: boolean }>>;
+  cancel(id: string): Promise<ApiResponse<ScheduledJob>>;
+  runDue(input?: RunDueSchedulesInput): Promise<ApiResponse<RunDueSchedulesResult>>;
 }
 
 export interface UsageResource {
@@ -292,7 +295,9 @@ export class SnsAgentClient {
         ),
       create: (input) => this.post<ApiResponse<ScheduledJob>>("/api/schedules", input),
       update: (id, input) => this.patch<ApiResponse<ScheduledJob>>(`/api/schedules/${id}`, input),
-      cancel: (id) => this.delete<ApiResponse<{ success: boolean }>>(`/api/schedules/${id}`),
+      cancel: (id) => this.delete<ApiResponse<ScheduledJob>>(`/api/schedules/${id}`),
+      runDue: (input) =>
+        this.post<ApiResponse<RunDueSchedulesResult>>("/api/schedules/run-due", input ?? {}),
     };
   }
 

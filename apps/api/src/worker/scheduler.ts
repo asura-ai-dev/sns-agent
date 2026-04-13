@@ -11,7 +11,7 @@
  *
  * 起動は apps/api/src/index.ts で ENABLE_SCHEDULER=true の時のみ行う。
  */
-import { executeJob, findExecutableJobs, POLL_BATCH_SIZE } from "@sns-agent/core";
+import { dispatchDueJobs, POLL_BATCH_SIZE } from "@sns-agent/core";
 import type { ScheduleUsecaseDeps } from "@sns-agent/core";
 import {
   DrizzleScheduledJobRepository,
@@ -100,36 +100,48 @@ export function createSchedulerWorker(options: SchedulerWorkerOptions = {}): Sch
 
   const deps = buildScheduleDeps(options.db ?? getDb());
 
+  async function runBatch(): Promise<void> {
+    const result = await dispatchDueJobs(deps, { limit: batchSize });
+    if (result.scanned === 0) return;
+
+    logger.info(`processed ${result.processed}/${result.scanned} due job(s)`, {
+      succeeded: result.succeeded,
+      retrying: result.retrying,
+      failed: result.failed,
+      skipped: result.skipped,
+    });
+
+    for (const job of result.jobs) {
+      if (job.afterStatus === "skipped") {
+        logger.warn(`job ${job.id} skipped`, {
+          previousStatus: job.beforeStatus,
+          recoveredStaleLock: job.recoveredStaleLock,
+        });
+        continue;
+      }
+      if (job.afterStatus === "retrying") {
+        logger.warn(`job ${job.id} failed, will retry`, {
+          error: job.error,
+          recoveredStaleLock: job.recoveredStaleLock,
+        });
+        continue;
+      }
+      if (job.afterStatus === "failed") {
+        logger.error(`job ${job.id} permanently failed`, {
+          error: job.error,
+          recoveredStaleLock: job.recoveredStaleLock,
+        });
+        continue;
+      }
+      logger.info(`job ${job.id} succeeded`, {
+        recoveredStaleLock: job.recoveredStaleLock,
+      });
+    }
+  }
+
   async function runTick(): Promise<void> {
     try {
-      const jobs = await findExecutableJobs(deps, batchSize);
-      if (jobs.length === 0) return;
-
-      logger.info(`processing ${jobs.length} job(s)`);
-
-      for (const job of jobs) {
-        try {
-          const result = await executeJob(deps, job.id);
-          if (!result) {
-            // 他のワーカーが先に取った、または対象 status ではなかった
-            continue;
-          }
-          if (result.willRetry) {
-            logger.warn(`job ${job.id} failed, will retry`, {
-              error: result.error,
-              nextRetryAt: result.job.nextRetryAt,
-            });
-          } else if (result.job.status === "failed") {
-            logger.error(`job ${job.id} permanently failed`, { error: result.error });
-          } else if (result.job.status === "succeeded") {
-            logger.info(`job ${job.id} succeeded`);
-          }
-        } catch (err) {
-          logger.error(`executeJob threw for ${job.id}`, {
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
+      await runBatch();
     } catch (err) {
       logger.error("poll tick failed", {
         error: err instanceof Error ? err.message : String(err),
@@ -178,4 +190,32 @@ export function createSchedulerWorker(options: SchedulerWorkerOptions = {}): Sch
       return running;
     },
   };
+}
+
+export async function runSchedulerBatch(
+  options: SchedulerWorkerOptions = {},
+): Promise<Awaited<ReturnType<typeof dispatchDueJobs>>> {
+  const logger = options.logger ?? {
+    // eslint-disable-next-line no-console
+    info: (msg, meta) => console.log(`[scheduler] ${msg}`, meta ?? ""),
+    // eslint-disable-next-line no-console
+    warn: (msg, meta) => console.warn(`[scheduler] ${msg}`, meta ?? ""),
+    // eslint-disable-next-line no-console
+    error: (msg, meta) => console.error(`[scheduler] ${msg}`, meta ?? ""),
+  };
+
+  const deps = buildScheduleDeps(options.db ?? getDb());
+  const batchSize = options.batchSize ?? POLL_BATCH_SIZE;
+  const result = await dispatchDueJobs(deps, { limit: batchSize });
+
+  logger.info(`single run complete`, {
+    scanned: result.scanned,
+    processed: result.processed,
+    succeeded: result.succeeded,
+    retrying: result.retrying,
+    failed: result.failed,
+    skipped: result.skipped,
+  });
+
+  return result;
 }
