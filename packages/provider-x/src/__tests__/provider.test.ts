@@ -27,7 +27,7 @@ describe("XProvider", () => {
       textPost: true,
       imagePost: true,
       videoPost: true,
-      threadPost: false,
+      threadPost: true,
       directMessage: true,
       commentReply: true,
       broadcast: false,
@@ -127,7 +127,11 @@ describe("XProvider", () => {
   });
 
   it("implements validatePost / publishPost / deletePost", async () => {
-    const httpClient = buildClient([{ status: 201, body: { data: { id: "1" } } }, { status: 204 }]);
+    const httpClient = buildClient([
+      { status: 201, body: { data: { id: "1" } } },
+      { status: 204 },
+      { status: 201, body: { data: { id: "2" } } },
+    ]);
     const provider = new XProvider({ oauth: { clientId: "cid" }, httpClient });
 
     const v = await provider.validatePost({
@@ -141,14 +145,29 @@ describe("XProvider", () => {
       accountCredentials: JSON.stringify({ accessToken: "tok" }),
       contentText: "hi",
       contentMedia: null,
+      providerMetadata: {
+        x: {
+          quotePostId: "tweet-42",
+        },
+      },
     });
     expect(p.success).toBe(true);
     expect(p.platformPostId).toBe("1");
+    expect(p.providerMetadata?.x?.publishedThreadIds).toEqual(["1"]);
 
     const d = await provider.deletePost({
       accountCredentials: JSON.stringify({ accessToken: "tok" }),
       platformPostId: "1",
     });
     expect(d.success).toBe(true);
+
+    const r = await provider.sendReply({
+      accountCredentials: JSON.stringify({ accessToken: "tok" }),
+      externalThreadId: "conv-1",
+      replyToMessageId: "tweet-1",
+      contentText: "thanks",
+    });
+    expect(r.success).toBe(true);
+    expect(r.externalMessageId).toBe("2");
   });
 });

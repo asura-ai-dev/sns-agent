@@ -3,7 +3,8 @@
  *
  * - sns post list [--platform <p>] [--status <s>] [--limit <n>] [--json]
  * - sns post create --platform <p> --account <name|id> (--text "..." | --file <path>)
- *                   [--media <path>]... [--publish | --at <ISO>] [--json]
+ *                   [--media <path>]... [--quote-post-id <id>] [--thread-segment <text>]...
+ *                   [--publish | --at <ISO>] [--json]
  * - sns post show <id> [--json]
  * - sns post delete <id>
  * - sns post publish <id>
@@ -21,6 +22,7 @@ import type {
   MediaAttachment,
   Platform,
   Post,
+  PostProviderMetadata,
   SocialAccount,
 } from "@sns-agent/sdk";
 import { runCommand, type GlobalOptions } from "../context.js";
@@ -210,6 +212,14 @@ export function registerPostCommand(program: Command): void {
     .option("--media <path>", "Attach media file (repeatable)", (value, previous: string[]) => {
       return previous ? [...previous, value] : [value];
     })
+    .option("--quote-post-id <id>", "Quote target tweet/post id (X only)")
+    .option(
+      "--thread-segment <text>",
+      "Append a self-reply segment for thread posting (repeatable, X only)",
+      (value, previous: string[]) => {
+        return previous ? [...previous, value] : [value];
+      },
+    )
     .option("--publish", "Publish immediately (omit for draft)")
     .option("--at <iso>", "Schedule for future publishing (ISO 8601)")
     .action(
@@ -220,6 +230,8 @@ export function registerPostCommand(program: Command): void {
           text?: string;
           file?: string;
           media?: string[];
+          quotePostId?: string;
+          threadSegment?: string[];
           publish?: boolean;
           at?: string;
         },
@@ -229,10 +241,14 @@ export function registerPostCommand(program: Command): void {
         await runCommand(globals, async (ctx) => {
           const platform = validatePlatform(requireStr(subOpts.platform, "platform"));
           const accountValue = requireStr(subOpts.account, "account");
+          const quotePostId = subOpts.quotePostId?.trim() ?? "";
+          const threadSegments =
+            subOpts.threadSegment?.map((segment) => segment.trim()).filter((segment) => segment) ??
+            [];
 
-          // text / file のどちらか（少なくとも片方）が必要。media 単独投稿は認めない方が安全
-          if (!subOpts.text && !subOpts.file) {
-            throw Object.assign(new Error("--text or --file is required"), {
+          // text / file / quote のいずれかは必要。quote-only 投稿も許可する。
+          if (!subOpts.text && !subOpts.file && !quotePostId) {
+            throw Object.assign(new Error("--text, --file, or --quote-post-id is required"), {
               code: "VALID_REQUIRED",
             });
           }
@@ -244,6 +260,17 @@ export function registerPostCommand(program: Command): void {
           if (subOpts.publish && subOpts.at) {
             throw Object.assign(new Error("--publish and --at are mutually exclusive"), {
               code: "VALID_CONFLICT",
+            });
+          }
+          if (platform !== "x" && (quotePostId || threadSegments.length > 0)) {
+            throw Object.assign(
+              new Error("--quote-post-id and --thread-segment are supported only for platform x"),
+              { code: "VALID_PLATFORM_OPTION" },
+            );
+          }
+          if (subOpts.threadSegment && threadSegments.length !== subOpts.threadSegment.length) {
+            throw Object.assign(new Error("Empty --thread-segment is not allowed"), {
+              code: "VALID_THREAD_SEGMENT",
             });
           }
 
@@ -261,6 +288,18 @@ export function registerPostCommand(program: Command): void {
           const socialAccountId = await resolveAccountId(ctx, accountValue, platform);
           const contentMedia = await buildMediaAttachments(subOpts.media);
           const scheduledAt = subOpts.at ? validateIsoDate(subOpts.at, "at") : undefined;
+          const providerMetadata: PostProviderMetadata | null =
+            quotePostId || threadSegments.length > 0
+              ? {
+                  x: {
+                    quotePostId: quotePostId || null,
+                    threadPosts:
+                      threadSegments.length > 0
+                        ? threadSegments.map((contentText) => ({ contentText }))
+                        : null,
+                  },
+                }
+              : null;
 
           const input: CreatePostInput = {
             socialAccountId,
@@ -268,6 +307,7 @@ export function registerPostCommand(program: Command): void {
           };
           if (contentText !== undefined) input.contentText = contentText;
           if (contentMedia.length > 0) input.contentMedia = contentMedia;
+          if (providerMetadata) input.providerMetadata = providerMetadata;
           if (subOpts.publish) input.publish = true;
 
           const postRes = await ctx.client.posts.create(input);

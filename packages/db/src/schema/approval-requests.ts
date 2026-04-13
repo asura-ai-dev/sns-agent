@@ -8,6 +8,7 @@ export const approvalRequests = sqliteTable("approval_requests", {
     .references(() => workspaces.id),
   resourceType: text("resource_type").notNull(),
   resourceId: text("resource_id").notNull(),
+  payload: text("payload"),
   requestedBy: text("requested_by").notNull(),
   requestedAt: integer("requested_at", { mode: "timestamp" }).notNull(),
   status: text("status", {

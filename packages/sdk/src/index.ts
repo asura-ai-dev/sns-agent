@@ -46,6 +46,7 @@ export type {
   UpdateBudgetPolicyDto,
   SocialAccount,
   Post,
+  PostProviderMetadata,
   ScheduledJob,
   UsageRecord,
   MediaAttachment,

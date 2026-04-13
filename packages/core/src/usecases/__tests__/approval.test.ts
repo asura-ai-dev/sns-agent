@@ -142,6 +142,11 @@ describe("requiresApproval policy", () => {
     expect(requiresApproval("line:broadcast", "editor")).toBe(true);
   });
 
+  it("agent の inbox:reply は承認必要、editor は承認不要", () => {
+    expect(requiresApproval("inbox:reply", "agent")).toBe(true);
+    expect(requiresApproval("inbox:reply", "editor")).toBe(false);
+  });
+
   it("budget:exceed-continue は require-approval 設定時のみ承認必要", () => {
     expect(
       requiresApproval("budget:exceed-continue", "editor", {
@@ -212,10 +217,11 @@ describe("approveRequest", () => {
   it("承認後に executor を呼び、status=approved を返す", async () => {
     let executorCalled = false;
     const executors = new Map<string, ApprovalExecutor>();
-    executors.set("post", async (resId, ctx) => {
+    executors.set("post", async (resId, ctx, request) => {
       executorCalled = true;
       expect(resId).toBe("p1");
       expect(ctx.workspaceId).toBe("w1");
+      expect(request.resourceType).toBe("post");
       return { published: true };
     });
     const { deps, approvalRepo, auditRepo } = makeDeps(executors);
@@ -378,6 +384,7 @@ describe("expireStaleRequests", () => {
       workspaceId: "w1",
       resourceType: "post",
       resourceId: "p1",
+      payload: null,
       requestedBy: "u1",
       requestedAt: new Date(now.getTime() - 25 * 60 * 60 * 1000),
       status: "pending",
@@ -391,6 +398,7 @@ describe("expireStaleRequests", () => {
       workspaceId: "w1",
       resourceType: "post",
       resourceId: "p2",
+      payload: null,
       requestedBy: "u1",
       requestedAt: new Date(now.getTime() - 60 * 60 * 1000),
       status: "pending",

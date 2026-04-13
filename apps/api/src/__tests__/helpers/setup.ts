@@ -34,6 +34,12 @@ import type {
   ConnectAccountInput,
   ConnectAccountResult,
   ProviderCapabilities,
+  ListThreadsInput,
+  ThreadListResult,
+  GetMessagesInput,
+  MessageListResult,
+  SendReplyInput,
+  SendReplyResult,
 } from "@sns-agent/core";
 import type { Platform } from "@sns-agent/config";
 import { setProviderRegistry, resetProviderRegistry } from "../../providers.js";
@@ -96,7 +102,7 @@ export function createMockXProvider(): SocialProvider {
         textPost: true,
         imagePost: true,
         videoPost: true,
-        threadPost: false,
+        threadPost: true,
         directMessage: true,
         commentReply: true,
         broadcast: false,
@@ -147,6 +153,83 @@ export function createMockXProvider(): SocialProvider {
     },
     async deletePost(_input: DeletePostInput): Promise<DeleteResult> {
       return { success: true };
+    },
+    async listThreads(_input: ListThreadsInput): Promise<ThreadListResult> {
+      return {
+        threads: [
+          {
+            externalThreadId: "conv-sync-1",
+            participantName: "Alice",
+            participantExternalId: "user-sync-1",
+            channel: "public",
+            initiatedBy: "external",
+            lastMessageAt: new Date("2026-04-10T10:05:00Z"),
+            providerMetadata: {
+              x: {
+                entryType: "reply",
+                conversationId: "conv-sync-1",
+                rootPostId: "conv-sync-1",
+                focusPostId: "tweet-sync-2",
+                replyToPostId: "tweet-sync-root",
+                authorXUserId: "user-sync-1",
+                authorUsername: "alice",
+              },
+            },
+          },
+        ],
+        nextCursor: '{"sinceId":"tweet-sync-2"}',
+      };
+    },
+    async getMessages(_input: GetMessagesInput): Promise<MessageListResult> {
+      return {
+        messages: [
+          {
+            externalMessageId: "tweet-sync-1",
+            direction: "inbound",
+            contentText: "@brand hello",
+            contentMedia: null,
+            authorExternalId: "user-sync-1",
+            authorDisplayName: "Alice",
+            sentAt: new Date("2026-04-10T10:00:00Z"),
+            providerMetadata: {
+              x: {
+                entryType: "mention",
+                conversationId: "conv-sync-1",
+                postId: "tweet-sync-1",
+                replyToPostId: null,
+                authorUsername: "alice",
+                mentionedXUserIds: ["mock-ext-1"],
+              },
+            },
+          },
+          {
+            externalMessageId: "tweet-sync-2",
+            direction: "outbound",
+            contentText: "thanks!",
+            contentMedia: null,
+            authorExternalId: "mock-ext-1",
+            authorDisplayName: "Mock X Account",
+            sentAt: new Date("2026-04-10T10:05:00Z"),
+            providerMetadata: {
+              x: {
+                entryType: "reply",
+                conversationId: "conv-sync-1",
+                postId: "tweet-sync-2",
+                replyToPostId: "tweet-sync-root",
+                authorUsername: "brand",
+                mentionedXUserIds: ["user-sync-1"],
+              },
+            },
+          },
+        ],
+        nextCursor: null,
+      };
+    },
+    async sendReply(_input: SendReplyInput): Promise<SendReplyResult> {
+      return {
+        success: true,
+        externalMessageId: `mock-reply-${randomUUID()}`,
+      };
     },
   };
 }
@@ -244,7 +327,7 @@ export function seedTestData(sqlite: Database.Database): SeedResult {
         textPost: true,
         imagePost: true,
         videoPost: true,
-        threadPost: false,
+        threadPost: true,
         directMessage: true,
         commentReply: true,
         broadcast: false,

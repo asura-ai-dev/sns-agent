@@ -73,6 +73,7 @@ app.use("/api/inbox/*", authMiddleware);
 app.use("/api/posts/*", usageRecorderMiddleware);
 app.use("/api/schedules/*", usageRecorderMiddleware);
 app.use("/api/usage/*", usageRecorderMiddleware);
+app.use("/api/inbox/*", usageRecorderMiddleware);
 
 // 自動監査記録ミドルウェア（認証後・書き込み系エンドポイントで適用）
 // POST / PATCH / PUT / DELETE の完了後に audit_logs テーブルへ追記する

@@ -155,7 +155,15 @@ export const rolePermissions: Record<Role, readonly Permission[]> = {
     "inbox:reply",
   ],
 
-  agent: ["account:read", "post:read", "post:create", "schedule:read", "usage:read", "inbox:read"],
+  agent: [
+    "account:read",
+    "post:read",
+    "post:create",
+    "schedule:read",
+    "usage:read",
+    "inbox:read",
+    "inbox:reply",
+  ],
 };
 
 // ───────────────────────────────────────────

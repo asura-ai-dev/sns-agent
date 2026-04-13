@@ -281,5 +281,6 @@ export interface MessageFilterOptions {
 export interface MessageRepository {
   findByThread(threadId: string, options?: MessageFilterOptions): Promise<Message[]>;
   countByThread(threadId: string): Promise<number>;
+  findByExternalMessage(threadId: string, externalMessageId: string): Promise<Message | null>;
   create(message: Omit<Message, "id" | "createdAt">): Promise<Message>;
 }

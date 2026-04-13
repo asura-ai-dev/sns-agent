@@ -12,6 +12,9 @@ export const messages = sqliteTable("messages", {
   contentText: text("content_text"),
   contentMedia: text("content_media", { mode: "json" }),
   externalMessageId: text("external_message_id"),
+  authorExternalId: text("author_external_id"),
+  authorDisplayName: text("author_display_name"),
   sentAt: integer("sent_at", { mode: "timestamp" }),
+  providerMetadata: text("provider_metadata", { mode: "json" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });

@@ -6,19 +6,26 @@
  */
 "use client";
 
-import { Image as ImageIcon, FilmSlate, Quotes } from "@phosphor-icons/react";
+import { Image as ImageIcon, FilmSlate, Quotes, LinkSimple, Rows } from "@phosphor-icons/react";
 import { PlatformIcon, PLATFORM_VISUALS } from "@/components/settings/PlatformIcon";
 import { PLATFORM_LIMITS } from "./platformLimits";
-import type { MediaAttachment, Platform, PostSocialAccount } from "./types";
+import type { MediaAttachment, Platform, PostProviderMetadata, PostSocialAccount } from "./types";
 
 interface PostPreviewProps {
   account: PostSocialAccount | null;
   platform: Platform | null;
   text: string;
   media: MediaAttachment[];
+  providerMetadata?: PostProviderMetadata | null;
 }
 
-export function PostPreview({ account, platform, text, media }: PostPreviewProps) {
+export function PostPreview({
+  account,
+  platform,
+  text,
+  media,
+  providerMetadata,
+}: PostPreviewProps) {
   if (!platform || !account) {
     return (
       <div className="rounded-box border border-dashed border-base-300 bg-base-100 p-6 text-center">
@@ -34,6 +41,8 @@ export function PostPreview({ account, platform, text, media }: PostPreviewProps
   const limit = PLATFORM_LIMITS[platform].textLimit;
   const length = text.length;
   const over = length > limit;
+  const quotePostId = providerMetadata?.x?.quotePostId?.trim() ?? "";
+  const threadPosts = providerMetadata?.x?.threadPosts ?? [];
 
   return (
     <div className="relative overflow-hidden rounded-box border border-base-300 bg-base-100 shadow-[0_1px_0_rgba(0,0,0,0.02),0_20px_50px_-30px_rgba(0,0,0,0.2)]">
@@ -90,6 +99,40 @@ export function PostPreview({ account, platform, text, media }: PostPreviewProps
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {quotePostId && (
+          <div className="mt-4 rounded-field border border-base-300 bg-base-100 px-3 py-2">
+            <p className="inline-flex items-center gap-1 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-base-content/45">
+              <LinkSimple size={12} weight="bold" />
+              Quote
+            </p>
+            <p className="mt-1 text-xs text-base-content/75">引用元 ID: {quotePostId}</p>
+          </div>
+        )}
+
+        {threadPosts.length > 0 && (
+          <div className="mt-4 rounded-field border border-base-300 bg-base-100 px-3 py-3">
+            <p className="inline-flex items-center gap-1 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-base-content/45">
+              <Rows size={12} weight="bold" />
+              Thread
+            </p>
+            <ol className="mt-2 space-y-2">
+              {threadPosts.map((segment, index) => (
+                <li
+                  key={`${segment.contentText}-${index}`}
+                  className="rounded-field bg-base-200/40 px-3 py-2"
+                >
+                  <p className="text-[0.65rem] uppercase tracking-[0.14em] text-base-content/40">
+                    #{index + 2}
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm text-base-content/80">
+                    {segment.contentText}
+                  </p>
+                </li>
+              ))}
+            </ol>
           </div>
         )}
       </div>

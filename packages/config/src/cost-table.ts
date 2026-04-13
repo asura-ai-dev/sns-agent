@@ -31,6 +31,8 @@ export const COST_TABLE: Record<string, CostRate> = {
   "x:tweet.delete": { unit: "per-request", costUsd: 0.0005 },
   "x:user.lookup": { unit: "per-request", costUsd: 0.0002 },
   "x:timeline.read": { unit: "per-request", costUsd: 0.0002 },
+  "x:inbox.list": { unit: "per-request", costUsd: 0.0003 },
+  "x:inbox.getMessages": { unit: "per-request", costUsd: 0.0003 },
 
   // ─── LINE ──────────────────────────────────
   "line:messaging.push": { unit: "per-request", costUsd: 0.0001 },

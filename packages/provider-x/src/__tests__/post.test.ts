@@ -64,6 +64,37 @@ describe("validatePost (X)", () => {
     expect(result.errors[0]?.field).toBe("content");
   });
 
+  it("accepts quote-only post", () => {
+    const result = validatePost({
+      platform: "x",
+      contentText: "",
+      contentMedia: null,
+      providerMetadata: {
+        x: {
+          quotePostId: "tweet-42",
+        },
+      },
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects empty thread segment", () => {
+    const result = validatePost({
+      platform: "x",
+      contentText: "root",
+      contentMedia: null,
+      providerMetadata: {
+        x: {
+          threadPosts: [{ contentText: "   " }],
+        },
+      },
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => /Thread segment must contain text/.test(e.message))).toBe(
+      true,
+    );
+  });
+
   it("rejects more than 4 images", () => {
     const result = validatePost({
       platform: "x",
@@ -129,6 +160,105 @@ describe("publishPost (X)", () => {
     expect(result.success).toBe(true);
     expect(result.platformPostId).toBe("1234567890");
     expect(result.publishedAt).toBeInstanceOf(Date);
+  });
+
+  it("publishes a quote thread sequentially", async () => {
+    const calls: unknown[] = [];
+    const fetchImpl: FetchLike = async (_input, init) => {
+      calls.push(JSON.parse(String(init.body ?? "{}")));
+      const id = calls.length === 1 ? "root-1" : "reply-1";
+      return new Response(JSON.stringify({ data: { id } }), { status: 201 });
+    };
+    const httpClient = new XApiClient({ fetchImpl });
+
+    const result = await publishPost(
+      {
+        accountCredentials: buildCredentials(),
+        contentText: "",
+        contentMedia: null,
+        providerMetadata: {
+          x: {
+            quotePostId: "tweet-42",
+            threadPosts: [{ contentText: "follow-up" }],
+          },
+        },
+      },
+      httpClient,
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.platformPostId).toBe("root-1");
+    expect(result.providerMetadata?.x?.publishedThreadIds).toEqual(["root-1", "reply-1"]);
+    expect(calls).toEqual([
+      { quote_tweet_id: "tweet-42" },
+      { text: "follow-up", reply: { in_reply_to_tweet_id: "root-1" } },
+    ]);
+  });
+
+  it("uploads image media before creating the tweet", async () => {
+    const calls: Array<{ url: string; command: string | null; json?: unknown }> = [];
+    const fetchImpl: FetchLike = async (url, init) => {
+      const body = init?.body;
+      if (body instanceof FormData) {
+        const command = String(body.get("command"));
+        calls.push({ url, command });
+        if (command === "INIT") {
+          return new Response(JSON.stringify({ data: { id: "media-1" } }), { status: 201 });
+        }
+        if (command === "APPEND") {
+          return new Response(null, { status: 204 });
+        }
+        if (command === "FINALIZE") {
+          return new Response(
+            JSON.stringify({
+              data: {
+                id: "media-1",
+                processing_info: { state: "pending", check_after_secs: 0 },
+              },
+            }),
+            { status: 201 },
+          );
+        }
+      }
+
+      if (url.includes("command=STATUS")) {
+        calls.push({ url, command: "STATUS" });
+        return new Response(JSON.stringify({ data: { id: "media-1" } }), { status: 200 });
+      }
+
+      const json = JSON.parse(String(body ?? "{}"));
+      calls.push({ url, command: null, json });
+      return new Response(JSON.stringify({ data: { id: "tweet-1" } }), { status: 201 });
+    };
+    const httpClient = new XApiClient({ fetchImpl });
+
+    const result = await publishPost(
+      {
+        accountCredentials: buildCredentials(),
+        contentText: "with image",
+        contentMedia: [
+          {
+            type: "image",
+            url: "data:image/png;base64,aGVsbG8=",
+            mimeType: "image/png",
+          },
+        ],
+      },
+      httpClient,
+    );
+
+    expect(result.success).toBe(true);
+    expect(calls.map((call) => call.command)).toEqual([
+      "INIT",
+      "APPEND",
+      "FINALIZE",
+      "STATUS",
+      null,
+    ]);
+    expect(calls.at(-1)?.json).toEqual({
+      text: "with image",
+      media: { media_ids: ["media-1"] },
+    });
   });
 
   it("returns error on X API failure", async () => {

@@ -485,6 +485,47 @@ describe("CLI integration", () => {
     );
   });
 
+  it("b-3. `sns post create` forwards quote/thread metadata for X", async () => {
+    const res = await runCli([
+      "--api-url",
+      `http://127.0.0.1:${mockPort}`,
+      "--api-key",
+      "test",
+      "--json",
+      "post",
+      "create",
+      "--platform",
+      "x",
+      "--account",
+      "0123456789abcdef0123456789abcdef",
+      "--quote-post-id",
+      "tweet-42",
+      "--thread-segment",
+      "follow-up 1",
+      "--thread-segment",
+      "follow-up 2",
+    ]);
+
+    expect(res.exitCode).toBe(0);
+    const postRequest = routeHits.find(
+      (h) => h.method === "POST" && h.url.startsWith("/api/posts"),
+    );
+    expect(postRequest).toBeDefined();
+    const parsed = JSON.parse(postRequest?.body ?? "{}") as {
+      providerMetadata?: {
+        x?: {
+          quotePostId?: string | null;
+          threadPosts?: Array<{ contentText: string }>;
+        };
+      };
+    };
+    expect(parsed.providerMetadata?.x?.quotePostId).toBe("tweet-42");
+    expect(parsed.providerMetadata?.x?.threadPosts).toEqual([
+      { contentText: "follow-up 1" },
+      { contentText: "follow-up 2" },
+    ]);
+  });
+
   it("c. `sns schedule create` creates a schedule", async () => {
     const futureAt = new Date(Date.now() + 86400000).toISOString();
     const res = await runCli([

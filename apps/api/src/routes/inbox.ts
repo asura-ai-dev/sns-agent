@@ -8,25 +8,35 @@
  * エンドポイント:
  *   GET  /api/inbox                 (inbox:read)
  *   GET  /api/inbox/:threadId       (inbox:read)
+ *   POST /api/inbox/sync            (inbox:read)
  *   POST /api/inbox/:threadId/reply (inbox:reply, editor 以上)
  */
 import { Hono } from "hono";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Platform } from "@sns-agent/config";
 import { PLATFORMS } from "@sns-agent/config";
 import {
   listThreads,
   getThread,
   sendInboxReply,
+  syncInboxFromProvider,
+  createApprovalRequest,
+  requiresApproval,
   ValidationError,
+  type ApprovalUsecaseDeps,
   type InboxUsecaseDeps,
   type ConversationThread,
+  type MediaAttachment,
   type Message,
   type ThreadStatus,
 } from "@sns-agent/core";
 import {
   DrizzleAccountRepository,
+  DrizzleApprovalRepository,
+  DrizzleAuditLogRepository,
   DrizzleConversationRepository,
   DrizzleMessageRepository,
+  posts,
 } from "@sns-agent/db";
 import { requirePermission } from "../middleware/rbac.js";
 import { getProviderRegistry } from "../providers.js";
@@ -49,6 +59,7 @@ function buildDeps(db: AppVariables["db"]): InboxUsecaseDeps {
     conversationRepo: new DrizzleConversationRepository(db),
     messageRepo: new DrizzleMessageRepository(db),
     accountRepo: new DrizzleAccountRepository(db),
+    usageRepo: undefined,
     providers: getProviderRegistry().getAll(),
     encryptionKey,
   };
@@ -66,7 +77,11 @@ function serializeThread(thread: ConversationThread): Record<string, unknown> {
     platform: thread.platform,
     externalThreadId: thread.externalThreadId,
     participantName: thread.participantName,
+    participantExternalId: thread.participantExternalId,
+    channel: thread.channel,
+    initiatedBy: thread.initiatedBy,
     lastMessageAt: thread.lastMessageAt,
+    providerMetadata: thread.providerMetadata,
     status: thread.status,
     createdAt: thread.createdAt,
   };
@@ -80,9 +95,100 @@ function serializeMessage(message: Message): Record<string, unknown> {
     contentText: message.contentText,
     contentMedia: message.contentMedia,
     externalMessageId: message.externalMessageId,
+    authorExternalId: message.authorExternalId,
+    authorDisplayName: message.authorDisplayName,
     sentAt: message.sentAt,
+    providerMetadata: message.providerMetadata,
     createdAt: message.createdAt,
   };
+}
+
+interface RelatedPostSummary {
+  id: string;
+  platform: string;
+  status: string;
+  platformPostId: string | null;
+  contentText: string | null;
+  createdAt: Date;
+  publishedAt: Date | null;
+}
+
+function collectRelatedPlatformPostIds(
+  thread: ConversationThread,
+  messages: Message[],
+): {
+  entryType: string | null;
+  conversationId: string | null;
+  rootPostId: string | null;
+  focusPostId: string | null;
+  replyToPostId: string | null;
+  platformPostIds: string[];
+} {
+  const ids = new Set<string>();
+  const threadMeta = thread.providerMetadata?.x;
+
+  const addId = (value: string | null | undefined) => {
+    if (typeof value === "string" && value.length > 0) {
+      ids.add(value);
+    }
+  };
+
+  addId(threadMeta?.rootPostId);
+  addId(threadMeta?.focusPostId);
+  addId(threadMeta?.replyToPostId);
+
+  for (const message of messages) {
+    const meta = message.providerMetadata?.x;
+    addId(meta?.postId);
+    addId(meta?.replyToPostId);
+  }
+
+  return {
+    entryType: threadMeta?.entryType ?? null,
+    conversationId: threadMeta?.conversationId ?? null,
+    rootPostId: threadMeta?.rootPostId ?? null,
+    focusPostId: threadMeta?.focusPostId ?? null,
+    replyToPostId: threadMeta?.replyToPostId ?? null,
+    platformPostIds: [...ids],
+  };
+}
+
+async function loadRelatedPosts(
+  db: AppVariables["db"],
+  workspaceId: string,
+  platform: Platform,
+  platformPostIds: string[],
+): Promise<RelatedPostSummary[]> {
+  const ids = platformPostIds.filter((value) => value.length > 0);
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const rows = await db
+    .select({
+      id: posts.id,
+      platform: posts.platform,
+      status: posts.status,
+      platformPostId: posts.platformPostId,
+      contentText: posts.contentText,
+      createdAt: posts.createdAt,
+      publishedAt: posts.publishedAt,
+    })
+    .from(posts)
+    .where(
+      and(
+        eq(posts.workspaceId, workspaceId),
+        eq(posts.platform, platform),
+        inArray(posts.platformPostId, ids),
+      ),
+    );
+
+  const order = new Map(ids.map((id, index) => [id, index]));
+  return rows.sort((a, b) => {
+    const aIndex = order.get(a.platformPostId ?? "") ?? Number.MAX_SAFE_INTEGER;
+    const bIndex = order.get(b.platformPostId ?? "") ?? Number.MAX_SAFE_INTEGER;
+    return aIndex - bIndex;
+  });
 }
 
 function parseIntOrUndefined(value: string | undefined): number | undefined {
@@ -91,13 +197,35 @@ function parseIntOrUndefined(value: string | undefined): number | undefined {
   return Number.isNaN(n) ? undefined : n;
 }
 
+function hasMediaAttachments(
+  contentMedia: MediaAttachment[] | null | undefined,
+): contentMedia is MediaAttachment[] {
+  return Array.isArray(contentMedia) && contentMedia.length > 0;
+}
+
+function buildDepsFromContext(c: {
+  get<K extends keyof AppVariables>(key: K): AppVariables[K];
+}): InboxUsecaseDeps {
+  const deps = buildDeps(c.get("db"));
+  return {
+    ...deps,
+    usageRepo: c.get("usageRepo"),
+  };
+}
+
+function buildApprovalDeps(db: AppVariables["db"]): ApprovalUsecaseDeps {
+  return {
+    approvalRepo: new DrizzleApprovalRepository(db),
+    auditRepo: new DrizzleAuditLogRepository(db),
+  };
+}
+
 // ───────────────────────────────────────────
 // GET /api/inbox  -- スレッド一覧
 // ───────────────────────────────────────────
 inbox.get("/", requirePermission("inbox:read"), async (c) => {
   const actor = c.get("actor");
-  const db = c.get("db");
-  const deps = buildDeps(db);
+  const deps = buildDepsFromContext(c);
 
   const platformQ = c.req.query("platform");
   const statusQ = c.req.query("status");
@@ -133,19 +261,34 @@ inbox.get("/", requirePermission("inbox:read"), async (c) => {
 // ───────────────────────────────────────────
 inbox.get("/:threadId", requirePermission("inbox:read"), async (c) => {
   const actor = c.get("actor");
+  const deps = buildDepsFromContext(c);
   const db = c.get("db");
-  const deps = buildDeps(db);
   const threadId = c.req.param("threadId");
 
   const limit = parseIntOrUndefined(c.req.query("limit"));
   const offset = parseIntOrUndefined(c.req.query("offset"));
 
   const result = await getThread(deps, actor.workspaceId, threadId, { limit, offset });
+  const context = collectRelatedPlatformPostIds(result.thread, result.messages);
+  const relatedPosts = await loadRelatedPosts(
+    db,
+    actor.workspaceId,
+    result.thread.platform,
+    context.platformPostIds,
+  );
 
   return c.json({
     data: {
       thread: serializeThread(result.thread),
       messages: result.messages.map(serializeMessage),
+      context: {
+        entryType: context.entryType,
+        conversationId: context.conversationId,
+        rootPostId: context.rootPostId,
+        focusPostId: context.focusPostId,
+        replyToPostId: context.replyToPostId,
+        relatedPosts,
+      },
     },
   });
 });
@@ -156,21 +299,62 @@ inbox.get("/:threadId", requirePermission("inbox:read"), async (c) => {
 inbox.post("/:threadId/reply", requirePermission("inbox:reply"), async (c) => {
   const actor = c.get("actor");
   const db = c.get("db");
-  const deps = buildDeps(db);
+  const deps = buildDepsFromContext(c);
   const threadId = c.req.param("threadId");
 
   const body = await c.req.json<{
     contentText?: string;
+    contentMedia?: MediaAttachment[] | null;
   }>();
 
-  if (!body.contentText || typeof body.contentText !== "string") {
-    throw new ValidationError("contentText is required");
+  const contentText = typeof body.contentText === "string" ? body.contentText : "";
+  const contentMedia = body.contentMedia ?? null;
+
+  if (contentText.trim().length === 0 && !hasMediaAttachments(contentMedia)) {
+    throw new ValidationError("contentText or contentMedia is required");
+  }
+
+  const thread = await getThread(deps, actor.workspaceId, threadId, { limit: 1, offset: 0 });
+  const needsApproval = requiresApproval("inbox:reply", actor.role, {
+    platform: thread.thread.platform,
+  });
+
+  if (needsApproval) {
+    const approvalDeps = buildApprovalDeps(db);
+    const approval = await createApprovalRequest(approvalDeps, {
+      workspaceId: actor.workspaceId,
+      resourceType: "inbox_reply",
+      resourceId: threadId,
+      payload: {
+        contentText,
+        contentMedia,
+      },
+      requestedBy: actor.id,
+      requestedByType: actor.type === "agent" ? "agent" : "user",
+      reason: `${actor.role} requested ${thread.thread.platform} inbox reply`,
+    });
+
+    return c.json(
+      {
+        data: {
+          threadId,
+          status: "pending_approval",
+          contentText,
+        },
+        meta: {
+          requiresApproval: true,
+          approvalId: approval.id,
+        },
+      },
+      202,
+    );
   }
 
   const result = await sendInboxReply(deps, {
     workspaceId: actor.workspaceId,
     threadId,
-    contentText: body.contentText,
+    contentText,
+    contentMedia,
     actorId: actor.id,
   });
 
@@ -183,6 +367,36 @@ inbox.post("/:threadId/reply", requirePermission("inbox:reply"), async (c) => {
     },
     201,
   );
+});
+
+// ───────────────────────────────────────────
+// POST /api/inbox/sync  -- Provider から inbox を同期
+// ───────────────────────────────────────────
+inbox.post("/sync", requirePermission("inbox:read"), async (c) => {
+  const actor = c.get("actor");
+  const deps = buildDepsFromContext(c);
+
+  const body = await c.req.json<{
+    socialAccountId?: string;
+    limit?: number;
+    cursor?: string;
+  }>();
+
+  if (!body.socialAccountId || typeof body.socialAccountId !== "string") {
+    throw new ValidationError("socialAccountId is required");
+  }
+
+  const result = await syncInboxFromProvider(deps, {
+    workspaceId: actor.workspaceId,
+    socialAccountId: body.socialAccountId,
+    actorId: actor.id,
+    limit: typeof body.limit === "number" ? body.limit : undefined,
+    cursor: typeof body.cursor === "string" ? body.cursor : undefined,
+  });
+
+  return c.json({
+    data: result,
+  });
 });
 
 export { inbox };

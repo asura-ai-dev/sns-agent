@@ -21,6 +21,7 @@ import {
 import type {
   MediaAttachment,
   Post,
+  PostProviderMetadata,
   PostListItem,
   PostUsecaseDeps,
   ApprovalUsecaseDeps,
@@ -99,6 +100,7 @@ function serializePost(post: Post): Record<string, unknown> {
     status: post.status,
     contentText: post.contentText,
     contentMedia: post.contentMedia,
+    providerMetadata: post.providerMetadata ?? null,
     platformPostId: post.platformPostId,
     validationResult: post.validationResult,
     idempotencyKey: post.idempotencyKey,
@@ -255,6 +257,7 @@ posts.post("/", requirePermission("post:create"), async (c) => {
     socialAccountId?: string;
     contentText?: string | null;
     contentMedia?: MediaAttachment[] | null;
+    providerMetadata?: PostProviderMetadata | null;
     publishNow?: boolean;
     idempotencyKey?: string | null;
   }>();
@@ -262,8 +265,13 @@ posts.post("/", requirePermission("post:create"), async (c) => {
   if (!body.socialAccountId) {
     throw new ValidationError("socialAccountId is required");
   }
-  if (body.contentText === undefined && !body.contentMedia) {
-    throw new ValidationError("contentText or contentMedia is required");
+  const hasQuoteOnly =
+    typeof body.providerMetadata?.x?.quotePostId === "string" &&
+    body.providerMetadata.x.quotePostId.trim().length > 0;
+  if (body.contentText === undefined && !body.contentMedia && !hasQuoteOnly) {
+    throw new ValidationError(
+      "contentText, contentMedia, or providerMetadata.x.quotePostId is required",
+    );
   }
 
   // publish を行うなら post:publish 権限も必要
@@ -278,6 +286,7 @@ posts.post("/", requirePermission("post:create"), async (c) => {
     socialAccountId: body.socialAccountId,
     contentText: body.contentText ?? null,
     contentMedia: body.contentMedia ?? null,
+    providerMetadata: body.providerMetadata ?? null,
     publishNow: body.publishNow === true,
     idempotencyKey,
     createdBy: actor.id,
@@ -311,11 +320,13 @@ posts.patch("/:id", requirePermission("post:create"), async (c) => {
   const body = await c.req.json<{
     contentText?: string | null;
     contentMedia?: MediaAttachment[] | null;
+    providerMetadata?: PostProviderMetadata | null;
   }>();
 
   const updated = await updatePost(deps, actor.workspaceId, id, {
     contentText: body.contentText,
     contentMedia: body.contentMedia,
+    providerMetadata: body.providerMetadata,
   });
 
   return c.json({ data: serializePost(updated) });

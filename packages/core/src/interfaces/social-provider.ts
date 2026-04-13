@@ -5,7 +5,15 @@
  * 各 SNS プロバイダ (provider-x, provider-line, provider-instagram) がこのインターフェースを実装する。
  */
 import type { Platform } from "@sns-agent/config";
-import type { ProviderCapabilities, MediaAttachment } from "../domain/entities.js";
+import type {
+  ProviderCapabilities,
+  MediaAttachment,
+  PostProviderMetadata,
+  InboxChannel,
+  InboxInitiator,
+  ThreadProviderMetadata,
+  MessageProviderMetadata,
+} from "../domain/entities.js";
 
 // ───────────────────────────────────────────
 // 入出力型
@@ -39,6 +47,7 @@ export interface ValidatePostInput {
   platform: Platform;
   contentText: string | null;
   contentMedia: MediaAttachment[] | null;
+  providerMetadata?: PostProviderMetadata | null;
 }
 
 export interface ValidationResult {
@@ -58,6 +67,7 @@ export interface PublishPostInput {
   accountCredentials: string;
   contentText: string | null;
   contentMedia: MediaAttachment[] | null;
+  providerMetadata?: PostProviderMetadata | null;
   /** 冪等性キー */
   idempotencyKey?: string;
 }
@@ -66,6 +76,7 @@ export interface PublishResult {
   success: boolean;
   platformPostId: string | null;
   publishedAt: Date | null;
+  providerMetadata?: PostProviderMetadata | null;
   error?: string;
 }
 
@@ -89,7 +100,11 @@ export interface ThreadListResult {
   threads: {
     externalThreadId: string;
     participantName: string | null;
+    participantExternalId?: string | null;
+    channel?: InboxChannel | null;
+    initiatedBy?: InboxInitiator | null;
     lastMessageAt: Date | null;
+    providerMetadata?: ThreadProviderMetadata | null;
   }[];
   nextCursor: string | null;
 }
@@ -107,7 +122,10 @@ export interface MessageListResult {
     direction: "inbound" | "outbound";
     contentText: string | null;
     contentMedia: MediaAttachment[] | null;
+    authorExternalId?: string | null;
+    authorDisplayName?: string | null;
     sentAt: Date | null;
+    providerMetadata?: MessageProviderMetadata | null;
   }[];
   nextCursor: string | null;
 }
@@ -117,6 +135,8 @@ export interface SendReplyInput {
   externalThreadId: string;
   contentText: string;
   contentMedia?: MediaAttachment[];
+  /** 返信先の外部メッセージ ID（X では in_reply_to_tweet_id に相当） */
+  replyToMessageId?: string | null;
 }
 
 export interface SendReplyResult {

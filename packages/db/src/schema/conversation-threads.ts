@@ -15,7 +15,15 @@ export const conversationThreads = sqliteTable("conversation_threads", {
   }).notNull(),
   externalThreadId: text("external_thread_id"),
   participantName: text("participant_name"),
+  participantExternalId: text("participant_external_id"),
+  channel: text("channel", {
+    enum: ["direct", "public"],
+  }),
+  initiatedBy: text("initiated_by", {
+    enum: ["self", "external", "mixed", "unknown"],
+  }),
   lastMessageAt: integer("last_message_at", { mode: "timestamp" }),
+  providerMetadata: text("provider_metadata", { mode: "json" }),
   status: text("status", {
     enum: ["open", "closed", "archived"],
   })
