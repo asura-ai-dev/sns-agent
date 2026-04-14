@@ -74,42 +74,56 @@ const HELP_SECTIONS = [
 const CLI_REFERENCE = [
   {
     command: "accounts",
+    purpose: "接続準備",
     description:
       "接続済みアカウントの確認と新規接続の起点です。運用前に一覧と接続状態を整えると、その後の投稿や返信が安定します。",
     examples: ["sns accounts list", "sns accounts connect x"],
   },
   {
     command: "post",
+    purpose: "投稿作成",
     description:
       "下書きの作成、一覧確認、即時公開までをひと続きで扱います。まず本文を整え、必要に応じて公開判断を CLI から進めます。",
-    examples: ['sns post create --platform x --account team-x --text "新機能のお知らせです"', "sns post list --platform x"],
+    examples: [
+      'sns post create --platform x --account team-x --text "新機能のお知らせです" --publish',
+      "sns post list --platform x",
+    ],
   },
   {
     command: "schedule",
+    purpose: "予約管理",
     description:
       "予約投稿の一覧確認と時刻調整に使います。公開の間隔を維持したいときに、直近の予定を落ち着いて見直せます。",
-    examples: ["sns schedule list", "sns schedule show 9f2c2b1a", "sns schedule logs 9f2c2b1a"],
+    examples: [
+      "sns schedule list --status pending",
+      "sns schedule show 9f2c2b1a",
+      "sns schedule logs 9f2c2b1a",
+    ],
   },
   {
     command: "inbox",
+    purpose: "会話確認",
     description:
       "会話スレッドの流れを確認し、どの媒体の返信を優先するかを整理するための入口です。状況確認を素早く行えます。",
     examples: ["sns inbox list --platform line", "sns inbox show thread_01 --limit 20"],
   },
   {
     command: "usage",
+    purpose: "利用量確認",
     description:
       "API 利用量とコスト感を見渡すための集計コマンドです。月次の振り返りと日々の消費傾向の確認に向いています。",
     examples: ["sns usage report --range monthly", "sns usage summary"],
   },
   {
     command: "llm",
+    purpose: "AI経路設定",
     description:
       "LLM のルーティング設定を確認し、媒体や用途ごとの経路を調整します。運用ルールを変える前の現状把握にも使えます。",
     examples: ["sns llm route list", "sns llm route set --platform x --provider openai --model gpt-5.4-mini"],
   },
   {
     command: "skills",
+    purpose: "運用テンプレート",
     description:
       "スキルパッケージの一覧確認と生成、切り替えを扱います。媒体ごとの支援セットを整えると運用の再現性が上がります。",
     examples: ["sns skills list", "sns skills pack --platform instagram --provider codex"],
@@ -185,7 +199,7 @@ export default function HelpPage() {
                 Command Line
               </h2>
               <p className="mt-3 text-sm leading-7 text-base-content/65">
-                Web UI と並行して使うための代表的なコマンドをまとめています。細かな引数を暗記するより、よく使う流れから読み始める想定です。
+                よく使う CLI コマンドを、用途ごとにすぐ見返せる形でまとめています。
               </p>
             </div>
 
@@ -196,12 +210,17 @@ export default function HelpPage() {
                   className="rounded-sm border border-base-content/10 bg-base-200/20 p-4 sm:p-5"
                 >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
-                    <h3
-                      className="font-display text-xl font-semibold leading-tight text-base-content"
-                      style={{ fontFamily: "'Fraunces', serif" }}
-                    >
-                      {section.command}
-                    </h3>
+                    <div>
+                      <p className="font-mono text-[0.68rem] uppercase tracking-[0.18em] text-base-content/45">
+                        {section.purpose}
+                      </p>
+                      <h3
+                        className="mt-1 font-display text-xl font-semibold leading-tight text-base-content"
+                        style={{ fontFamily: "'Fraunces', serif" }}
+                      >
+                        {section.command}
+                      </h3>
+                    </div>
                     <code className="font-mono text-xs uppercase tracking-[0.16em] text-base-content/45">
                       sns {section.command}
                     </code>

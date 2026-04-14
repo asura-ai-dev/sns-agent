@@ -69,6 +69,7 @@ export interface ExecuteResponse {
     mode: ExecutionMode;
   };
   auditLogId?: string | null;
+  conversationId?: string | null;
 }
 
 export interface HistoryEntry {
@@ -268,6 +269,7 @@ async function streamFallback(
 
 function executeFallback(params: {
   intent: SkillIntent;
+  conversationId: string | null;
   mode?: ExecutionMode;
 }): ApiResult<ExecuteResponse> {
   return {
@@ -285,6 +287,7 @@ function executeFallback(params: {
         },
       },
       auditLogId: null,
+      conversationId: params.conversationId,
     },
   };
 }

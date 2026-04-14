@@ -107,7 +107,14 @@ describe("dryRunSkillAction", () => {
   it("returns preview for valid action", () => {
     const r = dryRunSkillAction(ctx());
     expect(r.allowed).toBe(true);
-    expect(r.preview).toContain("post.create");
+    expect(r.preview).toEqual(
+      expect.objectContaining({
+        operation: "draft",
+        account: "(required)",
+        text: "hello world",
+        characterCount: 11,
+      }),
+    );
     expect(r.blockedReason).toBeNull();
   });
 
@@ -134,6 +141,13 @@ describe("dryRunSkillAction", () => {
       ctx({ actionName: "post.list", args: { limit: 10 }, mode: "read-only" }),
     );
     expect(r.allowed).toBe(true);
+    expect(r.preview).toEqual(
+      expect.objectContaining({
+        operation: "list_posts",
+        platform: "x",
+        limit: 10,
+      }),
+    );
   });
 });
 

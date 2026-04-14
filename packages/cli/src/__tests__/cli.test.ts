@@ -12,6 +12,7 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { AddressInfo } from "node:net";
 import { Command } from "commander";
 import { registerAccountsCommand } from "../commands/accounts.js";
+import { registerAgentCommand } from "../commands/agent.js";
 import { registerPostCommand } from "../commands/post.js";
 import { registerScheduleCommand } from "../commands/schedule.js";
 import { registerUsageCommand } from "../commands/usage.js";
@@ -139,6 +140,7 @@ async function runCli(argv: string[]): Promise<CaptureResult> {
   registerPostCommand(program);
   registerScheduleCommand(program);
   registerUsageCommand(program);
+  registerAgentCommand(program);
 
   process.exitCode = 0;
 
@@ -399,6 +401,81 @@ beforeAll(async () => {
         },
       }),
     },
+    {
+      method: "POST",
+      path: "/api/agent/chat",
+      respond: (_req, body) => {
+        const parsed = body ? (JSON.parse(body) as Record<string, unknown>) : {};
+        const message = typeof parsed.message === "string" ? parsed.message : "";
+        const conversationId =
+          typeof parsed.conversationId === "string" && parsed.conversationId.length > 0
+            ? parsed.conversationId
+            : "agent-conv-1";
+
+        return {
+          status: 200,
+          body: {
+            data: {
+              kind: "preview",
+              conversationId,
+              content: `「${message}」を X の予約投稿として解釈しました。内容を確認してください。`,
+              intent: {
+                actionName: "post.schedule",
+                packageName: "sns-agent-x-openai",
+                args: {
+                  accountName: "Mock X",
+                  text: "明日9時の投稿です",
+                  scheduledAt: "2026-04-15T09:00:00+09:00",
+                },
+              },
+              preview: {
+                actionName: "post.schedule",
+                packageName: "sns-agent-x-openai",
+                description: "X のテキスト投稿を指定日時に予約投稿する",
+                preview: {
+                  platform: "x",
+                  targetAccountName: "Mock X",
+                  scheduledAt: "2026-04-15T09:00:00+09:00",
+                  text: "明日9時の投稿です",
+                },
+                requiredPermissions: ["schedule:create"],
+                missingPermissions: [],
+                argumentErrors: [],
+                mode: "approval-required",
+                allowed: true,
+                blockedReason: null,
+              },
+            },
+          },
+        };
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/agent/execute",
+      respond: (_req, body) => {
+        const parsed = body ? (JSON.parse(body) as Record<string, unknown>) : {};
+        return {
+          status: 200,
+          body: {
+            data: {
+              outcome: {
+                actionName: parsed.actionName ?? "post.schedule",
+                packageName: parsed.packageName ?? "sns-agent-x-openai",
+                mode: parsed.mode ?? "approval-required",
+                result: {
+                  status: "scheduled",
+                  id: "job-agent-1",
+                  scheduledAt: "2026-04-15T09:00:00+09:00",
+                },
+              },
+              auditLogId: "audit-agent-1",
+              conversationId: parsed.conversationId ?? "agent-conv-1",
+            },
+          },
+        };
+      },
+    },
   ]);
 });
 
@@ -616,7 +693,56 @@ describe("CLI integration", () => {
     expect(parsed.data[0]?.status).toBe("failed");
   });
 
-  it("f. unknown command exits with code 1", async () => {
+  it("f. `sns agent chat --json` returns a structured preview", async () => {
+    const res = await runCli([
+      "--api-url",
+      `http://127.0.0.1:${mockPort}`,
+      "--api-key",
+      "test",
+      "--json",
+      "agent",
+      "chat",
+      "明日9時に投稿して",
+    ]);
+
+    expect(res.exitCode).toBe(0);
+    const parsed = JSON.parse(res.stdout) as {
+      data: {
+        response: {
+          kind: string;
+          preview?: { preview?: { scheduledAt?: string } };
+        };
+        execution: { attempted: boolean };
+      };
+    };
+    expect(parsed.data.response.kind).toBe("preview");
+    expect(parsed.data.response.preview?.preview?.scheduledAt).toBe("2026-04-15T09:00:00+09:00");
+    expect(parsed.data.execution.attempted).toBe(false);
+    expect(routeHits.some((h) => h.method === "POST" && h.url === "/api/agent/chat")).toBe(true);
+  });
+
+  it("g. `sns agent chat --execute` previews and executes in one run", async () => {
+    const res = await runCli([
+      "--api-url",
+      `http://127.0.0.1:${mockPort}`,
+      "--api-key",
+      "test",
+      "agent",
+      "chat",
+      "明日9時に投稿して",
+      "--execute",
+    ]);
+
+    expect(res.exitCode).toBe(0);
+    expect(res.stdout).toContain("実行プレビュー");
+    expect(res.stdout).toContain("実行結果");
+    expect(routeHits.some((h) => h.method === "POST" && h.url === "/api/agent/chat")).toBe(true);
+    expect(routeHits.some((h) => h.method === "POST" && h.url === "/api/agent/execute")).toBe(
+      true,
+    );
+  });
+
+  it("h. unknown command exits with code 1", async () => {
     const res = await runCli([
       "--api-url",
       `http://127.0.0.1:${mockPort}`,

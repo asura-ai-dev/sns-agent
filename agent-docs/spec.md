@@ -189,7 +189,7 @@ error: #E5484D
 
 ### Phase 3: CLI + Web UI 基本
 
-CLI の主要コマンド実装、Web UI の基本画面（ダッシュボード、投稿一覧、投稿作成、予約カレンダー、設定）。Phase 2 のドメインを操作する Presentation 層。
+CLI の主要コマンド実装、Web UI の基本画面（ダッシュボード、投稿一覧、投稿作成、予約カレンダー、設定、help/CLI リファレンス）。Phase 2 のドメインを操作する Presentation 層。
 
 ### Phase 4: 全 SNS 対応 + 使用量
 

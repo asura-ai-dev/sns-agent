@@ -48,33 +48,52 @@ class InMemoryAuditRepo implements AuditLogRepository {
 
 const actor: AgentActor = { id: "user-1", role: "editor", type: "user" };
 
-function makeSkill(): SkillPackage {
-  return {
-    id: "sp-1",
-    workspaceId: "ws-1",
-    name: "sns-agent-x",
-    version: "0.1.0",
-    platform: "x",
-    llmProvider: "openai",
-    enabled: true,
-    manifest: {
-      name: "sns-agent-x",
-      version: "0.1.0",
-      platform: "x",
-      provider: "openai",
-      description: "X skill",
+function makeSkill(overrides: Partial<SkillPackage> = {}): SkillPackage {
+  const platform = overrides.platform ?? "x";
+  const name = overrides.name ?? `sns-agent-${platform}`;
+  const version = overrides.version ?? "0.1.0";
+  const llmProvider = overrides.llmProvider ?? "openai";
+  const manifest =
+    overrides.manifest ??
+    ({
+      name,
+      version,
+      platform,
+      provider: llmProvider,
+      description: `${String(platform).toUpperCase()} skill`,
       actions: [
         {
           name: "post.create",
           description: "Create a post",
-          parameters: { type: "object" },
+          parameters: {
+            type: "object",
+            properties: {
+              accountName: { type: "string", description: "Target account" },
+              text: { type: "string", description: "Post text" },
+              scheduledAt: { type: "string", description: "ISO 8601 datetime" },
+            },
+            required: ["accountName", "text"],
+            additionalProperties: false,
+          },
           permissions: ["post:create"],
           requiredCapabilities: ["textPost"],
+          readOnly: false,
         },
       ],
-    },
+    }) as SkillPackage["manifest"];
+
+  return {
+    id: "sp-1",
+    workspaceId: "ws-1",
+    name,
+    version,
+    platform,
+    llmProvider,
+    enabled: overrides.enabled ?? true,
+    manifest,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
+    ...overrides,
   };
 }
 
@@ -271,11 +290,56 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("approval-required");
     expect(prompt).toContain("sns-agent-x");
     expect(prompt).toContain("post.create");
+    expect(prompt).toContain("Prefer structured intent JSON over free-form answers");
+    expect(prompt).toContain("convert relative or natural-language timing");
+    expect(prompt).toContain("Never emit a naive datetime");
+    expect(prompt).toContain("requiredArgs=accountName, text");
   });
 
   it("marks empty skills", () => {
     const prompt = buildSystemPrompt([], "read-only");
     expect(prompt).toContain("no skill packages enabled");
     expect(prompt).toContain("read-only");
+  });
+
+  it("prioritizes X skills when multiple platform skills are enabled", () => {
+    const xSkill = makeSkill({
+      platform: "x",
+      name: "sns-agent-x",
+    });
+    const lineSkill = makeSkill({
+      platform: "line",
+      name: "sns-agent-line",
+      manifest: {
+        name: "sns-agent-line",
+        version: "0.1.0",
+        platform: "line",
+        provider: "openai",
+        description: "LINE skill",
+        actions: [
+          {
+            name: "message.send",
+            description: "Send a LINE message",
+            parameters: {
+              type: "object",
+              properties: {
+                text: { type: "string", description: "Message text" },
+              },
+              required: ["text"],
+              additionalProperties: false,
+            },
+            permissions: ["post:create"],
+            requiredCapabilities: ["textPost"],
+            readOnly: false,
+          },
+        ],
+      },
+    });
+
+    const prompt = buildSystemPrompt([xSkill, lineSkill], "approval-required");
+    expect(prompt).toContain("focused on X operations");
+    expect(prompt).toContain("sns-agent-x");
+    expect(prompt).not.toContain("sns-agent-line");
+    expect(prompt).not.toContain("message.send");
   });
 });

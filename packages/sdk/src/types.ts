@@ -235,3 +235,88 @@ export interface UpdateBudgetPolicyDto {
   limitAmountUsd?: number;
   actionOnExceed?: BudgetActionOnExceed;
 }
+
+// ───────────────────────────────────────────
+// Agent Gateway
+// ───────────────────────────────────────────
+
+export type AgentExecutionMode =
+  | "read-only"
+  | "draft"
+  | "approval-required"
+  | "direct-execute";
+
+export interface AgentSkillIntent {
+  actionName: string;
+  packageName: string;
+  args: Record<string, unknown>;
+}
+
+export interface AgentSkillPreview {
+  actionName: string;
+  packageName: string;
+  description?: string | null;
+  preview?: Record<string, unknown> | string | null;
+  requiredPermissions: string[];
+  missingPermissions: string[];
+  argumentErrors: string[];
+  mode: AgentExecutionMode;
+  allowed: boolean;
+  blockedReason?: string | null;
+}
+
+export interface AgentChatTextResponse {
+  kind: "text";
+  conversationId: string | null;
+  content: string;
+}
+
+export interface AgentChatPreviewResponse {
+  kind: "preview";
+  conversationId: string | null;
+  content: string;
+  intent: AgentSkillIntent;
+  preview: AgentSkillPreview;
+}
+
+export type AgentChatResponse = AgentChatTextResponse | AgentChatPreviewResponse;
+
+export interface AgentChatInput {
+  message: string;
+  conversationId?: string | null;
+  mode?: AgentExecutionMode;
+}
+
+export interface AgentExecuteInput {
+  actionName: string;
+  packageName: string;
+  args?: Record<string, unknown>;
+  conversationId?: string | null;
+  mode?: AgentExecutionMode;
+}
+
+export interface AgentExecuteResponse {
+  outcome: {
+    actionName: string;
+    packageName: string;
+    result: Record<string, unknown>;
+    mode: AgentExecutionMode;
+  };
+  auditLogId?: string | null;
+  conversationId?: string | null;
+}
+
+export interface AgentHistoryEntry {
+  id: string;
+  action: string;
+  conversationId: string | null;
+  inputSummary: string | null;
+  resultSummary: string | null;
+  createdAt: string;
+}
+
+export interface AgentHistoryParams {
+  conversationId?: string;
+  page?: number;
+  limit?: number;
+}

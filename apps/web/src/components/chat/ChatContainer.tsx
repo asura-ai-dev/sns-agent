@@ -201,6 +201,11 @@ export function ChatContainer({
     if (res.isFallback) {
       setOffline(true);
     }
+    const resolvedConversationId = res.value.conversationId ?? activeConversationId;
+    if (resolvedConversationId && resolvedConversationId !== activeConversationId) {
+      setActiveConversationId(resolvedConversationId);
+      onConversationChanged?.(resolvedConversationId);
+    }
     // Append an execution log system message.
     const summary =
       typeof (res.value.outcome.result as { message?: unknown })?.message === "string"
@@ -217,7 +222,7 @@ export function ChatContainer({
     ]);
     setPendingPreview((p) => (p ? { ...p, settled: true } : null));
     return res.value;
-  }, [pendingPreview, activeConversationId]);
+  }, [pendingPreview, activeConversationId, onConversationChanged]);
 
   const handleCancelPreview = useCallback(() => {
     setPendingPreview(null);
