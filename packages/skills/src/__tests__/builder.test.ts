@@ -72,9 +72,15 @@ describe("generateSkillPackage", () => {
     expect(manifest.provider).toBe("openai");
     expect(manifest.version).toMatch(/^\d+\.\d+\.\d+/);
 
-    // 4 つのビルトイン action がすべて含まれる
+    // X 向け最小セット 5 つが含まれる
     const names = manifest.actions.map((a) => a.name).sort();
-    expect(names).toEqual(["create_post", "list_accounts", "list_posts", "schedule_post"]);
+    expect(names).toEqual([
+      "inbox.list",
+      "post.create",
+      "post.list",
+      "post.schedule",
+      "schedule.list",
+    ]);
 
     // validateSkillManifest で通る
     expect(validateSkillManifest(manifest).valid).toBe(true);
@@ -87,9 +93,9 @@ describe("generateSkillPackage", () => {
       { platform: "x", llmProvider: "anthropic" },
     );
     const names = manifest.actions.map((a) => a.name).sort();
-    // textPost が無いので create_post / schedule_post は除外され、
-    // list_* のみ残る
-    expect(names).toEqual(["list_accounts", "list_posts"]);
+    // textPost が無いので post.create / post.schedule は除外され、
+    // read-only の一覧系のみ残る
+    expect(names).toEqual(["inbox.list", "post.list", "schedule.list"]);
   });
 
   it("throws when provider is not registered", () => {
@@ -142,7 +148,13 @@ describe("generateSkillPackage", () => {
 
   it("BUILTIN_ACTION_TEMPLATES contains expected core actions", () => {
     const names = BUILTIN_ACTION_TEMPLATES.map((t) => t.action.name).sort();
-    expect(names).toEqual(["create_post", "list_accounts", "list_posts", "schedule_post"]);
+    expect(names).toEqual([
+      "inbox.list",
+      "post.create",
+      "post.list",
+      "post.schedule",
+      "schedule.list",
+    ]);
   });
 });
 
@@ -159,7 +171,7 @@ describe("parseManifest", () => {
     description: "X skill",
     actions: [
       {
-        name: "list_posts",
+        name: "post.list",
         description: "List posts",
         parameters: { type: "object", properties: {}, required: [] },
         permissions: ["post:read"],
@@ -198,7 +210,7 @@ describe("validateManifest", () => {
       description: "ok",
       actions: [
         {
-          name: "list_posts",
+          name: "post.list",
           description: "list",
           parameters: { type: "object", properties: {}, required: [] },
           permissions: [],

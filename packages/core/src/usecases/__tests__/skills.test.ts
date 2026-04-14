@@ -64,7 +64,7 @@ function fakeManifest(platform: string, llmProvider: string): SkillManifestLike 
     description: "test",
     actions: [
       {
-        name: "list_posts",
+        name: "post.list",
         description: "list",
         parameters: { type: "object", properties: {}, required: [] },
         permissions: ["post:read"],

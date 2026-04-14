@@ -53,8 +53,11 @@ const PLATFORM_OPTIONS: { value: string; label: string; hint: string }[] = [
 
 const ACTION_OPTIONS: { value: string; label: string; hint: string }[] = [
   { value: "", label: "全体（デフォルト）", hint: "all" },
-  { value: "create_post", label: "投稿作成", hint: "create_post" },
-  { value: "schedule_post", label: "投稿予約", hint: "schedule_post" },
+  { value: "post.create", label: "投稿作成", hint: "post.create" },
+  { value: "post.schedule", label: "投稿予約", hint: "post.schedule" },
+  { value: "post.list", label: "投稿一覧", hint: "post.list" },
+  { value: "schedule.list", label: "予約一覧", hint: "schedule.list" },
+  { value: "inbox.list", label: "受信一覧", hint: "inbox.list" },
   { value: "reply", label: "返信", hint: "reply" },
   { value: "draft", label: "下書き", hint: "draft" },
   { value: "summarize", label: "要約", hint: "summarize" },

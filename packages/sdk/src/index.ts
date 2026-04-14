@@ -14,6 +14,7 @@ export type {
   SchedulesResource,
   UsageResource,
   BudgetResource,
+  AgentResource,
 } from "./client.js";
 
 // Types
@@ -51,6 +52,17 @@ export type {
   UsageRecord,
   MediaAttachment,
   Platform,
+  AgentExecutionMode,
+  AgentSkillIntent,
+  AgentSkillPreview,
+  AgentChatTextResponse,
+  AgentChatPreviewResponse,
+  AgentChatResponse,
+  AgentChatInput,
+  AgentExecuteInput,
+  AgentExecuteResponse,
+  AgentHistoryEntry,
+  AgentHistoryParams,
 } from "./types.js";
 
 // Errors

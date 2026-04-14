@@ -18,6 +18,7 @@
  *  - LLM 応答の skill intent 解析は JSON パース (v1 方針)。
  *  - ストリーミングは v1.5 以降で追加予定 (現在は非ストリーミング JSON 応答)。
  */
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import {
   ValidationError,
@@ -25,10 +26,11 @@ import {
   handleChatMessage,
   executeAgentAction,
   listAuditLogs,
-  listAccounts,
   listPosts,
   createPost,
   schedulePost,
+  listSchedules,
+  listThreads,
   type AgentActor,
   type AgentDryRunPreview,
   type AgentExecutionMode,
@@ -39,17 +41,22 @@ import {
   type Actor,
   type SkillPackage,
   type Permission,
-  type AccountUsecaseDeps,
   type PostUsecaseDeps,
   type ScheduleUsecaseDeps,
+  type InboxUsecaseDeps,
   type ListPostsFilters,
   type Post,
+  type ScheduledJob,
+  type ConversationThread,
+  type ThreadStatus,
 } from "@sns-agent/core";
 import type { Platform, Role } from "@sns-agent/config";
 import {
   DrizzleAccountRepository,
   DrizzleAuditLogRepository,
+  DrizzleConversationRepository,
   DrizzleLlmRouteRepository,
+  DrizzleMessageRepository,
   DrizzlePostRepository,
   DrizzleScheduledJobRepository,
   DrizzleSkillPackageRepository,
@@ -75,6 +82,29 @@ import { requirePermission } from "../middleware/rbac.js";
 import type { AppVariables } from "../types.js";
 
 const agent = new Hono<{ Variables: AppVariables }>();
+const TIMEZONE_AWARE_ISO_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+type AgentAccountResolutionStatus = "resolved" | "missing" | "not-found" | "ambiguous";
+
+interface AgentAccountCandidateSummary {
+  id: string;
+  displayName: string;
+  platform: Platform;
+}
+
+interface AgentAccountResolutionResult {
+  status: AgentAccountResolutionStatus;
+  input: string | null;
+  resolved: AgentAccountCandidateSummary | null;
+  candidates: AgentAccountCandidateSummary[];
+}
+
+interface AgentAccountLookup {
+  findByWorkspace(workspaceId: string): Promise<
+    Array<{ id: string; displayName: string; platform: Platform }>
+  >;
+}
 
 // ───────────────────────────────────────────
 // skill package 読み込み
@@ -178,6 +208,10 @@ function parseExecutionMode(raw: unknown): AgentExecutionMode {
   return "approval-required";
 }
 
+export function ensureConversationId(raw: unknown): string {
+  return typeof raw === "string" && raw.trim().length > 0 ? raw : `agent-${randomUUID()}`;
+}
+
 function toSkillMode(mode: AgentExecutionMode): SkillExecutionMode {
   return mode;
 }
@@ -204,14 +238,13 @@ function toSkillMode(mode: AgentExecutionMode): SkillExecutionMode {
  * 経由しても budgetPolicyRepo 未設定 → 予算チェックをスキップで動作する。
  */
 function buildSkillUsecaseDeps(db: DbClient): {
-  accountDeps: AccountUsecaseDeps;
   postDeps: PostUsecaseDeps;
   scheduleDeps: ScheduleUsecaseDeps;
+  inboxDeps: InboxUsecaseDeps;
 } {
   const encryptionKey =
     process.env.ENCRYPTION_KEY ||
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-  const callbackBaseUrl = `${process.env.WEB_URL || "http://localhost:3001"}/api/accounts/callback`;
 
   const accountRepo = new DrizzleAccountRepository(db);
   const postRepo = new DrizzlePostRepository(db);
@@ -228,20 +261,22 @@ function buildSkillUsecaseDeps(db: DbClient): {
     scheduledJobRepo,
   };
 
-  const accountDeps: AccountUsecaseDeps = {
-    accountRepo,
-    providers,
-    encryptionKey,
-    callbackBaseUrl,
-  };
-
   const scheduleDeps: ScheduleUsecaseDeps = {
     scheduledJobRepo,
     postRepo,
     postUsecaseDeps: postDeps,
   };
 
-  return { accountDeps, postDeps, scheduleDeps };
+  const inboxDeps: InboxUsecaseDeps = {
+    conversationRepo: new DrizzleConversationRepository(db),
+    messageRepo: new DrizzleMessageRepository(db),
+    accountRepo,
+    usageRepo,
+    providers,
+    encryptionKey,
+  };
+
+  return { postDeps, scheduleDeps, inboxDeps };
 }
 
 /**
@@ -253,38 +288,206 @@ function buildSkillUsecaseDeps(db: DbClient): {
  *
  * platform が args に含まれる場合はその platform に絞り込む。
  */
+function summarizeAccountCandidate(account: {
+  id: string;
+  displayName: string;
+  platform: Platform;
+}): AgentAccountCandidateSummary {
+  return {
+    id: account.id,
+    displayName: account.displayName,
+    platform: account.platform,
+  };
+}
+
+function buildAccountResolutionError(
+  resolution: AgentAccountResolutionResult,
+  platformFilter: Platform | null,
+): ValidationError {
+  if (resolution.status === "missing") {
+    return new ValidationError("accountName or socialAccountId is required");
+  }
+
+  if (resolution.status === "ambiguous") {
+    const candidateSummary = resolution.candidates
+      .map((candidate) => `${candidate.displayName} [${candidate.id}]`)
+      .join(", ");
+    return new ValidationError(
+      `SocialAccount is ambiguous for accountName="${resolution.input ?? ""}"${
+        platformFilter ? ` (platform=${platformFilter})` : ""
+      }`,
+      {
+        accountName: resolution.input,
+        platform: platformFilter,
+        candidates: resolution.candidates,
+        candidateSummary,
+      },
+    );
+  }
+
+  return new ValidationError(
+    `SocialAccount not found for accountName="${resolution.input ?? ""}"${
+      platformFilter ? ` (platform=${platformFilter})` : ""
+    }`,
+    {
+      accountName: resolution.input,
+      platform: platformFilter,
+    },
+  );
+}
+
+async function resolveAgentAccountReference(
+  accountRepo: AgentAccountLookup,
+  workspaceId: string,
+  args: Record<string, unknown>,
+  options: { defaultPlatform?: Platform } = {},
+): Promise<AgentAccountResolutionResult> {
+  const accountName = typeof args.accountName === "string" ? args.accountName.trim() : "";
+  const explicitId = typeof args.socialAccountId === "string" ? args.socialAccountId.trim() : "";
+  const input = explicitId || accountName || null;
+
+  if (!input) {
+    return {
+      status: "missing",
+      input: null,
+      resolved: null,
+      candidates: [],
+    };
+  }
+
+  const accounts = await accountRepo.findByWorkspace(workspaceId);
+  const platformFilter =
+    typeof args.platform === "string"
+      ? (args.platform as Platform)
+      : (options.defaultPlatform ?? null);
+  const candidates = platformFilter
+    ? accounts.filter((account) => account.platform === platformFilter)
+    : accounts;
+
+  if (explicitId) {
+    const matches = candidates.filter((account) => account.id === explicitId);
+    if (matches.length === 1) {
+      return {
+        status: "resolved",
+        input: explicitId,
+        resolved: summarizeAccountCandidate(matches[0]),
+        candidates: [summarizeAccountCandidate(matches[0])],
+      };
+    }
+
+    return {
+      status: "not-found",
+      input: explicitId,
+      resolved: null,
+      candidates: [],
+    };
+  }
+
+  const idMatches = candidates.filter((account) => account.id === accountName);
+  if (idMatches.length === 1) {
+    return {
+      status: "resolved",
+      input: accountName,
+      resolved: summarizeAccountCandidate(idMatches[0]),
+      candidates: [summarizeAccountCandidate(idMatches[0])],
+    };
+  }
+
+  if (idMatches.length > 1) {
+    return {
+      status: "ambiguous",
+      input: accountName,
+      resolved: null,
+      candidates: idMatches.map(summarizeAccountCandidate),
+    };
+  }
+
+  const nameMatches = candidates.filter((account) => account.displayName === accountName);
+  if (nameMatches.length === 1) {
+    return {
+      status: "resolved",
+      input: accountName,
+      resolved: summarizeAccountCandidate(nameMatches[0]),
+      candidates: [summarizeAccountCandidate(nameMatches[0])],
+    };
+  }
+
+  if (nameMatches.length > 1) {
+    return {
+      status: "ambiguous",
+      input: accountName,
+      resolved: null,
+      candidates: nameMatches.map(summarizeAccountCandidate),
+    };
+  }
+
+  return {
+    status: "not-found",
+    input: accountName,
+    resolved: null,
+    candidates: [],
+  };
+}
+
+export function normalizeAgentScheduledAt(raw: string): {
+  ok: boolean;
+  normalized: string | null;
+  reason: string | null;
+} {
+  const value = raw.trim();
+  if (value === "") {
+    return {
+      ok: false,
+      normalized: null,
+      reason: "scheduledAt is required (timezone-aware ISO 8601 string)",
+    };
+  }
+
+  if (!TIMEZONE_AWARE_ISO_PATTERN.test(value)) {
+    return {
+      ok: false,
+      normalized: null,
+      reason:
+        "scheduledAt must be a timezone-aware ISO 8601 string like 2026-04-15T09:00:00+09:00",
+    };
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return {
+      ok: false,
+      normalized: null,
+      reason: `Invalid scheduledAt: ${raw}`,
+    };
+  }
+
+  return {
+    ok: true,
+    normalized: parsed.toISOString(),
+    reason: null,
+  };
+}
+
 async function resolveSocialAccountId(
   deps: PostUsecaseDeps,
   workspaceId: string,
   args: Record<string, unknown>,
+  options: { defaultPlatform?: Platform } = {},
 ): Promise<string> {
-  const accountName = typeof args.accountName === "string" ? args.accountName : null;
-  const explicitId = typeof args.socialAccountId === "string" ? args.socialAccountId : null;
-
-  if (explicitId) return explicitId;
-  if (!accountName) {
-    throw new ValidationError("accountName or socialAccountId is required");
-  }
-
-  const accounts = await deps.accountRepo.findByWorkspace(workspaceId);
-  const platformFilter = typeof args.platform === "string" ? (args.platform as Platform) : null;
-  const candidates = platformFilter
-    ? accounts.filter((a) => a.platform === platformFilter)
-    : accounts;
-
-  // ID 一致
-  const byId = candidates.find((a) => a.id === accountName);
-  if (byId) return byId.id;
-
-  // displayName 完全一致
-  const byName = candidates.find((a) => a.displayName === accountName);
-  if (byName) return byName.id;
-
-  throw new ValidationError(
-    `SocialAccount not found for accountName="${accountName}"${
-      platformFilter ? ` (platform=${platformFilter})` : ""
-    }`,
+  const platformFilter =
+    typeof args.platform === "string"
+      ? (args.platform as Platform)
+      : (options.defaultPlatform ?? null);
+  const resolution = await resolveAgentAccountReference(
+    deps.accountRepo,
+    workspaceId,
+    args,
+    options,
   );
+  if (resolution.status !== "resolved" || !resolution.resolved) {
+    throw buildAccountResolutionError(resolution, platformFilter);
+  }
+  return resolution.resolved.id;
 }
 
 /**
@@ -324,41 +527,187 @@ function summarizePost(post: Post): Record<string, unknown> {
   };
 }
 
+function summarizeScheduledJob(job: ScheduledJob): Record<string, unknown> {
+  return {
+    id: job.id,
+    postId: job.postId,
+    scheduledAt: job.scheduledAt.toISOString(),
+    status: job.status,
+    attemptCount: job.attemptCount,
+    maxAttempts: job.maxAttempts,
+    lastError: job.lastError,
+    nextRetryAt: job.nextRetryAt ? job.nextRetryAt.toISOString() : null,
+    completedAt: job.completedAt ? job.completedAt.toISOString() : null,
+  };
+}
+
+function summarizeThread(thread: ConversationThread): Record<string, unknown> {
+  return {
+    id: thread.id,
+    socialAccountId: thread.socialAccountId,
+    platform: thread.platform,
+    participantName: thread.participantName,
+    channel: thread.channel,
+    status: thread.status,
+    lastMessageAt: thread.lastMessageAt ? thread.lastMessageAt.toISOString() : null,
+    createdAt: thread.createdAt.toISOString(),
+  };
+}
+
+function mapScheduleListFilters(
+  args: Record<string, unknown>,
+): Parameters<typeof listSchedules>[2] {
+  const filters: Parameters<typeof listSchedules>[2] = {};
+  if (typeof args.status === "string") {
+    filters.status = args.status as ScheduledJob["status"];
+  }
+  if (typeof args.limit === "number" && Number.isFinite(args.limit) && args.limit > 0) {
+    filters.limit = args.limit;
+  }
+  if (typeof args.from === "string") {
+    const from = new Date(args.from);
+    if (!Number.isNaN(from.getTime())) filters.from = from;
+  }
+  if (typeof args.to === "string") {
+    const to = new Date(args.to);
+    if (!Number.isNaN(to.getTime())) filters.to = to;
+  }
+  return filters;
+}
+
+function mapInboxListFilters(
+  args: Record<string, unknown>,
+): Parameters<typeof listThreads>[2] {
+  const filters: Parameters<typeof listThreads>[2] = { platform: "x" };
+  if (typeof args.status === "string") {
+    filters.status = args.status as ThreadStatus;
+  }
+  if (typeof args.limit === "number" && Number.isFinite(args.limit) && args.limit > 0) {
+    filters.limit = args.limit;
+  }
+  if (typeof args.offset === "number" && Number.isFinite(args.offset) && args.offset >= 0) {
+    filters.offset = args.offset;
+  }
+  return filters;
+}
+
+export async function enrichPreviewForChat(params: {
+  db: DbClient;
+  workspaceId: string;
+  intent: AgentSkillIntent;
+  preview: AgentDryRunPreview;
+}): Promise<AgentDryRunPreview> {
+  const { db, workspaceId, intent, preview } = params;
+  if (
+    preview.preview === null ||
+    typeof preview.preview !== "object" ||
+    Array.isArray(preview.preview)
+  ) {
+    return preview;
+  }
+
+  if (intent.actionName !== "post.create" && intent.actionName !== "post.schedule") {
+    return preview;
+  }
+
+  const payload = { ...preview.preview } as Record<string, unknown>;
+  const accountInput =
+    typeof intent.args.accountName === "string"
+      ? intent.args.accountName
+      : typeof intent.args.socialAccountId === "string"
+        ? intent.args.socialAccountId
+        : null;
+  const accountResolution = await resolveAgentAccountReference(
+    new DrizzleAccountRepository(db),
+    workspaceId,
+    intent.args,
+    {
+      defaultPlatform: "x",
+    },
+  );
+  const nextArgumentErrors = [...preview.argumentErrors];
+  let blockedReason = preview.blockedReason;
+  let allowed = preview.allowed;
+
+  payload.platform = "x";
+  payload.accountInput = accountInput ?? "(required)";
+  payload.accountResolutionStatus = accountResolution.status;
+  payload.targetAccountName =
+    accountResolution.resolved?.displayName ?? accountInput ?? "(required)";
+  payload.targetAccountId = accountResolution.resolved?.id ?? null;
+
+  if (accountResolution.status === "ambiguous") {
+    const candidates = accountResolution.candidates.map((candidate) => ({
+      id: candidate.id,
+      displayName: candidate.displayName,
+      platform: candidate.platform,
+    }));
+    payload.accountCandidates = candidates;
+    const error = `accountName matched multiple X accounts: ${candidates
+      .map((candidate) => `${candidate.displayName} [${candidate.id}]`)
+      .join(", ")}`;
+    if (!nextArgumentErrors.includes(error)) {
+      nextArgumentErrors.push(error);
+    }
+    blockedReason ??= "Target account is ambiguous. Clarify which X account to use.";
+    allowed = false;
+  } else if (accountResolution.status === "not-found" && accountInput) {
+    const error = `No X account matched "${accountInput}"`;
+    if (!nextArgumentErrors.includes(error)) {
+      nextArgumentErrors.push(error);
+    }
+    blockedReason ??= "Target account could not be resolved. Check the account name or ID.";
+    allowed = false;
+  }
+
+  if (intent.actionName === "post.schedule") {
+    const scheduledAtRaw =
+      typeof intent.args.scheduledAt === "string" ? intent.args.scheduledAt : null;
+    payload.scheduledAtInput = scheduledAtRaw ?? "(required)";
+    if (scheduledAtRaw) {
+      const normalized = normalizeAgentScheduledAt(scheduledAtRaw);
+      if (normalized.ok) {
+        payload.scheduledAt = scheduledAtRaw;
+        payload.scheduledAtIso = normalized.normalized;
+      } else if (normalized.reason) {
+        if (!nextArgumentErrors.includes(normalized.reason)) {
+          nextArgumentErrors.push(normalized.reason);
+        }
+        blockedReason ??= "Scheduled time is ambiguous. Use a timezone-aware ISO 8601 datetime.";
+        allowed = false;
+      }
+    }
+  }
+
+  return {
+    ...preview,
+    preview: payload,
+    argumentErrors: nextArgumentErrors,
+    blockedReason,
+    allowed: blockedReason === null && allowed,
+  };
+}
+
 /**
  * action 名から core use case を呼び出す invoker を生成する。
  *
  * 対応 action:
- *  - list_accounts  → listAccounts(accountDeps, workspaceId)
- *  - list_posts     → listPosts(postDeps, workspaceId, filters)
- *  - create_post    → createPost(postDeps, { ... })
- *  - schedule_post  → createPost(draft) → schedulePost(scheduleDeps, ...)
+ *  - post.list      → listPosts(postDeps, workspaceId, { platform: "x", ... })
+ *  - post.create    → createPost(postDeps, { ... })
+ *  - post.schedule  → createPost(draft) → schedulePost(scheduleDeps, ...)
+ *  - schedule.list  → listSchedules(scheduleDeps, workspaceId, ...)
+ *  - inbox.list     → listThreads(inboxDeps, workspaceId, { platform: "x", ... })
  *  - 未知の action  → { status: "unsupported_action", actionName }
  *
  * 戻り値は監査ログ / API レスポンスに載る Record<string, unknown>。
  */
 function buildSkillActionInvoker(db: DbClient): SkillActionInvoker {
-  const { accountDeps, postDeps, scheduleDeps } = buildSkillUsecaseDeps(db);
+  const { postDeps, scheduleDeps, inboxDeps } = buildSkillUsecaseDeps(db);
 
   return async ({ workspaceId, actor, actionName, args }) => {
     switch (actionName) {
-      case "list_accounts": {
-        const data = await listAccounts(accountDeps, workspaceId);
-        return {
-          status: "ok",
-          actionName,
-          count: data.length,
-          accounts: data.map((a) => ({
-            id: a.id,
-            platform: a.platform,
-            displayName: a.displayName,
-            status: a.status,
-            tokenExpiryWarning: a.tokenExpiryWarning,
-          })),
-        };
-      }
-
-      case "list_posts": {
-        const filters = mapListPostsFilters(args);
+      case "post.list": {
+        const filters = { ...mapListPostsFilters(args), platform: "x" as Platform };
         const result = await listPosts(postDeps, workspaceId, filters);
         return {
           status: "ok",
@@ -370,13 +719,15 @@ function buildSkillActionInvoker(db: DbClient): SkillActionInvoker {
         };
       }
 
-      case "create_post": {
+      case "post.create": {
         const text = typeof args.text === "string" ? args.text : null;
         if (!text) {
-          throw new ValidationError("text is required for create_post");
+          throw new ValidationError("text is required for post.create");
         }
         const publishNow = args.publishNow === true;
-        const socialAccountId = await resolveSocialAccountId(postDeps, workspaceId, args);
+        const socialAccountId = await resolveSocialAccountId(postDeps, workspaceId, args, {
+          defaultPlatform: "x",
+        });
 
         const created = await createPost(postDeps, {
           workspaceId,
@@ -394,21 +745,24 @@ function buildSkillActionInvoker(db: DbClient): SkillActionInvoker {
         };
       }
 
-      case "schedule_post": {
+      case "post.schedule": {
         const text = typeof args.text === "string" ? args.text : null;
         if (!text) {
-          throw new ValidationError("text is required for schedule_post");
+          throw new ValidationError("text is required for post.schedule");
         }
         const scheduledAtRaw = typeof args.scheduledAt === "string" ? args.scheduledAt : null;
         if (!scheduledAtRaw) {
           throw new ValidationError("scheduledAt is required (ISO 8601 string)");
         }
-        const scheduledAt = new Date(scheduledAtRaw);
-        if (Number.isNaN(scheduledAt.getTime())) {
-          throw new ValidationError(`Invalid scheduledAt: ${scheduledAtRaw}`);
+        const normalized = normalizeAgentScheduledAt(scheduledAtRaw);
+        if (!normalized.ok || !normalized.normalized) {
+          throw new ValidationError(normalized.reason ?? `Invalid scheduledAt: ${scheduledAtRaw}`);
         }
+        const scheduledAt = new Date(normalized.normalized);
 
-        const socialAccountId = await resolveSocialAccountId(postDeps, workspaceId, args);
+        const socialAccountId = await resolveSocialAccountId(postDeps, workspaceId, args, {
+          defaultPlatform: "x",
+        });
 
         // 1. draft を作成
         const draft = await createPost(postDeps, {
@@ -433,6 +787,41 @@ function buildSkillActionInvoker(db: DbClient): SkillActionInvoker {
           postId: draft.id,
           scheduledAt: job.scheduledAt.toISOString(),
           jobStatus: job.status,
+        };
+      }
+
+      case "schedule.list": {
+        const jobs = await listSchedules(scheduleDeps, workspaceId, mapScheduleListFilters(args));
+        const withPosts = await Promise.all(
+          jobs.map(async (job) => ({
+            job,
+            post: await postDeps.postRepo.findById(job.postId),
+          })),
+        );
+        const schedules = withPosts
+          .filter((item) => item.post?.workspaceId === workspaceId && item.post.platform === "x")
+          .map((item) => ({
+            ...summarizeScheduledJob(item.job),
+            post: item.post ? summarizePost(item.post) : null,
+          }));
+
+        return {
+          status: "ok",
+          actionName,
+          total: schedules.length,
+          schedules,
+        };
+      }
+
+      case "inbox.list": {
+        const result = await listThreads(inboxDeps, workspaceId, mapInboxListFilters(args));
+        return {
+          status: "ok",
+          actionName,
+          total: result.meta.total,
+          limit: result.meta.limit,
+          offset: result.meta.offset,
+          threads: result.data.map(summarizeThread),
         };
       }
 
@@ -577,6 +966,44 @@ function mapDryRunPreview(
   };
 }
 
+export function summarizeHistoryField(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    const serialized = value
+      .map((item) => summarizeHistoryField(item))
+      .filter((item): item is string => Boolean(item))
+      .join(", ");
+    return serialized.length > 0 ? serialized : null;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.message === "string" && record.message.trim().length > 0) {
+      return record.message;
+    }
+    if (
+      typeof record.actionName === "string" &&
+      typeof record.packageName === "string" &&
+      typeof record.mode === "string"
+    ) {
+      return `${record.actionName} (${record.packageName}, ${record.mode})`;
+    }
+    if (typeof record.decisionType === "string") {
+      return `decision=${record.decisionType}`;
+    }
+    try {
+      const serialized = JSON.stringify(record);
+      return serialized.length > 180 ? `${serialized.slice(0, 177)}...` : serialized;
+    } catch {
+      return "[unserializable]";
+    }
+  }
+  return String(value);
+}
+
 // ───────────────────────────────────────────
 // ヘルパー: actor 型変換
 // ───────────────────────────────────────────
@@ -604,10 +1031,7 @@ agent.post("/chat", requirePermission("chat:use"), async (c) => {
   if (typeof body.message !== "string" || body.message.trim() === "") {
     throw new ValidationError("message is required (non-empty string)");
   }
-  const conversationId =
-    typeof body.conversationId === "string" && body.conversationId.length > 0
-      ? body.conversationId
-      : null;
+  const conversationId = ensureConversationId(body.conversationId);
   const mode = parseExecutionMode(body.mode);
 
   const enabled = await loadEnabledSkillPackages(db, actor.workspaceId);
@@ -632,13 +1056,20 @@ agent.post("/chat", requirePermission("chat:use"), async (c) => {
     });
   }
 
+  const preview = await enrichPreviewForChat({
+    db,
+    workspaceId: actor.workspaceId,
+    intent: result.intent,
+    preview: result.preview,
+  });
+
   return c.json({
     data: {
       kind: "preview",
       conversationId: result.conversationId,
       content: result.content,
       intent: result.intent,
-      preview: result.preview,
+      preview,
     },
   });
 });
@@ -671,10 +1102,7 @@ agent.post("/execute", requirePermission("chat:use"), async (c) => {
     body.args !== null && typeof body.args === "object" && !Array.isArray(body.args)
       ? (body.args as Record<string, unknown>)
       : {};
-  const conversationId =
-    typeof body.conversationId === "string" && body.conversationId.length > 0
-      ? body.conversationId
-      : null;
+  const conversationId = ensureConversationId(body.conversationId);
   const mode = parseExecutionMode(body.mode);
 
   // 追加の権限チェック: action.permissions を actor role と突き合わせ
@@ -724,6 +1152,7 @@ agent.post("/execute", requirePermission("chat:use"), async (c) => {
     data: {
       outcome: result.outcome,
       auditLogId: result.auditLogId,
+      conversationId,
     },
   });
 });
@@ -768,8 +1197,8 @@ agent.get("/history", requirePermission("chat:use"), async (c) => {
       id: log.id,
       action: log.action,
       conversationId: log.resourceId,
-      inputSummary: log.inputSummary,
-      resultSummary: log.resultSummary,
+      inputSummary: summarizeHistoryField(log.inputSummary),
+      resultSummary: summarizeHistoryField(log.resultSummary),
       createdAt: log.createdAt.toISOString(),
     })),
     meta: {

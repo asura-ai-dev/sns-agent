@@ -1,8 +1,8 @@
 /**
- * Skill Action ビルトインテンプレート (Task 5003)
+ * Skill Action ビルトインテンプレート (Task 5003 / P3-1)
  *
- * 各 SNS プラットフォームの基本アクション定義（create_post, schedule_post,
- * list_posts, list_accounts 等）をテンプレートとして保持する。
+ * X 向けチャット操作の最小セットを中心に、manifest 駆動で skill action を
+ * 宣言するテンプレート群を保持する。
  *
  * design.md セクション 1.6 (skills 配布フォーマット) に従い、
  *  - name は `<namespace>.<verb>` 形式
@@ -40,10 +40,22 @@ const SCHEDULED_AT_PARAM: SkillJsonSchema = {
   minLength: 1,
 };
 
-const STATUS_FILTER_PARAM: SkillJsonSchema = {
+const POST_STATUS_FILTER_PARAM: SkillJsonSchema = {
   type: "string",
   description: "投稿ステータスフィルタ",
-  enum: ["draft", "scheduled", "published", "failed", "deleted"],
+  enum: ["draft", "scheduled", "publishing", "published", "failed", "deleted"],
+};
+
+const SCHEDULE_STATUS_FILTER_PARAM: SkillJsonSchema = {
+  type: "string",
+  description: "予約ジョブのステータスフィルタ",
+  enum: ["pending", "locked", "running", "succeeded", "failed", "retrying"],
+};
+
+const INBOX_STATUS_FILTER_PARAM: SkillJsonSchema = {
+  type: "string",
+  description: "受信スレッドの状態フィルタ",
+  enum: ["open", "closed", "archived"],
 };
 
 const LIMIT_PARAM: SkillJsonSchema = {
@@ -51,6 +63,19 @@ const LIMIT_PARAM: SkillJsonSchema = {
   description: "最大取得件数",
   minimum: 1,
   maximum: 200,
+};
+
+const OFFSET_PARAM: SkillJsonSchema = {
+  type: "integer",
+  description: "取得開始位置",
+  minimum: 0,
+  maximum: 10000,
+};
+
+const DATE_TIME_PARAM: SkillJsonSchema = {
+  type: "string",
+  description: "ISO 8601 形式の日時",
+  minLength: 1,
 };
 
 // ───────────────────────────────────────────
@@ -80,42 +105,27 @@ export interface SkillActionTemplate {
 }
 
 /**
- * X / LINE / Instagram で共通の最低限テンプレート集合。
+ * X 向けチャット操作でまず必要になる最小テンプレート集合。
  *
- * - text 投稿系: textPost capability
- * - 予約投稿:    textPost capability (予約は core 側のジョブで実現するため
- *               provider の nativeSchedule capability に依存しない)
- * - 一覧系:       常時 (DB 検索なので capability 不要)
+ * - post.create   : X に新規投稿を作る
+ * - post.schedule : X に予約投稿を作る
+ * - post.list     : X 投稿一覧を見る
+ * - schedule.list : X の予約一覧を見る
+ * - inbox.list    : X の受信スレッド一覧を見る
+ *
+ * 投稿/予約作成は textPost capability を前提にし、
+ * 一覧系は DB 検索のため capability 不要で採用できる。
  */
 export const BUILTIN_ACTION_TEMPLATES: SkillActionTemplate[] = [
-  // ───── アカウント一覧 (全 platform 共通, capability 不要) ─────
+  // ───── 投稿一覧 (DB 検索のため capability 不要) ─────
   {
     action: {
-      name: "list_accounts",
-      description: "ワークスペースに接続済みの SNS アカウント一覧を取得する",
-      parameters: {
-        type: "object",
-        properties: {},
-        required: [],
-        additionalProperties: false,
-      },
-      permissions: ["account:read" as Permission],
-      requiredCapabilities: [],
-      readOnly: true,
-    },
-    capabilityKeys: [],
-    platforms: ["x", "line", "instagram"],
-  },
-
-  // ───── 投稿一覧 (全 platform 共通, capability 不要) ─────
-  {
-    action: {
-      name: "list_posts",
-      description: "投稿一覧を取得する。status / limit でフィルタできる",
+      name: "post.list",
+      description: "X の投稿一覧を取得する。status / limit で絞り込める",
       parameters: {
         type: "object",
         properties: {
-          status: STATUS_FILTER_PARAM,
+          status: POST_STATUS_FILTER_PARAM,
           limit: LIMIT_PARAM,
         },
         required: [],
@@ -132,8 +142,9 @@ export const BUILTIN_ACTION_TEMPLATES: SkillActionTemplate[] = [
   // ───── テキスト投稿作成 (textPost capability 必須) ─────
   {
     action: {
-      name: "create_post",
-      description: "新規テキスト投稿を作成する。publishNow=true なら即時投稿、false なら下書き保存",
+      name: "post.create",
+      description:
+        "X に新規テキスト投稿を作成する。publishNow=true なら即時投稿、false なら下書き保存",
       parameters: {
         type: "object",
         properties: {
@@ -158,8 +169,8 @@ export const BUILTIN_ACTION_TEMPLATES: SkillActionTemplate[] = [
   // ───── 予約投稿 (textPost capability 必須) ─────
   {
     action: {
-      name: "schedule_post",
-      description: "テキスト投稿を指定日時に予約投稿する",
+      name: "post.schedule",
+      description: "X のテキスト投稿を指定日時に予約投稿する",
       parameters: {
         type: "object",
         properties: {
@@ -176,5 +187,52 @@ export const BUILTIN_ACTION_TEMPLATES: SkillActionTemplate[] = [
     },
     capabilityKeys: ["textPost"],
     platforms: ["x", "line", "instagram"],
+  },
+
+  // ───── 予約一覧 (DB 検索のため capability 不要) ─────
+  {
+    action: {
+      name: "schedule.list",
+      description: "X の予約一覧を取得する。status / from / to / limit で絞り込める",
+      parameters: {
+        type: "object",
+        properties: {
+          status: SCHEDULE_STATUS_FILTER_PARAM,
+          from: DATE_TIME_PARAM,
+          to: DATE_TIME_PARAM,
+          limit: LIMIT_PARAM,
+        },
+        required: [],
+        additionalProperties: false,
+      },
+      permissions: ["schedule:read" as Permission],
+      requiredCapabilities: [],
+      readOnly: true,
+    },
+    capabilityKeys: [],
+    platforms: ["x", "line", "instagram"],
+  },
+
+  // ───── 受信一覧 (Phase 2 完了後に X で使う read-only skill) ─────
+  {
+    action: {
+      name: "inbox.list",
+      description: "X の受信スレッド一覧を取得する。status / limit / offset で絞り込める",
+      parameters: {
+        type: "object",
+        properties: {
+          status: INBOX_STATUS_FILTER_PARAM,
+          limit: LIMIT_PARAM,
+          offset: OFFSET_PARAM,
+        },
+        required: [],
+        additionalProperties: false,
+      },
+      permissions: ["inbox:read" as Permission],
+      requiredCapabilities: [],
+      readOnly: true,
+    },
+    capabilityKeys: [],
+    platforms: ["x"],
   },
 ];
