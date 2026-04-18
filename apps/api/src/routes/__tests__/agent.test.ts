@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type Database from "better-sqlite3";
 import {
   bindDatabaseUrl,
@@ -17,12 +16,21 @@ import {
 } from "../agent.js";
 
 let ctx: {
-  db: BetterSQLite3Database<Record<string, unknown>>;
+  db: ReturnType<typeof createTestDb>["db"];
   sqlite: Database.Database;
   dbPath: string;
   dbDir: string;
 };
 let seed: SeedResult;
+
+function expectStructuredPreview(
+  preview: ReturnType<typeof enrichPreviewForChat> extends Promise<infer T> ? T : never,
+): Record<string, unknown> {
+  expect(preview.preview).not.toBeNull();
+  expect(typeof preview.preview).toBe("object");
+  expect(Array.isArray(preview.preview)).toBe(false);
+  return preview.preview as Record<string, unknown>;
+}
 
 beforeAll(() => {
   ctx = createTestDb();
@@ -77,7 +85,7 @@ describe("agent route helpers", () => {
       },
     });
 
-    expect(preview.preview).toMatchObject({
+    expect(expectStructuredPreview(preview)).toMatchObject({
       platform: "x",
       accountInput: "Mock X Account",
       accountResolutionStatus: "resolved",
@@ -142,10 +150,10 @@ describe("agent route helpers", () => {
     expect(preview.argumentErrors).toEqual(
       expect.arrayContaining([expect.stringContaining("matched multiple X accounts")]),
     );
-    expect(preview.preview).toMatchObject({
+    expect(expectStructuredPreview(preview)).toMatchObject({
       accountResolutionStatus: "ambiguous",
     });
-    expect(preview.preview).toHaveProperty("accountCandidates");
+    expect(expectStructuredPreview(preview)).toHaveProperty("accountCandidates");
   });
 
   it("blocks preview when scheduledAt is missing timezone information", async () => {
@@ -187,7 +195,7 @@ describe("agent route helpers", () => {
     expect(preview.argumentErrors).toEqual(
       expect.arrayContaining([expect.stringContaining("timezone-aware ISO 8601")]),
     );
-    expect(preview.preview).toMatchObject({
+    expect(expectStructuredPreview(preview)).toMatchObject({
       scheduledAtInput: "2026-04-15T18:00:00",
     });
   });
@@ -202,8 +210,7 @@ describe("agent route helpers", () => {
     expect(normalizeAgentScheduledAt("2026-04-15T18:00:00")).toEqual({
       ok: false,
       normalized: null,
-      reason:
-        "scheduledAt must be a timezone-aware ISO 8601 string like 2026-04-15T09:00:00+09:00",
+      reason: "scheduledAt must be a timezone-aware ISO 8601 string like 2026-04-15T09:00:00+09:00",
     });
   });
 
@@ -301,7 +308,7 @@ describe("agent route helpers", () => {
       createdAt: new Date("2026-04-15T00:01:00Z"),
     });
 
-    expect(entry.resultSummary).toBe("{\"success\":false,\"error\":\"provider timeout\"}");
+    expect(entry.resultSummary).toBe('{"success":false,"error":"provider timeout"}');
     expect(entry.transcript.executionNote).toBe(
       "post.create の実行に失敗しました: provider timeout",
     );

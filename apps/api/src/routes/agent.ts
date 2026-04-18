@@ -102,9 +102,9 @@ interface AgentAccountResolutionResult {
 }
 
 interface AgentAccountLookup {
-  findByWorkspace(workspaceId: string): Promise<
-    Array<{ id: string; displayName: string; platform: Platform }>
-  >;
+  findByWorkspace(
+    workspaceId: string,
+  ): Promise<Array<{ id: string; displayName: string; platform: Platform }>>;
 }
 
 // ───────────────────────────────────────────
@@ -448,8 +448,7 @@ export function normalizeAgentScheduledAt(raw: string): {
     return {
       ok: false,
       normalized: null,
-      reason:
-        "scheduledAt must be a timezone-aware ISO 8601 string like 2026-04-15T09:00:00+09:00",
+      reason: "scheduledAt must be a timezone-aware ISO 8601 string like 2026-04-15T09:00:00+09:00",
     };
   }
 
@@ -576,9 +575,7 @@ function mapScheduleListFilters(
   return filters;
 }
 
-function mapInboxListFilters(
-  args: Record<string, unknown>,
-): Parameters<typeof listThreads>[2] {
+function mapInboxListFilters(args: Record<string, unknown>): Parameters<typeof listThreads>[2] {
   const filters: Parameters<typeof listThreads>[2] = { platform: "x" };
   if (typeof args.status === "string") {
     filters.status = args.status as ThreadStatus;
@@ -611,7 +608,7 @@ export async function enrichPreviewForChat(params: {
     return preview;
   }
 
-  const payload = { ...preview.preview } as Record<string, unknown>;
+  const payload = { ...(preview.preview as Record<string, unknown>) };
   const accountInput =
     typeof intent.args.accountName === "string"
       ? intent.args.accountName
@@ -681,9 +678,14 @@ export async function enrichPreviewForChat(params: {
   }
 
   return {
-    ...preview,
+    actionName: preview.actionName,
+    packageName: preview.packageName,
+    description: preview.description,
     preview: payload,
+    requiredPermissions: preview.requiredPermissions,
+    missingPermissions: preview.missingPermissions,
     argumentErrors: nextArgumentErrors,
+    mode: preview.mode,
     blockedReason,
     allowed: blockedReason === null && allowed,
   };
@@ -1066,7 +1068,9 @@ function buildExecutionHistoryNote(
         : typeof resultSummary?.message === "string"
           ? resultSummary.message
           : null;
-    return error ? `${actionName} の実行に失敗しました: ${error}` : `${actionName} の実行に失敗しました`;
+    return error
+      ? `${actionName} の実行に失敗しました: ${error}`
+      : `${actionName} の実行に失敗しました`;
   }
 
   const resultPayload = asHistoryRecord(resultSummary?.result);

@@ -57,9 +57,69 @@ const PROVIDER_CHOICES: { value: string; label: string }[] = [
   { value: "anthropic", label: "anthropic" },
 ];
 
+const PLATFORM_LABELS: Record<string, string> = {
+  x: "X",
+  line: "LINE",
+  instagram: "Instagram",
+  common: "共通",
+};
+
+const PROVIDER_LABELS: Record<string, string> = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  "post.create": "投稿を作る",
+  "post.schedule": "投稿を予約する",
+  "post.list": "投稿一覧を見る",
+  "schedule.list": "予約一覧を見る",
+  "inbox.list": "受信一覧を見る",
+};
+
+const PERMISSION_LABELS: Record<string, string> = {
+  "post:read": "投稿一覧の確認",
+  "post:create": "投稿の作成",
+  "schedule:read": "予約一覧の確認",
+  "schedule:create": "予約投稿の作成",
+  "inbox:read": "受信一覧の確認",
+};
+
+const CAPABILITY_LABELS: Record<string, string> = {
+  textPost: "テキスト投稿",
+  imagePost: "画像投稿",
+  videoPost: "動画投稿",
+  threadPost: "スレッド投稿",
+  directMessage: "DM",
+  commentReply: "返信",
+  broadcast: "一括配信",
+  nativeSchedule: "SNS 側の予約投稿",
+  usageApi: "使用量 API",
+};
+
 function getUiPlatform(value: string): UiPlatform | null {
   if (value === "x" || value === "line" || value === "instagram") return value;
   return null;
+}
+
+function describePlatform(value: string): string {
+  return PLATFORM_LABELS[value] ?? value;
+}
+
+function describeProvider(value: string): string {
+  return PROVIDER_LABELS[value] ?? value;
+}
+
+function describeAction(value: string): string {
+  return ACTION_LABELS[value] ?? value;
+}
+
+function describePermission(value: string): string {
+  return PERMISSION_LABELS[value] ?? value;
+}
+
+function describeCapability(value: string): string {
+  return CAPABILITY_LABELS[value] ?? value;
 }
 
 // ───────────────────────────────────────────
@@ -67,8 +127,11 @@ function getUiPlatform(value: string): UiPlatform | null {
 // ───────────────────────────────────────────
 
 function getApiBase(): string {
-  const env = (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_SNS_AGENT_API_URL) || "";
-  return env.replace(/\/+$/, "") || "http://localhost:3001";
+  const env =
+    (typeof process !== "undefined" &&
+      (process.env?.NEXT_PUBLIC_API_BASE_URL ?? process.env?.NEXT_PUBLIC_SNS_AGENT_API_URL)) ||
+    "";
+  return env.replace(/\/+$/, "");
 }
 
 async function apiFetch<T>(
@@ -78,6 +141,7 @@ async function apiFetch<T>(
 ): Promise<T> {
   const res = await fetch(`${getApiBase()}${path}`, {
     method,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(method !== "GET"
@@ -151,7 +215,7 @@ interface ManifestResponse {
 
 export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProps) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
+  const [isRefreshing, startTransition] = useTransition();
 
   const [packages, setPackages] = useState<SkillPackageDto[]>(initialPackages);
 
@@ -259,6 +323,10 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
               {packages.length} on file
             </span>
           </h2>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-base-content/65">
+            Skills は「AI に何をしてよいか」を定義する操作パッケージです。ここで有効化した
+            パッケージだけが、チャット画面から実行候補として使われます。
+          </p>
         </div>
         <button
           type="button"
@@ -271,10 +339,62 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
         </button>
       </div>
 
+      <section className="grid gap-3 lg:grid-cols-[1.35fr_1fr]">
+        <div className="rounded-box border border-base-content/15 bg-base-100 px-4 py-4">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-base-content/45">
+            how skills flow
+          </div>
+          <div className="mt-2 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-sm border border-base-content/15 bg-base-200/20 px-3 py-3">
+              <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-base-content/45">
+                1. 生成
+              </div>
+              <p className="mt-1 text-sm text-base-content/75">
+                Platform と AI 提供元を選び、その組み合わせに合う Skills を自動生成します。
+              </p>
+            </div>
+            <div className="rounded-sm border border-base-content/15 bg-base-200/20 px-3 py-3">
+              <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-base-content/45">
+                2. 有効化
+              </div>
+              <p className="mt-1 text-sm text-base-content/75">
+                トグルを ON にしたパッケージだけが Agent Gateway で使える状態になります。
+              </p>
+            </div>
+            <div className="rounded-sm border border-base-content/15 bg-base-200/20 px-3 py-3">
+              <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-base-content/45">
+                3. 実行
+              </div>
+              <p className="mt-1 text-sm text-base-content/75">
+                チャットからの指示は API と Usecase を通り、権限内の操作だけが実行されます。
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-box border border-dashed border-base-content/20 bg-base-100 px-4 py-4">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-base-content/45">
+            reading the screen
+          </div>
+          <ul className="mt-2 space-y-2 text-sm leading-relaxed text-base-content/70">
+            <li>Platform はどの SNS 向けの操作かを示します。</li>
+            <li>LLM Provider は、その Skills を前提にした AI 提供元です。</li>
+            <li>有効にしたものだけがチャットで候補になります。</li>
+          </ul>
+        </div>
+      </section>
+
       {isFallback && (
         <div className="flex items-start gap-2 rounded-sm border border-dashed border-warning/60 bg-warning/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.15em] text-[#7a4b00]">
           <Warning size={12} weight="bold" className="mt-0.5 shrink-0" />
           <span>回線オフライン · 生成・有効化は API 起動後に再試行してください</span>
+        </div>
+      )}
+
+      {isRefreshing && (
+        <div className="flex items-start gap-2 rounded-sm border border-info/30 bg-info/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.15em] text-info">
+          <ArrowsClockwise size={12} weight="bold" className="mt-0.5 shrink-0 animate-spin" />
+          <span>最新の Skills 状態に同期しています</span>
         </div>
       )}
 
@@ -368,13 +488,18 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
                         </span>
                       )}
                       <span className="font-mono text-[11px] uppercase tracking-[0.15em] text-base-content/80">
-                        {pkg.platform}
+                        {describePlatform(pkg.platform)}
                       </span>
                     </div>
                   </td>
                   {/* llm provider */}
-                  <td className="px-4 py-3 font-mono text-[11px] uppercase tracking-[0.15em] text-base-content/75">
-                    {pkg.llmProvider}
+                  <td className="px-4 py-3">
+                    <div className="font-mono text-[11px] uppercase tracking-[0.15em] text-base-content/75">
+                      {describeProvider(pkg.llmProvider)}
+                    </div>
+                    <div className="font-mono text-[9px] uppercase tracking-[0.15em] text-base-content/40">
+                      {pkg.llmProvider}
+                    </div>
                   </td>
                   {/* version */}
                   <td className="px-4 py-3">
@@ -476,15 +601,18 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
               <div className="flex items-start justify-between border-b border-base-content/25 px-6 py-4">
                 <div>
                   <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-base-content/45">
-                    capabilities · commission
+                    skills · generator
                   </div>
                   <h3
                     id="generate-modal-title"
                     className="mt-0.5 font-display text-2xl font-semibold text-base-content"
                     style={{ fontFamily: "'Fraunces', serif" }}
                   >
-                    Package Generator
+                    Skills パッケージを生成
                   </h3>
+                  <p className="mt-1 max-w-md text-sm leading-relaxed text-base-content/60">
+                    選んだ SNS と AI 提供元に合わせて、使える操作セットを自動で組み立てます。
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -556,6 +684,11 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
                   </div>
                 </div>
 
+                <div className="rounded-sm border border-dashed border-base-content/20 bg-base-200/30 px-3 py-3 text-sm leading-relaxed text-base-content/65">
+                  生成されたパッケージは、一覧に保存されたあとで個別に有効化できます。
+                  有効化するまでは、チャットからは使われません。
+                </div>
+
                 {generateError && (
                   <div className="flex items-start gap-2 rounded-sm border border-error/40 bg-error/10 px-3 py-2 font-mono text-[11px] text-error">
                     <ShieldWarning size={12} weight="bold" className="mt-0.5 shrink-0" />
@@ -623,7 +756,7 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
               <div className="flex items-start justify-between border-b border-base-content/25 px-6 py-4">
                 <div className="min-w-0">
                   <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-base-content/45">
-                    manifest · specimen sheet
+                    manifest · permission sheet
                   </div>
                   <h3
                     id="manifest-modal-title"
@@ -635,9 +768,9 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
                   <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-[0.15em] text-base-content/50">
                     <span>v{detailPkg.version}</span>
                     <span className="inline-block h-1 w-1 rounded-full bg-base-content/30" />
-                    <span>{detailPkg.platform}</span>
+                    <span>{describePlatform(detailPkg.platform)}</span>
                     <span className="inline-block h-1 w-1 rounded-full bg-base-content/30" />
-                    <span>{detailPkg.llmProvider}</span>
+                    <span>{describeProvider(detailPkg.llmProvider)}</span>
                     <span className="inline-block h-1 w-1 rounded-full bg-base-content/30" />
                     <span>{detailPkg.actionCount} actions</span>
                   </div>
@@ -668,11 +801,42 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
                 )}
                 {detailManifest && (
                   <div className="space-y-5">
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="rounded-sm border border-base-content/15 bg-base-200/20 px-3 py-3">
+                        <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-base-content/45">
+                          対象 SNS
+                        </div>
+                        <div className="mt-1 text-sm font-medium text-base-content/80">
+                          {describePlatform(detailManifest.platform)}
+                        </div>
+                      </div>
+                      <div className="rounded-sm border border-base-content/15 bg-base-200/20 px-3 py-3">
+                        <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-base-content/45">
+                          想定 AI
+                        </div>
+                        <div className="mt-1 text-sm font-medium text-base-content/80">
+                          {describeProvider(detailManifest.provider)}
+                        </div>
+                      </div>
+                      <div className="rounded-sm border border-base-content/15 bg-base-200/20 px-3 py-3">
+                        <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-base-content/45">
+                          使える操作数
+                        </div>
+                        <div className="mt-1 text-sm font-medium text-base-content/80">
+                          {detailManifest.actions.length} 件
+                        </div>
+                      </div>
+                    </div>
                     {detailManifest.description && (
                       <p className="text-sm leading-relaxed text-base-content/70">
                         {detailManifest.description}
                       </p>
                     )}
+                    <div className="rounded-sm border border-dashed border-base-content/20 bg-base-200/30 px-3 py-3 text-sm leading-relaxed text-base-content/65">
+                      このマニフェストは {"Web UI -> API -> Agent Gateway -> Skill Executor"}{" "}
+                      の流れで参照されます。ここに書かれたアクション、パラメーター、権限だけが AI
+                      の実行候補になります。
+                    </div>
                     <div>
                       <div className="mb-2 flex items-baseline justify-between">
                         <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-base-content/55">
@@ -693,6 +857,9 @@ export function SkillsManager({ initialPackages, isFallback }: SkillsManagerProp
                                 className="font-display text-lg font-semibold text-base-content"
                                 style={{ fontFamily: "'Fraunces', serif" }}
                               >
+                                {describeAction(action.name)}
+                              </div>
+                              <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-base-content/40">
                                 {action.name}
                               </div>
                               {action.readOnly && (
@@ -770,9 +937,10 @@ function ChipGroup({
             <span
               key={v}
               className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 font-mono text-[10px] ${chipCls}`}
+              title={label === "permissions" ? describePermission(v) : describeCapability(v)}
             >
               {icon}
-              {v}
+              {label === "permissions" ? describePermission(v) : describeCapability(v)}
             </span>
           ))}
         </div>
