@@ -155,6 +155,11 @@ describe("handleChatMessage", () => {
     expect(deps.dryRunInvoker).not.toHaveBeenCalled();
     expect(auditRepo.logs).toHaveLength(1);
     expect(auditRepo.logs[0].action).toBe("agent.chat");
+    expect(auditRepo.logs[0].inputSummary).toMatchObject({ message: "hi" });
+    expect(auditRepo.logs[0].resultSummary).toMatchObject({
+      decisionType: "text",
+      content: "hello!",
+    });
   });
 
   it("returns preview kind when LLM replies with skill intent", async () => {
@@ -182,6 +187,11 @@ describe("handleChatMessage", () => {
       expect(result.intent).toEqual(intent);
     }
     expect(deps.dryRunInvoker).toHaveBeenCalledTimes(1);
+    expect((deps.auditRepo as InMemoryAuditRepo).logs[0].resultSummary).toMatchObject({
+      decisionType: "skill",
+      content: JSON.stringify({ action: intent.actionName, args: intent.args }),
+      intent,
+    });
   });
 
   it("rejects empty message", async () => {

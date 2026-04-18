@@ -25,8 +25,10 @@ import { useCallback, useEffect, useState } from "react";
 import { ChatContainer } from "@/components/chat/ChatContainer";
 import { ConversationList } from "@/components/chat/ConversationList";
 import {
+  buildConversationMessageMap,
   fetchHistory,
   groupHistoryByConversation,
+  type ConversationMessage,
   type ConversationSummary,
 } from "@/components/chat/api";
 
@@ -34,6 +36,9 @@ type MobilePane = "cabinet" | "desk";
 
 export default function AgentsPage() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [conversationMessages, setConversationMessages] = useState<
+    Record<string, ConversationMessage[]>
+  >({});
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -45,9 +50,11 @@ export default function AgentsPage() {
     if (res.ok) {
       const grouped = groupHistoryByConversation(res.value);
       setConversations(grouped);
+      setConversationMessages(buildConversationMessageMap(res.value));
       setOffline(Boolean(res.isFallback));
     } else {
       setConversations([]);
+      setConversationMessages({});
       setOffline(true);
     }
     setLoading(false);
@@ -80,6 +87,7 @@ export default function AgentsPage() {
     conversations.findIndex((c) => c.id === activeId) >= 0
       ? conversations.findIndex((c) => c.id === activeId) + 1
       : conversations.length + 1;
+  const seedMessages = activeId ? (conversationMessages[activeId] ?? []) : [];
 
   return (
     <div className="-m-4 flex h-[calc(100vh-4rem)] min-h-0 overflow-hidden border-y border-base-content/15 bg-base-100 lg:-m-6 lg:h-[calc(100vh-4rem)]">
@@ -107,6 +115,7 @@ export default function AgentsPage() {
         <ChatContainer
           key={activeId ?? "new"}
           conversationId={activeId}
+          seedMessages={seedMessages}
           onConversationChanged={handleConversationChanged}
           onOpenCabinet={() => setMobilePane("cabinet")}
           editionNumber={editionNumber}
