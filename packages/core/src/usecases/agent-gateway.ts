@@ -207,6 +207,18 @@ export async function handleChatMessage(
     conversationId: input.conversationId ?? null,
   });
 
+  const resultSummary =
+    decision.type === "text"
+      ? {
+          decisionType: decision.type,
+          content: decision.content,
+        }
+      : {
+          decisionType: decision.type,
+          content: decision.content,
+          intent: decision.intent,
+        };
+
   // 監査: chat.send (LLM 呼び出し自体を記録)
   await safeRecordAudit(deps.auditRepo, {
     workspaceId: input.workspaceId,
@@ -216,7 +228,7 @@ export async function handleChatMessage(
     resourceType: "agent_conversation",
     resourceId: input.conversationId ?? null,
     inputSummary: { message: input.message, mode },
-    resultSummary: { decisionType: decision.type },
+    resultSummary,
   });
 
   if (decision.type === "text") {

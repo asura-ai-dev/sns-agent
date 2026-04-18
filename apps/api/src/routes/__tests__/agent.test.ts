@@ -9,6 +9,7 @@ import {
   type SeedResult,
 } from "../../__tests__/helpers/setup.js";
 import {
+  buildAgentHistoryEntry,
   enrichPreviewForChat,
   ensureConversationId,
   normalizeAgentScheduledAt,
@@ -220,5 +221,91 @@ describe("agent route helpers", () => {
         message: "予約を受け付けました",
       }),
     ).toBe("予約を受け付けました");
+  });
+
+  it("builds transcript fields for agent chat history entries", () => {
+    const entry = buildAgentHistoryEntry({
+      id: "log-chat-1",
+      workspaceId: seed.workspaceId,
+      actorId: seed.editorUserId,
+      actorType: "user",
+      action: "agent.chat",
+      resourceType: "agent_conversation",
+      resourceId: "conv-1",
+      platform: null,
+      socialAccountId: null,
+      inputSummary: {
+        message: "明日の朝に X 投稿を予約して",
+        mode: "approval-required",
+      },
+      resultSummary: {
+        decisionType: "skill",
+        content: "承知しました。予約プレビューを用意しました。",
+        intent: {
+          actionName: "post.schedule",
+          packageName: "sns-agent-x-openai",
+          args: {
+            accountName: "Mock X Account",
+            text: "朝の投稿",
+            scheduledAt: "2026-04-15T09:00:00+09:00",
+          },
+        },
+      },
+      estimatedCostUsd: null,
+      requestId: null,
+      createdAt: new Date("2026-04-15T00:00:00Z"),
+    });
+
+    expect(entry.inputSummary).toBe("明日の朝に X 投稿を予約して");
+    expect(entry.transcript).toEqual({
+      userMessage: "明日の朝に X 投稿を予約して",
+      assistantMessage: "承知しました。予約プレビューを用意しました。",
+      executionNote: null,
+      intent: {
+        actionName: "post.schedule",
+        packageName: "sns-agent-x-openai",
+        args: {
+          accountName: "Mock X Account",
+          text: "朝の投稿",
+          scheduledAt: "2026-04-15T09:00:00+09:00",
+        },
+      },
+    });
+  });
+
+  it("builds execution notes for failed agent actions", () => {
+    const entry = buildAgentHistoryEntry({
+      id: "log-exec-1",
+      workspaceId: seed.workspaceId,
+      actorId: seed.editorUserId,
+      actorType: "user",
+      action: "agent.execute.failed",
+      resourceType: "skill_action",
+      resourceId: "conv-1",
+      platform: null,
+      socialAccountId: null,
+      inputSummary: {
+        actionName: "post.create",
+        packageName: "sns-agent-x-openai",
+        args: {
+          text: "失敗する投稿",
+        },
+        mode: "approval-required",
+      },
+      resultSummary: {
+        success: false,
+        error: "provider timeout",
+      },
+      estimatedCostUsd: null,
+      requestId: null,
+      createdAt: new Date("2026-04-15T00:01:00Z"),
+    });
+
+    expect(entry.resultSummary).toBe("{\"success\":false,\"error\":\"provider timeout\"}");
+    expect(entry.transcript.executionNote).toBe(
+      "post.create の実行に失敗しました: provider timeout",
+    );
+    expect(entry.transcript.userMessage).toBeNull();
+    expect(entry.transcript.assistantMessage).toBeNull();
   });
 });

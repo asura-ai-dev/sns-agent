@@ -39,6 +39,7 @@ import {
   type AgentLlmDecision,
   type AgentSkillIntent,
   type Actor,
+  type AuditLog,
   type SkillPackage,
   type Permission,
   type PostUsecaseDeps,
@@ -1004,6 +1005,113 @@ export function summarizeHistoryField(value: unknown): string | null {
   return String(value);
 }
 
+export interface AgentHistoryTranscript {
+  userMessage: string | null;
+  assistantMessage: string | null;
+  executionNote: string | null;
+  intent: AgentSkillIntent | null;
+}
+
+export interface AgentHistoryEntry {
+  id: string;
+  action: string;
+  conversationId: string | null;
+  inputSummary: string | null;
+  resultSummary: string | null;
+  createdAt: string;
+  transcript: AgentHistoryTranscript;
+}
+
+function asHistoryRecord(value: unknown): Record<string, unknown> | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function parseHistoryIntent(value: unknown): AgentSkillIntent | null {
+  const record = asHistoryRecord(value);
+  if (!record) return null;
+
+  const actionName = typeof record.actionName === "string" ? record.actionName : null;
+  const packageName = typeof record.packageName === "string" ? record.packageName : null;
+  const args =
+    record.args !== null && typeof record.args === "object" && !Array.isArray(record.args)
+      ? (record.args as Record<string, unknown>)
+      : {};
+
+  if (!actionName || !packageName) {
+    return null;
+  }
+
+  return {
+    actionName,
+    packageName,
+    args,
+  };
+}
+
+function buildExecutionHistoryNote(
+  action: string,
+  inputSummary: Record<string, unknown> | null,
+  resultSummary: Record<string, unknown> | null,
+): string | null {
+  const actionName =
+    typeof inputSummary?.actionName === "string" ? inputSummary.actionName : "skill action";
+
+  if (action === "agent.execute.failed") {
+    const error =
+      typeof resultSummary?.error === "string"
+        ? resultSummary.error
+        : typeof resultSummary?.message === "string"
+          ? resultSummary.message
+          : null;
+    return error ? `${actionName} の実行に失敗しました: ${error}` : `${actionName} の実行に失敗しました`;
+  }
+
+  const resultPayload = asHistoryRecord(resultSummary?.result);
+  if (typeof resultPayload?.message === "string" && resultPayload.message.trim().length > 0) {
+    return resultPayload.message;
+  }
+
+  return `${actionName} を実行しました`;
+}
+
+export function buildAgentHistoryEntry(log: AuditLog): AgentHistoryEntry {
+  const inputRecord = asHistoryRecord(log.inputSummary);
+  const resultRecord = asHistoryRecord(log.resultSummary);
+
+  let userMessage: string | null = null;
+  let assistantMessage: string | null = null;
+  let executionNote: string | null = null;
+  let intent: AgentSkillIntent | null = null;
+
+  if (log.action === "agent.chat") {
+    userMessage = typeof inputRecord?.message === "string" ? inputRecord.message : null;
+    assistantMessage = typeof resultRecord?.content === "string" ? resultRecord.content : null;
+    intent = parseHistoryIntent(resultRecord?.intent);
+  }
+
+  if (log.action === "agent.execute" || log.action === "agent.execute.failed") {
+    executionNote = buildExecutionHistoryNote(log.action, inputRecord, resultRecord);
+  }
+
+  return {
+    id: log.id,
+    action: log.action,
+    conversationId: log.resourceId,
+    inputSummary: summarizeHistoryField(log.inputSummary),
+    resultSummary: summarizeHistoryField(log.resultSummary),
+    createdAt: log.createdAt.toISOString(),
+    transcript: {
+      userMessage,
+      assistantMessage,
+      executionNote,
+      intent,
+    },
+  };
+}
+
 // ───────────────────────────────────────────
 // ヘルパー: actor 型変換
 // ───────────────────────────────────────────
@@ -1193,14 +1301,7 @@ agent.get("/history", requirePermission("chat:use"), async (c) => {
   }
 
   return c.json({
-    data: entries.map((log) => ({
-      id: log.id,
-      action: log.action,
-      conversationId: log.resourceId,
-      inputSummary: summarizeHistoryField(log.inputSummary),
-      resultSummary: summarizeHistoryField(log.resultSummary),
-      createdAt: log.createdAt.toISOString(),
-    })),
+    data: entries.map(buildAgentHistoryEntry),
     meta: {
       page,
       limit,
