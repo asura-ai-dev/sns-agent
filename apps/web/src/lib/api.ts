@@ -54,12 +54,28 @@ function resolveSessionUserId(): string {
   return process.env.SNS_AGENT_SESSION_USER_ID ?? "user-owner-00000000";
 }
 
-function resolveAuthHeaders(): Record<string, string> {
+/**
+ * Dashboard / settings pages are operator-facing surfaces, so they should
+ * authenticate as the current session user first. The API middleware resolves
+ * `Authorization` before `X-Session-User-Id`; sending both would downgrade the
+ * request to the agent identity in local dev and trip RBAC on admin-only pages.
+ */
+function resolveOperatorHeaders(): Record<string, string> {
   const h: Record<string, string> = {};
+  const sessionUserId = resolveSessionUserId();
+  if (sessionUserId) {
+    h["X-Session-User-Id"] = sessionUserId;
+    return h;
+  }
   const apiKey = resolveApiKey();
-  if (apiKey) h["Authorization"] = `Bearer ${apiKey}`;
-  h["X-Session-User-Id"] = resolveSessionUserId();
+  if (apiKey) {
+    h["Authorization"] = `Bearer ${apiKey}`;
+  }
   return h;
+}
+
+function resolvePreferredApiKey(): string {
+  return resolveSessionUserId() ? "" : resolveApiKey();
 }
 
 // ───────────────────────────────────────────
@@ -76,7 +92,7 @@ export function getApiClient(): SnsAgentClient {
   if (cachedClient) return cachedClient;
   cachedClient = new SnsAgentClient({
     baseUrl: resolveBaseUrl(),
-    apiKey: resolveApiKey(),
+    apiKey: resolvePreferredApiKey(),
     sessionUserId: resolveSessionUserId(),
   });
   return cachedClient;
@@ -253,7 +269,7 @@ export function fetchLlmRoutesSafe(): Promise<FetchResult<LlmRouteDto[]>> {
     const res = await fetch(`${baseUrl}/api/llm/routes`, {
       method: "GET",
       headers: {
-        ...resolveAuthHeaders(),
+        ...resolveOperatorHeaders(),
       },
       cache: "no-store",
     });
@@ -292,7 +308,7 @@ export function fetchSkillPackagesSafe(): Promise<FetchResult<SkillPackageDto[]>
     const res = await fetch(`${baseUrl}/api/skills`, {
       method: "GET",
       headers: {
-        ...resolveAuthHeaders(),
+        ...resolveOperatorHeaders(),
       },
       cache: "no-store",
     });

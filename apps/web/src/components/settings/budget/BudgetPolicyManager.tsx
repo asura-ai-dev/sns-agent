@@ -123,9 +123,14 @@ function validateForm(form: FormState): string | null {
 // ───────────────────────────────────────────
 
 function getApiBase(): string {
-  // In the browser, default to the API dev port unless overridden.
-  const env = (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_SNS_AGENT_API_URL) || "";
-  return env.replace(/\/+$/, "") || "http://localhost:3001";
+  // Default to the Next.js relative `/api` path so middleware can attach the
+  // dev session header and forward to the Hono API. Allow explicit override
+  // for cross-origin setups.
+  const env =
+    (typeof process !== "undefined" &&
+      (process.env?.NEXT_PUBLIC_API_BASE_URL ?? process.env?.NEXT_PUBLIC_SNS_AGENT_API_URL)) ||
+    "";
+  return env.replace(/\/+$/, "");
 }
 
 async function apiFetch<T>(
@@ -135,6 +140,7 @@ async function apiFetch<T>(
 ): Promise<T> {
   const res = await fetch(`${getApiBase()}${path}`, {
     method,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       "X-Idempotency-Key":

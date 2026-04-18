@@ -27,7 +27,7 @@ export default async function LlmSettingsPage() {
       activeSlug="llm"
       eyebrow={SECTION_KICKERS.settingsLlm}
       title={MASTHEAD_TITLES.settingsLlm}
-      description=""
+      description="チャットや自動処理で使う AI を、用途ごとに切り替える設定画面です。どの SNS のどの操作に、どのモデルを使うかをここで決めます。"
     >
       <LlmRouteManager initialRoutes={routesRes.data} isFallback={routesRes.isFallback} />
     </SettingsShell>
