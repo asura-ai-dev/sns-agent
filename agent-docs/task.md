@@ -46,6 +46,7 @@ Phase 5 進捗:
 
 - [x] Web UI チャットで、会話一覧だけでなく過去会話の本文も再表示できるようにした
 - [x] Web UI で LLM ルーティング設定と Skills 管理を行い、どの AI をどの用途に使うか・AI に何を許可するかを画面で確認できるようにした
+- [x] Task 5007 Phase A として、OpenAI Codex / ChatGPT ログイン方式の credentials 保存基盤、status / disconnect API、設定画面の接続状態表示を追加した
 
 次にやること:
 

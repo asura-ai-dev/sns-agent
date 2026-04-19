@@ -11,6 +11,8 @@ import type {
   UsageRecord,
   BudgetPolicy,
   LlmRoute,
+  LlmProviderCredential,
+  LlmProviderCredentialProvider,
   AuditLog,
   ApprovalRequest,
   ApprovalStatus,
@@ -183,6 +185,23 @@ export interface LlmRouteRepository {
   create(route: Omit<LlmRoute, "id" | "createdAt" | "updatedAt">): Promise<LlmRoute>;
   update(id: string, data: Partial<LlmRoute>): Promise<LlmRoute>;
   delete(id: string): Promise<void>;
+}
+
+// ───────────────────────────────────────────
+// LlmProviderCredentialRepository
+// ───────────────────────────────────────────
+export interface LlmProviderCredentialRepository {
+  findByWorkspaceAndProvider(
+    workspaceId: string,
+    provider: LlmProviderCredentialProvider,
+  ): Promise<LlmProviderCredential | null>;
+  upsert(
+    credential: Omit<LlmProviderCredential, "id" | "createdAt" | "updatedAt">,
+  ): Promise<LlmProviderCredential>;
+  deleteByWorkspaceAndProvider(
+    workspaceId: string,
+    provider: LlmProviderCredentialProvider,
+  ): Promise<void>;
 }
 
 // ───────────────────────────────────────────

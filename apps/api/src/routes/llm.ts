@@ -13,9 +13,14 @@
  *  - fallback_provider + fallback_model はオプション
  */
 import { Hono } from "hono";
-import { ValidationError, NotFoundError } from "@sns-agent/core";
-import type { LlmRoute } from "@sns-agent/core";
-import { DrizzleLlmRouteRepository } from "@sns-agent/db";
+import {
+  ValidationError,
+  NotFoundError,
+  getLlmProviderStatus,
+  disconnectLlmProvider,
+} from "@sns-agent/core";
+import type { LlmRoute, LlmProviderStatusResult } from "@sns-agent/core";
+import { DrizzleLlmRouteRepository, DrizzleLlmProviderCredentialRepository } from "@sns-agent/db";
 import { requirePermission } from "../middleware/rbac.js";
 import type { AppVariables } from "../types.js";
 
@@ -40,6 +45,21 @@ function serializeRoute(route: LlmRoute): Record<string, unknown> {
     priority: route.priority,
     createdAt: route.createdAt.toISOString(),
     updatedAt: route.updatedAt.toISOString(),
+  };
+}
+
+function serializeProviderStatus(status: LlmProviderStatusResult): Record<string, unknown> {
+  return {
+    provider: status.provider,
+    status: status.status,
+    connected: status.connected,
+    requiresReauth: status.requiresReauth,
+    reason: status.reason,
+    expiresAt: status.expiresAt ? status.expiresAt.toISOString() : null,
+    scopes: status.scopes,
+    subject: status.subject,
+    metadata: status.metadata,
+    updatedAt: status.updatedAt ? status.updatedAt.toISOString() : null,
   };
 }
 
@@ -179,6 +199,34 @@ function validateUpdateBody(body: unknown): Partial<LlmRoute> {
   }
   return patch;
 }
+
+// ───────────────────────────────────────────
+// GET /api/llm/providers/openai-codex/status - 接続状態
+// ───────────────────────────────────────────
+llm.get("/providers/openai-codex/status", requirePermission("llm:read"), async (c) => {
+  const actor = c.get("actor");
+  const db = c.get("db");
+  const credentialRepo = new DrizzleLlmProviderCredentialRepository(db);
+  const status = await getLlmProviderStatus(
+    { credentialRepo },
+    { workspaceId: actor.workspaceId, provider: "openai-codex" },
+  );
+  return c.json({ data: serializeProviderStatus(status) });
+});
+
+// ───────────────────────────────────────────
+// DELETE /api/llm/providers/openai-codex/disconnect - 接続解除
+// ───────────────────────────────────────────
+llm.delete("/providers/openai-codex/disconnect", requirePermission("llm:manage"), async (c) => {
+  const actor = c.get("actor");
+  const db = c.get("db");
+  const credentialRepo = new DrizzleLlmProviderCredentialRepository(db);
+  const status = await disconnectLlmProvider(
+    { credentialRepo },
+    { workspaceId: actor.workspaceId, provider: "openai-codex" },
+  );
+  return c.json({ data: serializeProviderStatus(status) });
+});
 
 // ───────────────────────────────────────────
 // GET /api/llm/routes - 一覧

@@ -14,6 +14,7 @@ export { messages } from "./messages.js";
 export { usageRecords } from "./usage-records.js";
 export { budgetPolicies } from "./budget-policies.js";
 export { llmRoutes } from "./llm-routes.js";
+export { llmProviderCredentials } from "./llm-provider-credentials.js";
 export { skillPackages } from "./skill-packages.js";
 export { approvalRequests } from "./approval-requests.js";
 export { auditLogs } from "./audit-logs.js";

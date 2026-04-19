@@ -66,6 +66,7 @@ const ACTION_OPTIONS: { value: string; label: string; hint: string }[] = [
 
 const PROVIDER_OPTIONS: { value: string; label: string }[] = [
   { value: "openai", label: "openai" },
+  { value: "openai-codex", label: "openai-codex" },
   { value: "anthropic", label: "anthropic" },
 ];
 
@@ -88,6 +89,7 @@ const ACTION_LABELS: Record<string, string> = {
 
 const PROVIDER_LABELS: Record<string, string> = {
   openai: "OpenAI",
+  "openai-codex": "OpenAI Codex",
   anthropic: "Anthropic",
 };
 

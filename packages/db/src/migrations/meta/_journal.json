@@ -8,6 +8,13 @@
       "when": 1775838344907,
       "tag": "0000_cynical_dakota_north",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1776600000000,
+      "tag": "0001_openai_codex_provider_credentials",
+      "breakpoints": true
     }
   ]
 }
