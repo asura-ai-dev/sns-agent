@@ -181,7 +181,7 @@
     {
       "id": "XHP-004",
       "title": "Harden scheduled post parity",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-1",
       "owner_role": "implementer",
