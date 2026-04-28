@@ -213,7 +213,7 @@
     {
       "id": "XHP-005",
       "title": "Implement engagement gate domain API and processor",
-      "status": "planned",
+      "status": "verified",
       "priority": "P0",
       "phase": "phase-2",
       "owner_role": "implementer",
