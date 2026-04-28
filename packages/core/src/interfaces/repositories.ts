@@ -129,6 +129,10 @@ export type EngagementGateUpdateInput = Partial<
     | "conditions"
     | "actionType"
     | "actionText"
+    | "lineHarnessUrl"
+    | "lineHarnessApiKeyRef"
+    | "lineHarnessTag"
+    | "lineHarnessScenario"
     | "lastReplySinceId"
   >
 >;
@@ -152,10 +156,25 @@ export interface EngagementGateDeliveryCreateResult {
   created: boolean;
 }
 
+export interface EngagementGateDeliveryConsumeResult {
+  delivery: EngagementGateDelivery;
+  consumed: boolean;
+}
+
 export interface EngagementGateDeliveryRepository {
   findByGate(gateId: string): Promise<EngagementGateDelivery[]>;
   findByGateAndUser(gateId: string, externalUserId: string): Promise<EngagementGateDelivery | null>;
+  findByGateAndUsername(gateId: string, username: string): Promise<EngagementGateDelivery | null>;
+  findByGateAndDeliveryToken(
+    gateId: string,
+    deliveryToken: string,
+  ): Promise<EngagementGateDelivery | null>;
   createOnce(input: EngagementGateDeliveryCreateInput): Promise<EngagementGateDeliveryCreateResult>;
+  consumeToken(
+    gateId: string,
+    deliveryToken: string,
+    consumedAt: Date,
+  ): Promise<EngagementGateDeliveryConsumeResult | null>;
 }
 
 // ───────────────────────────────────────────

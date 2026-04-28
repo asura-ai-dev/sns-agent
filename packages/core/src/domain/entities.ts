@@ -130,6 +130,10 @@ export interface EngagementGate {
   conditions: EngagementGateConditions | null;
   actionType: EngagementGateActionType;
   actionText: string | null;
+  lineHarnessUrl: string | null;
+  lineHarnessApiKeyRef: string | null;
+  lineHarnessTag: string | null;
+  lineHarnessScenario: string | null;
   lastReplySinceId: string | null;
   createdBy: string | null;
   createdAt: Date;
@@ -146,6 +150,8 @@ export interface EngagementGateDelivery {
   actionType: EngagementGateActionType;
   status: EngagementGateDeliveryStatus;
   responseExternalId: string | null;
+  deliveryToken: string;
+  consumedAt: Date | null;
   metadata: Record<string, unknown> | null;
   deliveredAt: Date;
   createdAt: Date;

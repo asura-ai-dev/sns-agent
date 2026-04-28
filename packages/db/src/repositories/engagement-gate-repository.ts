@@ -28,6 +28,10 @@ function rowToGate(row: typeof engagementGates.$inferSelect): EngagementGate {
     conditions: (row.conditions as EngagementGateConditions | null) ?? null,
     actionType: row.actionType,
     actionText: row.actionText,
+    lineHarnessUrl: row.lineHarnessUrl,
+    lineHarnessApiKeyRef: row.lineHarnessApiKeyRef,
+    lineHarnessTag: row.lineHarnessTag,
+    lineHarnessScenario: row.lineHarnessScenario,
     lastReplySinceId: row.lastReplySinceId,
     createdBy: row.createdBy,
     createdAt: row.createdAt,
@@ -46,10 +50,21 @@ function rowToDelivery(row: typeof engagementGateDeliveries.$inferSelect): Engag
     actionType: row.actionType,
     status: row.status,
     responseExternalId: row.responseExternalId,
+    deliveryToken: row.deliveryToken,
+    consumedAt: row.consumedAt,
     metadata: (row.metadata as Record<string, unknown> | null) ?? null,
     deliveredAt: row.deliveredAt,
     createdAt: row.createdAt,
   };
+}
+
+function normalizeUsername(username: string): string {
+  return username.trim().replace(/^@+/, "").toLowerCase();
+}
+
+function metadataUsername(delivery: EngagementGateDelivery): string | null {
+  const value = delivery.metadata?.username;
+  return typeof value === "string" && value.trim() ? normalizeUsername(value) : null;
 }
 
 export class DrizzleEngagementGateRepository implements EngagementGateRepository {
@@ -112,6 +127,10 @@ export class DrizzleEngagementGateRepository implements EngagementGateRepository
       conditions: input.conditions,
       actionType: input.actionType,
       actionText: input.actionText,
+      lineHarnessUrl: input.lineHarnessUrl,
+      lineHarnessApiKeyRef: input.lineHarnessApiKeyRef,
+      lineHarnessTag: input.lineHarnessTag,
+      lineHarnessScenario: input.lineHarnessScenario,
       lastReplySinceId: input.lastReplySinceId,
       createdBy: input.createdBy,
       createdAt: now,
@@ -170,6 +189,38 @@ export class DrizzleEngagementGateDeliveryRepository implements EngagementGateDe
     return rows[0] ? rowToDelivery(rows[0]) : null;
   }
 
+  async findByGateAndUsername(
+    gateId: string,
+    username: string,
+  ): Promise<EngagementGateDelivery | null> {
+    const normalized = normalizeUsername(username);
+    const deliveries = await this.findByGate(gateId);
+    return (
+      deliveries.find(
+        (delivery) =>
+          metadataUsername(delivery) === normalized ||
+          normalizeUsername(delivery.externalUserId) === normalized,
+      ) ?? null
+    );
+  }
+
+  async findByGateAndDeliveryToken(
+    gateId: string,
+    deliveryToken: string,
+  ): Promise<EngagementGateDelivery | null> {
+    const rows = await this.db
+      .select()
+      .from(engagementGateDeliveries)
+      .where(
+        and(
+          eq(engagementGateDeliveries.engagementGateId, gateId),
+          eq(engagementGateDeliveries.deliveryToken, deliveryToken),
+        ),
+      )
+      .limit(1);
+    return rows[0] ? rowToDelivery(rows[0]) : null;
+  }
+
   async createOnce(
     input: EngagementGateDeliveryCreateInput,
   ): Promise<EngagementGateDeliveryCreateResult> {
@@ -190,6 +241,8 @@ export class DrizzleEngagementGateDeliveryRepository implements EngagementGateDe
       actionType: input.actionType,
       status: input.status,
       responseExternalId: input.responseExternalId,
+      deliveryToken: input.deliveryToken,
+      consumedAt: input.consumedAt,
       metadata: input.metadata,
       deliveredAt: input.deliveredAt,
       createdAt: now,
@@ -202,5 +255,28 @@ export class DrizzleEngagementGateDeliveryRepository implements EngagementGateDe
       },
       created: true,
     };
+  }
+
+  async consumeToken(
+    gateId: string,
+    deliveryToken: string,
+    consumedAt: Date,
+  ): Promise<{ delivery: EngagementGateDelivery; consumed: boolean } | null> {
+    const existing = await this.findByGateAndDeliveryToken(gateId, deliveryToken);
+    if (!existing) return null;
+    if (existing.consumedAt) return { delivery: existing, consumed: false };
+
+    await this.db
+      .update(engagementGateDeliveries)
+      .set({ consumedAt })
+      .where(
+        and(
+          eq(engagementGateDeliveries.engagementGateId, gateId),
+          eq(engagementGateDeliveries.deliveryToken, deliveryToken),
+        ),
+      );
+
+    const updated = await this.findByGateAndDeliveryToken(gateId, deliveryToken);
+    return updated ? { delivery: updated, consumed: true } : null;
   }
 }

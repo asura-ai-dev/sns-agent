@@ -1,4 +1,5 @@
 import type { Platform } from "@sns-agent/config";
+import { randomUUID } from "node:crypto";
 import type {
   EngagementGate,
   EngagementGateActionType,
@@ -35,6 +36,10 @@ export interface CreateEngagementGateInput {
   conditions?: EngagementGateConditions | null;
   actionType: EngagementGateActionType;
   actionText?: string | null;
+  lineHarnessUrl?: string | null;
+  lineHarnessApiKeyRef?: string | null;
+  lineHarnessTag?: string | null;
+  lineHarnessScenario?: string | null;
   createdBy?: string | null;
 }
 
@@ -47,6 +52,10 @@ export interface UpdateEngagementGateInput {
   conditions?: EngagementGateConditions | null;
   actionType?: EngagementGateActionType;
   actionText?: string | null;
+  lineHarnessUrl?: string | null;
+  lineHarnessApiKeyRef?: string | null;
+  lineHarnessTag?: string | null;
+  lineHarnessScenario?: string | null;
 }
 
 export interface ProcessEngagementGateRepliesInput {
@@ -61,6 +70,45 @@ export interface ProcessEngagementGateRepliesResult {
   skippedIneligible: number;
   actionsSent: number;
   lastReplySinceIdsUpdated: number;
+}
+
+export interface VerifyEngagementGateInput {
+  workspaceId: string;
+  gateId: string;
+  username: string;
+}
+
+export interface VerifyEngagementGateResult {
+  gateId: string;
+  username: string;
+  eligible: boolean;
+  conditions: EngagementConditionResult;
+  delivery: {
+    id: string;
+    token: string;
+    consumedAt: Date | null;
+  } | null;
+  lineHarness: {
+    url: string | null;
+    apiKeyRef: string | null;
+    tag: string | null;
+    scenario: string | null;
+  };
+}
+
+export interface ConsumeEngagementGateDeliveryTokenInput {
+  workspaceId: string;
+  gateId: string;
+  deliveryToken: string;
+}
+
+export interface ConsumeEngagementGateDeliveryTokenResult {
+  consumed: boolean;
+  delivery: {
+    id: string;
+    deliveryToken: string;
+    consumedAt: Date | null;
+  };
 }
 
 async function loadAccount(
@@ -123,6 +171,41 @@ function conditionsPass(
 
 function withoutRequirements(): EngagementConditionResult {
   return { liked: true, reposted: true, followed: true };
+}
+
+function normalizeUsername(username: string): string {
+  return username.trim().replace(/^@+/, "").toLowerCase();
+}
+
+function optionalTrim(value: string | null | undefined): string | null {
+  const trimmed = value?.trim() ?? "";
+  return trimmed ? trimmed : null;
+}
+
+function createDeliveryToken(): string {
+  return `egt_${randomUUID()}`;
+}
+
+function conditionsFromMetadata(
+  metadata: Record<string, unknown> | null,
+): EngagementConditionResult {
+  const raw = metadata?.conditions;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return withoutRequirements();
+  const conditions = raw as Record<string, unknown>;
+  return {
+    liked: conditions.liked === true,
+    reposted: conditions.reposted === true,
+    followed: conditions.followed === true,
+  };
+}
+
+function lineHarnessForGate(gate: EngagementGate): VerifyEngagementGateResult["lineHarness"] {
+  return {
+    url: gate.lineHarnessUrl,
+    apiKeyRef: gate.lineHarnessApiKeyRef,
+    tag: gate.lineHarnessTag,
+    scenario: gate.lineHarnessScenario,
+  };
 }
 
 function renderMentionText(reply: EngagementReply, actionText: string | null): string {
@@ -191,6 +274,10 @@ export async function createEngagementGate(
     conditions: normalizeConditions(input.conditions),
     actionType: input.actionType,
     actionText: input.actionText?.trim() || null,
+    lineHarnessUrl: optionalTrim(input.lineHarnessUrl),
+    lineHarnessApiKeyRef: optionalTrim(input.lineHarnessApiKeyRef),
+    lineHarnessTag: optionalTrim(input.lineHarnessTag),
+    lineHarnessScenario: optionalTrim(input.lineHarnessScenario),
     lastReplySinceId: null,
     createdBy: input.createdBy ?? null,
   });
@@ -232,6 +319,14 @@ export async function updateEngagementGate(
   if (input.conditions !== undefined) patch.conditions = normalizeConditions(input.conditions);
   if (input.actionType !== undefined) patch.actionType = input.actionType;
   if (input.actionText !== undefined) patch.actionText = input.actionText?.trim() || null;
+  if (input.lineHarnessUrl !== undefined) patch.lineHarnessUrl = optionalTrim(input.lineHarnessUrl);
+  if (input.lineHarnessApiKeyRef !== undefined) {
+    patch.lineHarnessApiKeyRef = optionalTrim(input.lineHarnessApiKeyRef);
+  }
+  if (input.lineHarnessTag !== undefined) patch.lineHarnessTag = optionalTrim(input.lineHarnessTag);
+  if (input.lineHarnessScenario !== undefined) {
+    patch.lineHarnessScenario = optionalTrim(input.lineHarnessScenario);
+  }
   return deps.gateRepo.update(input.id, patch);
 }
 
@@ -317,7 +412,12 @@ export async function processEngagementGateReplies(
         actionType: gate.actionType,
         status: action.status,
         responseExternalId: action.responseExternalId,
-        metadata: { conditions: check },
+        deliveryToken: createDeliveryToken(),
+        consumedAt: null,
+        metadata: {
+          username: normalizeUsername(reply.username ?? reply.externalUserId),
+          conditions: check,
+        },
         deliveredAt: new Date(),
       });
       if (delivery.created) {
@@ -335,4 +435,125 @@ export async function processEngagementGateReplies(
   }
 
   return summary;
+}
+
+export async function verifyEngagementGate(
+  deps: EngagementGateUsecaseDeps,
+  input: VerifyEngagementGateInput,
+): Promise<VerifyEngagementGateResult> {
+  const gate = await getEngagementGate(deps, input.workspaceId, input.gateId);
+  const username = normalizeUsername(input.username);
+  if (!username) throw new ValidationError("username is required");
+
+  const existing = await deps.deliveryRepo.findByGateAndUsername(gate.id, username);
+  if (existing) {
+    const check = conditionsFromMetadata(existing.metadata);
+    return {
+      gateId: gate.id,
+      username,
+      eligible: conditionsPass(gate.conditions ?? null, check),
+      conditions: check,
+      delivery: {
+        id: existing.id,
+        token: existing.deliveryToken,
+        consumedAt: existing.consumedAt,
+      },
+      lineHarness: lineHarnessForGate(gate),
+    };
+  }
+
+  const account = await loadAccount(deps, gate.workspaceId, gate.socialAccountId);
+  if (account.status !== "active" || gate.status !== "active") {
+    return {
+      gateId: gate.id,
+      username,
+      eligible: false,
+      conditions: { liked: false, reposted: false, followed: false },
+      delivery: null,
+      lineHarness: lineHarnessForGate(gate),
+    };
+  }
+
+  const conditions = gate.conditions ?? null;
+  let check = withoutRequirements();
+  if (requiresConditionCheck(conditions)) {
+    const provider = getProvider(deps, account.platform);
+    if (!provider.checkEngagementConditions) {
+      check = { liked: false, reposted: false, followed: false };
+    } else {
+      const accountCredentials = decryptCredentials(
+        account.credentialsEncrypted,
+        deps.encryptionKey,
+      );
+      check = await provider.checkEngagementConditions({
+        accountCredentials,
+        triggerPostId: gate.triggerPostId,
+        externalUserId: username,
+        conditions: conditions ?? {},
+      });
+    }
+  }
+
+  const eligible = conditionsPass(conditions, check);
+  if (!eligible) {
+    return {
+      gateId: gate.id,
+      username,
+      eligible: false,
+      conditions: check,
+      delivery: null,
+      lineHarness: lineHarnessForGate(gate),
+    };
+  }
+
+  const created = await deps.deliveryRepo.createOnce({
+    workspaceId: gate.workspaceId,
+    engagementGateId: gate.id,
+    socialAccountId: gate.socialAccountId,
+    externalUserId: username,
+    externalReplyId: null,
+    actionType: gate.actionType,
+    status: "verified",
+    responseExternalId: null,
+    deliveryToken: createDeliveryToken(),
+    consumedAt: null,
+    metadata: { username, conditions: check },
+    deliveredAt: new Date(),
+  });
+
+  return {
+    gateId: gate.id,
+    username,
+    eligible: true,
+    conditions: check,
+    delivery: {
+      id: created.delivery.id,
+      token: created.delivery.deliveryToken,
+      consumedAt: created.delivery.consumedAt,
+    },
+    lineHarness: lineHarnessForGate(gate),
+  };
+}
+
+export async function consumeEngagementGateDeliveryToken(
+  deps: EngagementGateUsecaseDeps,
+  input: ConsumeEngagementGateDeliveryTokenInput,
+): Promise<ConsumeEngagementGateDeliveryTokenResult> {
+  await getEngagementGate(deps, input.workspaceId, input.gateId);
+  const deliveryToken = input.deliveryToken.trim();
+  if (!deliveryToken) throw new ValidationError("deliveryToken is required");
+
+  const result = await deps.deliveryRepo.consumeToken(input.gateId, deliveryToken, new Date());
+  if (!result) {
+    throw new NotFoundError("EngagementGateDelivery", deliveryToken);
+  }
+
+  return {
+    consumed: result.consumed,
+    delivery: {
+      id: result.delivery.id,
+      deliveryToken: result.delivery.deliveryToken,
+      consumedAt: result.delivery.consumedAt,
+    },
+  };
 }

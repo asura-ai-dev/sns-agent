@@ -11,8 +11,10 @@ import type { EngagementGate, SocialAccount } from "../../domain/entities.js";
 import type { SocialProvider } from "../../interfaces/social-provider.js";
 import { encrypt } from "../../domain/crypto.js";
 import {
+  consumeEngagementGateDeliveryToken,
   createEngagementGate,
   processEngagementGateReplies,
+  verifyEngagementGate,
   type EngagementGateUsecaseDeps,
 } from "../engagement-gates.js";
 
@@ -69,6 +71,10 @@ function buildGate(input: Partial<EngagementGate> = {}): EngagementGate {
     },
     actionType: "mention_post",
     actionText: "secret link",
+    lineHarnessUrl: null,
+    lineHarnessApiKeyRef: null,
+    lineHarnessTag: null,
+    lineHarnessScenario: null,
     lastReplySinceId: null,
     createdBy: "user-1",
     createdAt: now,
@@ -135,6 +141,17 @@ function mockDeliveryRepo(): EngagementGateDeliveryRepository & {
       [...rows.values()].filter((delivery) => delivery.engagementGateId === gateId),
     findByGateAndUser: async (gateId, externalUserId) =>
       rows.get(`${gateId}:${externalUserId}`) ?? null,
+    findByGateAndUsername: async (gateId, username) =>
+      [...rows.values()].find(
+        (delivery) =>
+          delivery.engagementGateId === gateId &&
+          (delivery.externalUserId === username || delivery.metadata?.username === username),
+      ) ?? null,
+    findByGateAndDeliveryToken: async (gateId, deliveryToken) =>
+      [...rows.values()].find(
+        (delivery) =>
+          delivery.engagementGateId === gateId && delivery.deliveryToken === deliveryToken,
+      ) ?? null,
     createOnce: async (input: EngagementGateDeliveryCreateInput) => {
       const key = `${input.engagementGateId}:${input.externalUserId}`;
       const existing = rows.get(key);
@@ -146,6 +163,17 @@ function mockDeliveryRepo(): EngagementGateDeliveryRepository & {
       };
       rows.set(key, delivery);
       return { delivery, created: true };
+    },
+    consumeToken: async (gateId, deliveryToken, consumedAt) => {
+      const existing = [...rows.values()].find(
+        (delivery) =>
+          delivery.engagementGateId === gateId && delivery.deliveryToken === deliveryToken,
+      );
+      if (!existing) return null;
+      if (existing.consumedAt) return { delivery: existing, consumed: false };
+      const updated = { ...existing, consumedAt };
+      rows.set(`${existing.engagementGateId}:${existing.externalUserId}`, updated);
+      return { delivery: updated, consumed: true };
     },
   };
 }
@@ -327,6 +355,103 @@ describe("engagement gate usecases", () => {
     expect([...verifyDeps.deliveryRepo.rows.values()][0]).toMatchObject({
       status: "verified",
       responseExternalId: null,
+    });
+  });
+
+  it("verifies a username and returns eligible conditions delivery token and LINE handoff", async () => {
+    const deps = buildDeps(
+      buildGate({
+        actionType: "verify_only",
+        actionText: null,
+        lineHarnessUrl: "https://line-harness.example/campaigns/gate-1",
+        lineHarnessApiKeyRef: "line-harness-prod",
+        lineHarnessTag: "launch",
+        lineHarnessScenario: "reward-a",
+      } as Partial<EngagementGate>),
+    );
+
+    const result = await verifyEngagementGate(deps, {
+      workspaceId: "ws-1",
+      gateId: "gate-1",
+      username: "@alice",
+    });
+
+    expect(result).toMatchObject({
+      gateId: "gate-1",
+      username: "alice",
+      eligible: true,
+      conditions: {
+        liked: true,
+        reposted: true,
+        followed: true,
+      },
+      delivery: {
+        consumedAt: null,
+      },
+      lineHarness: {
+        url: "https://line-harness.example/campaigns/gate-1",
+        apiKeyRef: "line-harness-prod",
+        tag: "launch",
+        scenario: "reward-a",
+      },
+    });
+    expect(result.delivery?.token).toEqual(expect.any(String));
+    expect(JSON.stringify(result)).not.toContain("lineHarnessApiKey");
+
+    const delivery = [...deps.deliveryRepo.rows.values()][0];
+    expect(delivery).toMatchObject({
+      engagementGateId: "gate-1",
+      externalUserId: "alice",
+      externalReplyId: null,
+      actionType: "verify_only",
+      status: "verified",
+      deliveryToken: result.delivery?.token,
+      consumedAt: null,
+      metadata: {
+        username: "alice",
+        conditions: {
+          liked: true,
+          reposted: true,
+          followed: true,
+        },
+      },
+    });
+  });
+
+  it("consumes delivery tokens idempotently for external reward redemption", async () => {
+    const deps = buildDeps(buildGate({ actionType: "verify_only", actionText: null }));
+    const verified = await verifyEngagementGate(deps, {
+      workspaceId: "ws-1",
+      gateId: "gate-1",
+      username: "alice",
+    });
+    const token = verified.delivery?.token;
+    expect(token).toEqual(expect.any(String));
+
+    const first = await consumeEngagementGateDeliveryToken(deps, {
+      workspaceId: "ws-1",
+      gateId: "gate-1",
+      deliveryToken: token ?? "",
+    });
+    const second = await consumeEngagementGateDeliveryToken(deps, {
+      workspaceId: "ws-1",
+      gateId: "gate-1",
+      deliveryToken: token ?? "",
+    });
+
+    expect(first).toMatchObject({
+      consumed: true,
+      delivery: {
+        deliveryToken: token,
+        consumedAt: expect.any(Date),
+      },
+    });
+    expect(second).toMatchObject({
+      consumed: false,
+      delivery: {
+        deliveryToken: token,
+        consumedAt: first.delivery.consumedAt,
+      },
     });
   });
 });

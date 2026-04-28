@@ -180,19 +180,25 @@ export type {
 } from "./usecases/tags.js";
 
 export {
+  consumeEngagementGateDeliveryToken,
   createEngagementGate,
   deleteEngagementGate,
   getEngagementGate,
   listEngagementGates,
   processEngagementGateReplies,
   updateEngagementGate,
+  verifyEngagementGate,
 } from "./usecases/engagement-gates.js";
 export type {
+  ConsumeEngagementGateDeliveryTokenInput,
+  ConsumeEngagementGateDeliveryTokenResult,
   CreateEngagementGateInput,
   EngagementGateUsecaseDeps,
   ProcessEngagementGateRepliesInput,
   ProcessEngagementGateRepliesResult,
   UpdateEngagementGateInput,
+  VerifyEngagementGateInput,
+  VerifyEngagementGateResult,
 } from "./usecases/engagement-gates.js";
 
 export {
