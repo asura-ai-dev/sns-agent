@@ -6,6 +6,7 @@ export type {
   User,
   AgentIdentity,
   SocialAccount,
+  Follower,
   ProviderCapabilities,
   MediaAttachment,
   PostProviderMetadata,

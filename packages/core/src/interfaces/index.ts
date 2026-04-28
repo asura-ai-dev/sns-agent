@@ -5,6 +5,11 @@
 // Repositories
 export type {
   AccountRepository,
+  FollowerRepository,
+  FollowerListFilters,
+  FollowerUpsertInput,
+  MarkMissingFollowersInput,
+  MarkMissingFollowingInput,
   PostRepository,
   PostListFilters,
   PostOrderBy,
@@ -47,6 +52,9 @@ export type {
   WebhookResult,
   WebhookEvent,
   RefreshResult,
+  ListFollowersInput,
+  FollowerProviderProfile,
+  FollowerListResult,
 } from "./social-provider.js";
 
 // JobQueue

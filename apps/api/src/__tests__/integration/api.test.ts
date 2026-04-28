@@ -209,6 +209,49 @@ describe("a. accounts flow", () => {
 });
 
 // ───────────────────────────────────────────
+// a2. フォロワー同期
+// ───────────────────────────────────────────
+describe("a2. followers sync flow", () => {
+  it("POST /api/followers/sync stores X followers and GET /api/followers lists them", async () => {
+    const sync = await req("POST", "/api/followers/sync", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 100,
+    });
+
+    expect(sync.status).toBe(200);
+    expect(sync.body.data).toMatchObject({
+      followerCount: 1,
+      followingCount: 2,
+      nextFollowersCursor: null,
+      nextFollowingCursor: null,
+    });
+
+    const listed = await req(
+      "GET",
+      `/api/followers?socialAccountId=${seed.socialAccountId}`,
+      seed.viewerApiKey,
+    );
+
+    expect(listed.status).toBe(200);
+    const data = listed.body.data as Array<Record<string, unknown>>;
+    expect(data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          externalUserId: "follower-sync-1",
+          isFollowed: true,
+          isFollowing: true,
+        }),
+        expect.objectContaining({
+          externalUserId: "following-sync-1",
+          isFollowed: false,
+          isFollowing: true,
+        }),
+      ]),
+    );
+  });
+});
+
+// ───────────────────────────────────────────
 // b. 投稿作成→公開フロー
 // ───────────────────────────────────────────
 describe("b. post draft→publish flow", () => {

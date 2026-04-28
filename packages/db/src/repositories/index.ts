@@ -19,3 +19,4 @@ export {
   DrizzleConversationRepository,
   DrizzleMessageRepository,
 } from "./conversation-repository.js";
+export { DrizzleFollowerRepository } from "./follower-repository.js";

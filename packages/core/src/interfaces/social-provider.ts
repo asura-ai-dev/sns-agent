@@ -169,6 +169,24 @@ export interface RefreshResult {
   error?: string;
 }
 
+export interface ListFollowersInput {
+  accountCredentials: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface FollowerProviderProfile {
+  externalUserId: string;
+  displayName: string | null;
+  username: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface FollowerListResult {
+  profiles: FollowerProviderProfile[];
+  nextCursor: string | null;
+}
+
 // ───────────────────────────────────────────
 // SocialProvider インターフェース
 // ───────────────────────────────────────────
@@ -200,4 +218,10 @@ export interface SocialProvider {
 
   /** トークン更新（対応プロバイダのみ） */
   refreshToken?(accountId: string): Promise<RefreshResult>;
+
+  /** フォロワー一覧取得（対応プロバイダのみ） */
+  listFollowers?(input: ListFollowersInput): Promise<FollowerListResult>;
+
+  /** フォロー中一覧取得（対応プロバイダのみ） */
+  listFollowing?(input: ListFollowersInput): Promise<FollowerListResult>;
 }

@@ -11,6 +11,7 @@ export type {
   User,
   AgentIdentity,
   SocialAccount,
+  Follower,
   ProviderCapabilities,
   MediaAttachment,
   PostProviderMetadata,
@@ -49,6 +50,11 @@ export { encrypt, decrypt } from "./domain/index.js";
 // Interfaces
 export type {
   AccountRepository,
+  FollowerRepository,
+  FollowerListFilters,
+  FollowerUpsertInput,
+  MarkMissingFollowersInput,
+  MarkMissingFollowingInput,
   PostRepository,
   PostListFilters,
   PostOrderBy,
@@ -87,6 +93,9 @@ export type {
   WebhookResult,
   WebhookEvent,
   RefreshResult,
+  ListFollowersInput,
+  FollowerProviderProfile,
+  FollowerListResult,
   JobQueue,
 } from "./interfaces/index.js";
 export { ProviderRegistry } from "./interfaces/index.js";
@@ -121,6 +130,14 @@ export {
   checkTokenExpiry,
 } from "./usecases/account.js";
 export type { AccountSummary, AccountUsecaseDeps, OAuthStatePayload } from "./usecases/account.js";
+
+export { listFollowers, syncFollowersFromProvider } from "./usecases/followers.js";
+export type {
+  FollowerUsecaseDeps,
+  ListFollowersResult,
+  SyncFollowersFromProviderInput,
+  SyncFollowersFromProviderResult,
+} from "./usecases/followers.js";
 
 export {
   createPost,

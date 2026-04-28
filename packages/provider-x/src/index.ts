@@ -24,6 +24,8 @@ import type {
   MessageListResult,
   SendReplyInput,
   SendReplyResult,
+  ListFollowersInput,
+  FollowerListResult,
   RefreshResult,
 } from "@sns-agent/core";
 import { ProviderError } from "@sns-agent/core";
@@ -39,6 +41,7 @@ import {
 import { extractXRefreshToken, serializeXOAuth2Credentials } from "./credentials.js";
 import { validatePost, publishPost, deletePost } from "./post.js";
 import { listThreads, getMessages, sendReply as sendReplyImpl } from "./inbox.js";
+import { listFollowers, listFollowing } from "./followers.js";
 
 export interface XProviderOptions {
   /** X OAuth 2.0 クライアント設定 */
@@ -188,6 +191,14 @@ export class XProvider implements SocialProvider {
 
   async sendReply(input: SendReplyInput): Promise<SendReplyResult> {
     return sendReplyImpl(input, this.httpClient);
+  }
+
+  async listFollowers(input: ListFollowersInput): Promise<FollowerListResult> {
+    return listFollowers(input, this.httpClient);
+  }
+
+  async listFollowing(input: ListFollowersInput): Promise<FollowerListResult> {
+    return listFollowing(input, this.httpClient);
   }
 
   /**

@@ -412,7 +412,7 @@
     {
       "id": "XHP-011",
       "title": "Add X follower repository sync and segments",
-      "status": "planned",
+      "status": "verified",
       "priority": "P0",
       "phase": "phase-0",
       "owner_role": "implementer",

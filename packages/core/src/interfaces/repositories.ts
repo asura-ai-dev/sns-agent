@@ -20,6 +20,7 @@ import type {
   Message,
   ThreadStatus,
   SkillPackage,
+  Follower,
 } from "../domain/entities.js";
 import type { Platform } from "@sns-agent/config";
 
@@ -32,6 +33,45 @@ export interface AccountRepository {
   create(account: Omit<SocialAccount, "id" | "createdAt" | "updatedAt">): Promise<SocialAccount>;
   update(id: string, data: Partial<SocialAccount>): Promise<SocialAccount>;
   delete(id: string): Promise<void>;
+}
+
+// ───────────────────────────────────────────
+// FollowerRepository
+// ───────────────────────────────────────────
+
+export interface FollowerListFilters {
+  socialAccountId?: string;
+  isFollowed?: boolean;
+  isFollowing?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export type FollowerUpsertInput = Omit<Follower, "id" | "createdAt" | "updatedAt">;
+
+export interface MarkMissingFollowersInput {
+  workspaceId: string;
+  socialAccountId: string;
+  currentExternalUserIds: string[];
+  unfollowedAt: Date;
+}
+
+export interface MarkMissingFollowingInput {
+  workspaceId: string;
+  socialAccountId: string;
+  currentExternalUserIds: string[];
+  updatedAt: Date;
+}
+
+export interface FollowerRepository {
+  findByWorkspace(workspaceId: string, filters?: FollowerListFilters): Promise<Follower[]>;
+  findByAccountAndExternalUser(
+    socialAccountId: string,
+    externalUserId: string,
+  ): Promise<Follower | null>;
+  upsert(follower: FollowerUpsertInput): Promise<Follower>;
+  markMissingFollowersUnfollowed(input: MarkMissingFollowersInput): Promise<number>;
+  markMissingFollowingInactive(input: MarkMissingFollowingInput): Promise<number>;
 }
 
 // ───────────────────────────────────────────

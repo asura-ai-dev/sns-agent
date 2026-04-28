@@ -72,6 +72,27 @@ export interface SocialAccount {
   updatedAt: Date;
 }
 
+// ───────────────────────────────────────────
+// Follower
+// ───────────────────────────────────────────
+
+export interface Follower {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  platform: Platform;
+  externalUserId: string;
+  displayName: string | null;
+  username: string | null;
+  isFollowing: boolean;
+  isFollowed: boolean;
+  unfollowedAt: Date | null;
+  metadata: Record<string, unknown> | null;
+  lastSeenAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 /** Provider が公開する能力セット */
 export interface ProviderCapabilities {
   textPost: boolean;

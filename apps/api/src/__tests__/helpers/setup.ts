@@ -40,6 +40,8 @@ import type {
   MessageListResult,
   SendReplyInput,
   SendReplyResult,
+  ListFollowersInput,
+  FollowerListResult,
 } from "@sns-agent/core";
 import type { Platform } from "@sns-agent/config";
 import { setProviderRegistry, resetProviderRegistry } from "../../providers.js";
@@ -231,6 +233,38 @@ export function createMockXProvider(): SocialProvider {
       return {
         success: true,
         externalMessageId: `mock-reply-${randomUUID()}`,
+      };
+    },
+    async listFollowers(_input: ListFollowersInput): Promise<FollowerListResult> {
+      return {
+        profiles: [
+          {
+            externalUserId: "follower-sync-1",
+            displayName: "Follower One",
+            username: "follower_one",
+            metadata: { verified: true },
+          },
+        ],
+        nextCursor: null,
+      };
+    },
+    async listFollowing(_input: ListFollowersInput): Promise<FollowerListResult> {
+      return {
+        profiles: [
+          {
+            externalUserId: "follower-sync-1",
+            displayName: "Follower One",
+            username: "follower_one",
+            metadata: { verified: true },
+          },
+          {
+            externalUserId: "following-sync-1",
+            displayName: "Following One",
+            username: "following_one",
+            metadata: null,
+          },
+        ],
+        nextCursor: null,
       };
     },
   };
