@@ -757,6 +757,7 @@ describe("executeJob", () => {
     const delayMs = result!.job.nextRetryAt!.getTime() - new Date("2026-04-10T00:00:00Z").getTime();
     expect(delayMs).toBe(RETRY_BACKOFF_SECONDS[0] * 1000);
     expect(result!.willRetry).toBe(true);
+    expect(result!.job.lastError).toMatch(/^retryable:/);
   });
 
   it("marks job failed after reaching max attempts", async () => {
@@ -871,6 +872,7 @@ describe("executeJob", () => {
     expect(result).not.toBeNull();
     expect(result!.job.status).toBe("failed");
     expect(result!.willRetry).toBe(false);
+    expect(result!.job.lastError).toMatch(/^terminal:/);
 
     expect(deps.auditRepo.logs[0]?.action).toBe("schedule.execution.failed");
     expect((deps.auditRepo.logs[0]?.resultSummary as { retryRule?: string }).retryRule).toBe(
