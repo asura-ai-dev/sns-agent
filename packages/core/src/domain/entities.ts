@@ -93,6 +93,16 @@ export interface Follower {
   updatedAt: Date;
 }
 
+export interface Tag {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  name: string;
+  color: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 /** Provider が公開する能力セット */
 export interface ProviderCapabilities {
   textPost: boolean;

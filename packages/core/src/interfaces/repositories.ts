@@ -21,6 +21,7 @@ import type {
   ThreadStatus,
   SkillPackage,
   Follower,
+  Tag,
 } from "../domain/entities.js";
 import type { Platform } from "@sns-agent/config";
 
@@ -41,6 +42,7 @@ export interface AccountRepository {
 
 export interface FollowerListFilters {
   socialAccountId?: string;
+  tagId?: string;
   isFollowed?: boolean;
   isFollowing?: boolean;
   limit?: number;
@@ -72,6 +74,34 @@ export interface FollowerRepository {
   upsert(follower: FollowerUpsertInput): Promise<Follower>;
   markMissingFollowersUnfollowed(input: MarkMissingFollowersInput): Promise<number>;
   markMissingFollowingInactive(input: MarkMissingFollowingInput): Promise<number>;
+}
+
+// ───────────────────────────────────────────
+// TagRepository
+// ───────────────────────────────────────────
+
+export interface TagListFilters {
+  socialAccountId?: string;
+}
+
+export type TagCreateInput = Omit<Tag, "id" | "createdAt" | "updatedAt">;
+export type TagUpdateInput = Partial<Pick<Tag, "name" | "color">>;
+
+export interface FollowerTagInput {
+  workspaceId: string;
+  socialAccountId: string;
+  followerId: string;
+  tagId: string;
+}
+
+export interface TagRepository {
+  findById(id: string): Promise<Tag | null>;
+  findByWorkspace(workspaceId: string, filters?: TagListFilters): Promise<Tag[]>;
+  create(input: TagCreateInput): Promise<Tag>;
+  update(id: string, data: TagUpdateInput): Promise<Tag>;
+  delete(id: string): Promise<void>;
+  attachToFollower(input: FollowerTagInput): Promise<void>;
+  detachFromFollower(input: FollowerTagInput): Promise<void>;
 }
 
 // ───────────────────────────────────────────

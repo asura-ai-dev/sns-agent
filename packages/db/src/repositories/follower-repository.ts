@@ -9,6 +9,7 @@ import type {
   MarkMissingFollowingInput,
 } from "@sns-agent/core";
 import { followers } from "../schema/followers.js";
+import { followerTags } from "../schema/tags.js";
 import type { DbClient } from "../client.js";
 
 function rowToEntity(row: typeof followers.$inferSelect): Follower {
@@ -38,6 +39,19 @@ export class DrizzleFollowerRepository implements FollowerRepository {
     filters: FollowerListFilters = {},
   ): Promise<Follower[]> {
     const conditions = [eq(followers.workspaceId, workspaceId)];
+    if (filters.tagId) {
+      const taggedRows = await this.db
+        .select({ followerId: followerTags.followerId })
+        .from(followerTags)
+        .where(eq(followerTags.tagId, filters.tagId));
+      if (taggedRows.length === 0) return [];
+      conditions.push(
+        inArray(
+          followers.id,
+          taggedRows.map((row) => row.followerId),
+        ),
+      );
+    }
     if (filters.socialAccountId) {
       conditions.push(eq(followers.socialAccountId, filters.socialAccountId));
     }
