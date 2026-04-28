@@ -19,6 +19,8 @@ Use these files first:
 
 ## Work Rules
 
+- Before making any code or documentation changes, switch to `dev`.
+- If the checkout is on `main`, do not edit there; run `git switch dev` first and update it from `origin/main` when needed.
 - Work from the `dev` branch or another non-`main` branch.
 - Prefer one `ready` XHP ticket at a time.
 - Preserve the generic SNS architecture; add X-specific behavior through provider, usecase, route, SDK, CLI, and UI extension points.
