@@ -249,6 +249,70 @@ describe("a2. followers sync flow", () => {
       ]),
     );
   });
+
+  it("creates follower tags and filters followers by tag", async () => {
+    const sync = await req("POST", "/api/followers/sync", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 100,
+    });
+    expect(sync.status).toBe(200);
+
+    const followers = await req(
+      "GET",
+      `/api/followers?socialAccountId=${seed.socialAccountId}`,
+      seed.viewerApiKey,
+    );
+    expect(followers.status).toBe(200);
+    const follower = (followers.body.data as Array<Record<string, unknown>>).find(
+      (item) => item.externalUserId === "follower-sync-1",
+    );
+    expect(follower?.id).toBeTruthy();
+
+    const createdTag = await req("POST", "/api/tags", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "  vip  ",
+      color: "#eab308",
+    });
+    expect(createdTag.status).toBe(201);
+    expect(createdTag.body.data).toMatchObject({
+      socialAccountId: seed.socialAccountId,
+      name: "vip",
+      color: "#eab308",
+    });
+    const tagId = (createdTag.body.data as { id: string }).id;
+
+    const attached = await req(
+      "POST",
+      `/api/followers/${String(follower?.id)}/tags/${tagId}`,
+      seed.editorApiKey,
+      { socialAccountId: seed.socialAccountId },
+    );
+    expect(attached.status).toBe(200);
+
+    const filtered = await req(
+      "GET",
+      `/api/followers?socialAccountId=${seed.socialAccountId}&tagId=${tagId}`,
+      seed.viewerApiKey,
+    );
+    expect(filtered.status).toBe(200);
+    expect(filtered.body.data).toEqual([expect.objectContaining({ id: follower?.id })]);
+
+    const detached = await req(
+      "DELETE",
+      `/api/followers/${String(follower?.id)}/tags/${tagId}`,
+      seed.editorApiKey,
+      { socialAccountId: seed.socialAccountId },
+    );
+    expect(detached.status).toBe(200);
+
+    const afterDetach = await req(
+      "GET",
+      `/api/followers?socialAccountId=${seed.socialAccountId}&tagId=${tagId}`,
+      seed.viewerApiKey,
+    );
+    expect(afterDetach.status).toBe(200);
+    expect(afterDetach.body.data).toEqual([]);
+  });
 });
 
 // ───────────────────────────────────────────

@@ -30,6 +30,7 @@ import {
   webhooks,
   inbox,
   followers,
+  tags,
 } from "./routes/index.js";
 
 const app = new Hono<{ Variables: AppVariables }>();
@@ -70,6 +71,7 @@ app.use("/api/audit/*", authMiddleware);
 app.use("/api/approvals/*", authMiddleware);
 app.use("/api/inbox/*", authMiddleware);
 app.use("/api/followers/*", authMiddleware);
+app.use("/api/tags/*", authMiddleware);
 
 // 自動使用量記録ミドルウェア（認証後に適用。usageRepo を context に注入する）
 app.use("/api/posts/*", usageRecorderMiddleware);
@@ -77,6 +79,7 @@ app.use("/api/schedules/*", usageRecorderMiddleware);
 app.use("/api/usage/*", usageRecorderMiddleware);
 app.use("/api/inbox/*", usageRecorderMiddleware);
 app.use("/api/followers/*", usageRecorderMiddleware);
+app.use("/api/tags/*", usageRecorderMiddleware);
 
 // 自動監査記録ミドルウェア（認証後・書き込み系エンドポイントで適用）
 // POST / PATCH / PUT / DELETE の完了後に audit_logs テーブルへ追記する
@@ -90,6 +93,7 @@ app.use("/api/agent/*", auditMiddleware);
 app.use("/api/approvals/*", auditMiddleware);
 app.use("/api/inbox/*", auditMiddleware);
 app.use("/api/followers/*", auditMiddleware);
+app.use("/api/tags/*", auditMiddleware);
 
 // エラーハンドラ
 app.onError(errorHandler);
@@ -115,6 +119,7 @@ app.route("/api/approvals", approvals);
 app.route("/api/webhooks", webhooks);
 app.route("/api/inbox", inbox);
 app.route("/api/followers", followers);
+app.route("/api/tags", tags);
 
 // --- 404 ハンドラ ---
 app.notFound((c) => {

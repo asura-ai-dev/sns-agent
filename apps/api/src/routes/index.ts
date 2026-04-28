@@ -14,3 +14,4 @@ export { approvals } from "./approvals.js";
 export { webhooks } from "./webhooks.js";
 export { inbox } from "./inbox.js";
 export { followers } from "./followers.js";
+export { tags } from "./tags.js";
