@@ -239,14 +239,96 @@ export interface UpdateBudgetPolicyDto {
 }
 
 // ───────────────────────────────────────────
+// Engagement Gates
+// ───────────────────────────────────────────
+
+export interface EngagementGateConditionsDto {
+  requireLike?: boolean;
+  requireRepost?: boolean;
+  requireFollow?: boolean;
+}
+
+export type EngagementGateActionTypeDto = "mention_post" | "dm" | "verify_only";
+
+export interface EngagementGateDto {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  platform: Platform;
+  name: string;
+  status: "active" | "paused";
+  triggerType: "reply";
+  triggerPostId: string | null;
+  conditions: EngagementGateConditionsDto | null;
+  actionType: EngagementGateActionTypeDto;
+  actionText: string | null;
+  lineHarnessUrl: string | null;
+  lineHarnessApiKeyRef: string | null;
+  lineHarnessTag: string | null;
+  lineHarnessScenario: string | null;
+  lastReplySinceId: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateEngagementGateDto {
+  socialAccountId: string;
+  name: string;
+  triggerPostId?: string | null;
+  conditions?: EngagementGateConditionsDto | null;
+  actionType: EngagementGateActionTypeDto;
+  actionText?: string | null;
+  lineHarnessUrl?: string | null;
+  lineHarnessApiKeyRef?: string | null;
+  lineHarnessTag?: string | null;
+  lineHarnessScenario?: string | null;
+}
+
+export interface VerifyEngagementGateParams {
+  username: string;
+}
+
+export interface VerifyEngagementGateResultDto {
+  gateId: string;
+  username: string;
+  eligible: boolean;
+  conditions: {
+    liked: boolean;
+    reposted: boolean;
+    followed: boolean;
+  };
+  delivery: {
+    id: string;
+    token: string;
+    consumedAt: string | null;
+  } | null;
+  lineHarness: {
+    url: string | null;
+    apiKeyRef: string | null;
+    tag: string | null;
+    scenario: string | null;
+  };
+}
+
+export interface ConsumeEngagementGateDeliveryTokenDto {
+  deliveryToken: string;
+}
+
+export interface ConsumeEngagementGateDeliveryTokenResultDto {
+  consumed: boolean;
+  delivery: {
+    id: string;
+    deliveryToken: string;
+    consumedAt: string | null;
+  };
+}
+
+// ───────────────────────────────────────────
 // Agent Gateway
 // ───────────────────────────────────────────
 
-export type AgentExecutionMode =
-  | "read-only"
-  | "draft"
-  | "approval-required"
-  | "direct-execute";
+export type AgentExecutionMode = "read-only" | "draft" | "approval-required" | "direct-execute";
 
 export interface AgentSkillIntent {
   actionName: string;

@@ -14,6 +14,7 @@ export type {
   SchedulesResource,
   UsageResource,
   BudgetResource,
+  EngagementGatesResource,
   AgentResource,
 } from "./client.js";
 
@@ -45,6 +46,14 @@ export type {
   BudgetStatusDto,
   CreateBudgetPolicyDto,
   UpdateBudgetPolicyDto,
+  EngagementGateConditionsDto,
+  EngagementGateActionTypeDto,
+  EngagementGateDto,
+  CreateEngagementGateDto,
+  VerifyEngagementGateParams,
+  VerifyEngagementGateResultDto,
+  ConsumeEngagementGateDeliveryTokenDto,
+  ConsumeEngagementGateDeliveryTokenResultDto,
   SocialAccount,
   Post,
   PostProviderMetadata,

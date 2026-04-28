@@ -17,10 +17,14 @@ import type {
   ApiResponse,
   BudgetPolicyDto,
   BudgetStatusDto,
+  ConsumeEngagementGateDeliveryTokenDto,
+  ConsumeEngagementGateDeliveryTokenResultDto,
   ConnectAccountInput,
+  CreateEngagementGateDto,
   CreateBudgetPolicyDto,
   CreatePostInput,
   CreateScheduleInput,
+  EngagementGateDto,
   ListPostsParams,
   ListSchedulesParams,
   Post,
@@ -37,6 +41,8 @@ import type {
   UsageReportParams,
   UsageSummary,
   UsageSummaryReport,
+  VerifyEngagementGateParams,
+  VerifyEngagementGateResultDto,
 } from "./types.js";
 
 // ───────────────────────────────────────────
@@ -135,6 +141,18 @@ export interface BudgetResource {
   status(): Promise<ApiResponse<BudgetStatusDto[]>>;
 }
 
+export interface EngagementGatesResource {
+  create(input: CreateEngagementGateDto): Promise<ApiResponse<EngagementGateDto>>;
+  verify(
+    id: string,
+    params: VerifyEngagementGateParams,
+  ): Promise<ApiResponse<VerifyEngagementGateResultDto>>;
+  consumeDeliveryToken(
+    id: string,
+    input: ConsumeEngagementGateDeliveryTokenDto,
+  ): Promise<ApiResponse<ConsumeEngagementGateDeliveryTokenResultDto>>;
+}
+
 export interface AgentResource {
   chat(input: AgentChatInput): Promise<ApiResponse<AgentChatResponse>>;
   execute(input: AgentExecuteInput): Promise<ApiResponse<AgentExecuteResponse>>;
@@ -156,6 +174,7 @@ export class SnsAgentClient {
   public readonly schedules: SchedulesResource;
   public readonly usage: UsageResource;
   public readonly budget: BudgetResource;
+  public readonly engagementGates: EngagementGatesResource;
   public readonly agent: AgentResource;
 
   constructor(options: SnsAgentClientOptions) {
@@ -170,6 +189,7 @@ export class SnsAgentClient {
     this.schedules = this._buildSchedules();
     this.usage = this._buildUsage();
     this.budget = this._buildBudget();
+    this.engagementGates = this._buildEngagementGates();
     this.agent = this._buildAgent();
   }
 
@@ -351,11 +371,26 @@ export class SnsAgentClient {
     };
   }
 
+  private _buildEngagementGates(): EngagementGatesResource {
+    return {
+      create: (input) => this.post<ApiResponse<EngagementGateDto>>("/api/engagement-gates", input),
+      verify: (id, params) =>
+        this.get<ApiResponse<VerifyEngagementGateResultDto>>(
+          `/api/engagement-gates/${id}/verify`,
+          params,
+        ),
+      consumeDeliveryToken: (id, input) =>
+        this.post<ApiResponse<ConsumeEngagementGateDeliveryTokenResultDto>>(
+          `/api/engagement-gates/${id}/deliveries/consume`,
+          input,
+        ),
+    };
+  }
+
   private _buildAgent(): AgentResource {
     return {
       chat: (input) => this.post<ApiResponse<AgentChatResponse>>("/api/agent/chat", input),
-      execute: (input) =>
-        this.post<ApiResponse<AgentExecuteResponse>>("/api/agent/execute", input),
+      execute: (input) => this.post<ApiResponse<AgentExecuteResponse>>("/api/agent/execute", input),
       history: (params) =>
         this.get<ApiResponse<AgentHistoryEntry[]>>(
           "/api/agent/history",
