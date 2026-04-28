@@ -435,6 +435,98 @@ describe("a3. engagement gates flow", () => {
       skippedDuplicate: expect.any(Number),
     });
   });
+
+  it("verifies gate eligibility and consumes delivery tokens without leaking LINE secrets", async () => {
+    const created = await req("POST", "/api/engagement-gates", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "LINE handoff gate",
+      triggerPostId: "tweet-root-1",
+      conditions: {
+        requireLike: true,
+        requireRepost: true,
+        requireFollow: true,
+      },
+      actionType: "verify_only",
+      lineHarnessUrl: "https://line-harness.example/campaigns/gate",
+      lineHarnessApiKeyRef: "line-harness-prod",
+      lineHarnessApiKey: "super-secret-value",
+      lineHarnessTag: "launch",
+      lineHarnessScenario: "reward-a",
+    });
+
+    expect(created.status).toBe(201);
+    expect(created.body.data).toMatchObject({
+      lineHarnessUrl: "https://line-harness.example/campaigns/gate",
+      lineHarnessApiKeyRef: "line-harness-prod",
+      lineHarnessTag: "launch",
+      lineHarnessScenario: "reward-a",
+    });
+    expect(JSON.stringify(created.body)).not.toContain("super-secret-value");
+    expect(created.body.data).not.toHaveProperty("lineHarnessApiKey");
+
+    const gateId = (created.body.data as { id: string }).id;
+    const verified = await req(
+      "GET",
+      `/api/engagement-gates/${gateId}/verify?username=@gate_user`,
+      seed.viewerApiKey,
+    );
+
+    expect(verified.status).toBe(200);
+    expect(verified.body.data).toMatchObject({
+      gateId,
+      username: "gate_user",
+      eligible: true,
+      conditions: {
+        liked: true,
+        reposted: true,
+        followed: true,
+      },
+      delivery: {
+        consumedAt: null,
+      },
+      lineHarness: {
+        url: "https://line-harness.example/campaigns/gate",
+        apiKeyRef: "line-harness-prod",
+        tag: "launch",
+        scenario: "reward-a",
+      },
+    });
+    const token = (verified.body.data as { delivery?: { token?: string } }).delivery?.token;
+    expect(token).toEqual(expect.any(String));
+    expect(JSON.stringify(verified.body)).not.toContain("super-secret-value");
+    expect(verified.body.data).not.toHaveProperty("lineHarnessApiKey");
+
+    const consumed = await req(
+      "POST",
+      `/api/engagement-gates/${gateId}/deliveries/consume`,
+      seed.editorApiKey,
+      { deliveryToken: token },
+    );
+    expect(consumed.status).toBe(200);
+    expect(consumed.body.data).toMatchObject({
+      consumed: true,
+      delivery: {
+        deliveryToken: token,
+        consumedAt: expect.any(String),
+      },
+    });
+
+    const consumedAgain = await req(
+      "POST",
+      `/api/engagement-gates/${gateId}/deliveries/consume`,
+      seed.editorApiKey,
+      { deliveryToken: token },
+    );
+    expect(consumedAgain.status).toBe(200);
+    expect(consumedAgain.body.data).toMatchObject({
+      consumed: false,
+      delivery: {
+        deliveryToken: token,
+        consumedAt: (consumed.body.data as { delivery: { consumedAt: string } }).delivery
+          .consumedAt,
+      },
+    });
+  });
 });
 
 // ───────────────────────────────────────────

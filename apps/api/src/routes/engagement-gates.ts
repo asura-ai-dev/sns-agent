@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import {
+  consumeEngagementGateDeliveryToken,
   createEngagementGate,
   deleteEngagementGate,
   getEngagementGate,
   listEngagementGates,
   processEngagementGateReplies,
   updateEngagementGate,
+  verifyEngagementGate,
   type EngagementGate,
   type EngagementGateActionType,
   type EngagementGateConditions,
@@ -65,6 +67,12 @@ function parseConditions(value: unknown): EngagementGateConditions | null | unde
   };
 }
 
+function parseNullableString(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return typeof value === "string" ? value : undefined;
+}
+
 function serializeGate(gate: EngagementGate): Record<string, unknown> {
   return {
     id: gate.id,
@@ -78,6 +86,10 @@ function serializeGate(gate: EngagementGate): Record<string, unknown> {
     conditions: gate.conditions,
     actionType: gate.actionType,
     actionText: gate.actionText,
+    lineHarnessUrl: gate.lineHarnessUrl,
+    lineHarnessApiKeyRef: gate.lineHarnessApiKeyRef,
+    lineHarnessTag: gate.lineHarnessTag,
+    lineHarnessScenario: gate.lineHarnessScenario,
     lastReplySinceId: gate.lastReplySinceId,
     createdBy: gate.createdBy,
     createdAt: gate.createdAt,
@@ -133,6 +145,10 @@ engagementGates.post("/", requirePermission("inbox:reply"), async (c) => {
     conditions: conditions ?? null,
     actionType,
     actionText: typeof body.actionText === "string" ? body.actionText : null,
+    lineHarnessUrl: parseNullableString(body.lineHarnessUrl) ?? null,
+    lineHarnessApiKeyRef: parseNullableString(body.lineHarnessApiKeyRef) ?? null,
+    lineHarnessTag: parseNullableString(body.lineHarnessTag) ?? null,
+    lineHarnessScenario: parseNullableString(body.lineHarnessScenario) ?? null,
     createdBy: actor.id,
   });
 
@@ -143,6 +159,41 @@ engagementGates.post("/process", requirePermission("inbox:reply"), async (c) => 
   const deps = buildDeps(c.get("db"));
   const body = await c.req.json<{ limit?: number }>().catch(() => ({}));
   const result = await processEngagementGateReplies(deps, { limit: body.limit });
+  return c.json({ data: result });
+});
+
+engagementGates.get("/:id/verify", requirePermission("inbox:read"), async (c) => {
+  const actor = c.get("actor");
+  const deps = buildDeps(c.get("db"));
+  const username = c.req.query("username");
+  if (!username) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "username is required" } }, 400);
+  }
+
+  const result = await verifyEngagementGate(deps, {
+    workspaceId: actor.workspaceId,
+    gateId: c.req.param("id"),
+    username,
+  });
+  return c.json({ data: result });
+});
+
+engagementGates.post("/:id/deliveries/consume", requirePermission("inbox:reply"), async (c) => {
+  const actor = c.get("actor");
+  const deps = buildDeps(c.get("db"));
+  const body = await c.req.json<Record<string, unknown>>();
+  if (typeof body.deliveryToken !== "string" || !body.deliveryToken.trim()) {
+    return c.json(
+      { error: { code: "VALIDATION_ERROR", message: "deliveryToken is required" } },
+      400,
+    );
+  }
+
+  const result = await consumeEngagementGateDeliveryToken(deps, {
+    workspaceId: actor.workspaceId,
+    gateId: c.req.param("id"),
+    deliveryToken: body.deliveryToken,
+  });
   return c.json({ data: result });
 });
 
@@ -188,6 +239,10 @@ engagementGates.patch("/:id", requirePermission("inbox:reply"), async (c) => {
         : body.actionText === null
           ? null
           : undefined,
+    lineHarnessUrl: parseNullableString(body.lineHarnessUrl),
+    lineHarnessApiKeyRef: parseNullableString(body.lineHarnessApiKeyRef),
+    lineHarnessTag: parseNullableString(body.lineHarnessTag),
+    lineHarnessScenario: parseNullableString(body.lineHarnessScenario),
   });
 
   return c.json({ data: serializeGate(updated) });
