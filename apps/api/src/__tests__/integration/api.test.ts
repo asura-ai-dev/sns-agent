@@ -106,6 +106,83 @@ async function publicReq(
 }
 
 // ───────────────────────────────────────────
+// 0. LLM provider credentials status (Task 5007 Phase A)
+// ───────────────────────────────────────────
+describe("0. openai-codex provider status", () => {
+  it("GET /api/llm/providers/openai-codex/status returns missing when not connected", async () => {
+    const res = await req("GET", "/api/llm/providers/openai-codex/status", seed.adminApiKey);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      provider: "openai-codex",
+      status: "missing",
+      connected: false,
+      requiresReauth: false,
+      reason: "not_connected",
+    });
+  });
+
+  it("GET /api/llm/providers/openai-codex/status returns connected credential metadata", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const expiresAt = now + 3600;
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO llm_provider_credentials (id, workspace_id, provider, status, access_token_encrypted, refresh_token_encrypted, expires_at, scopes, subject, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "llm-cred-openai-codex",
+        seed.workspaceId,
+        "openai-codex",
+        "connected",
+        "encrypted-access-token",
+        "encrypted-refresh-token",
+        expiresAt,
+        JSON.stringify(["codex"]),
+        "user@example.com",
+        JSON.stringify({ source: "integration-test" }),
+        now,
+        now,
+      );
+
+    const res = await req("GET", "/api/llm/providers/openai-codex/status", seed.adminApiKey);
+
+    expect(res.status).toBe(200);
+    const data = res.body.data as Record<string, unknown>;
+    expect(data).toMatchObject({
+      provider: "openai-codex",
+      status: "connected",
+      connected: true,
+      requiresReauth: false,
+      subject: "user@example.com",
+    });
+    expect(data.expiresAt).toBeTruthy();
+    expect(data.scopes).toEqual(["codex"]);
+  });
+
+  it("viewer cannot read llm provider status", async () => {
+    const res = await req("GET", "/api/llm/providers/openai-codex/status", seed.viewerApiKey);
+
+    expect(res.status).toBe(403);
+  });
+
+  it("DELETE /api/llm/providers/openai-codex/disconnect removes credentials", async () => {
+    const res = await req("DELETE", "/api/llm/providers/openai-codex/disconnect", seed.adminApiKey);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      provider: "openai-codex",
+      status: "missing",
+      connected: false,
+    });
+
+    const row = ctx.sqlite
+      .prepare("SELECT id FROM llm_provider_credentials WHERE workspace_id = ? AND provider = ?")
+      .get(seed.workspaceId, "openai-codex");
+    expect(row).toBeUndefined();
+  });
+});
+
+// ───────────────────────────────────────────
 // a. アカウント接続フロー (GET /api/accounts)
 // ───────────────────────────────────────────
 describe("a. accounts flow", () => {

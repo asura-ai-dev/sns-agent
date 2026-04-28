@@ -154,6 +154,8 @@ describe("agent route helpers", () => {
       accountResolutionStatus: "ambiguous",
     });
     expect(expectStructuredPreview(preview)).toHaveProperty("accountCandidates");
+
+    ctx.sqlite.prepare("DELETE FROM social_accounts WHERE id = ?").run("sa-test-x-duplicate");
   });
 
   it("blocks preview when scheduledAt is missing timezone information", async () => {

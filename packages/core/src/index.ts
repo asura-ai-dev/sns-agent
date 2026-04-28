@@ -30,6 +30,9 @@ export type {
   UsageRecord,
   BudgetPolicy,
   LlmRoute,
+  LlmProviderCredential,
+  LlmProviderCredentialProvider,
+  LlmProviderCredentialStatus,
   SkillPackage,
   ApprovalRequest,
   AuditLog,
@@ -54,6 +57,7 @@ export type {
   UsageAggregation,
   BudgetPolicyRepository,
   LlmRouteRepository,
+  LlmProviderCredentialRepository,
   SkillPackageRepository,
   AuditLogRepository,
   AuditLogFilterOptions,
@@ -215,6 +219,19 @@ export type {
   BudgetPolicyStatus,
   BudgetStatusResult,
 } from "./usecases/budget.js";
+
+export {
+  getLlmProviderCredential,
+  getLlmProviderStatus,
+  saveLlmProviderCredential,
+  disconnectLlmProvider,
+} from "./usecases/llm-provider-credentials.js";
+export type {
+  LlmProviderCredentialsDeps,
+  LlmProviderConnectionStatus,
+  LlmProviderStatusResult,
+  SaveLlmProviderCredentialInput,
+} from "./usecases/llm-provider-credentials.js";
 
 export { recordAudit, listAuditLogs, exportAuditLogs } from "./usecases/audit.js";
 export type {

@@ -276,6 +276,31 @@ export interface LlmRoute {
 }
 
 // ───────────────────────────────────────────
+// LLM Provider Credential
+// ───────────────────────────────────────────
+export type LlmProviderCredentialProvider = "openai-codex";
+export type LlmProviderCredentialStatus = "connected" | "expired" | "reauth_required";
+
+export interface LlmProviderCredential {
+  id: string;
+  workspaceId: string;
+  provider: LlmProviderCredentialProvider;
+  status: LlmProviderCredentialStatus;
+  /**
+   * Encrypted token material only. Raw OAuth tokens must be encrypted before
+   * they enter the repository layer.
+   */
+  accessTokenEncrypted: string;
+  refreshTokenEncrypted: string | null;
+  expiresAt: Date | null;
+  scopes: string[] | null;
+  subject: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ───────────────────────────────────────────
 // SkillPackage
 // ───────────────────────────────────────────
 export interface SkillPackage {

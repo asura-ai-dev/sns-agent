@@ -255,6 +255,21 @@ export interface LlmRouteDto {
   updatedAt: string;
 }
 
+export type LlmProviderConnectionStatus = "missing" | "connected" | "expired" | "reauth_required";
+
+export interface LlmProviderStatusDto {
+  provider: "openai-codex";
+  status: LlmProviderConnectionStatus;
+  connected: boolean;
+  requiresReauth: boolean;
+  reason: string;
+  expiresAt: string | null;
+  scopes: string[] | null;
+  subject: string | null;
+  metadata: Record<string, unknown> | null;
+  updatedAt: string | null;
+}
+
 /**
  * Raw fetch against the Hono API for `GET /api/llm/routes`.
  *
@@ -279,6 +294,37 @@ export function fetchLlmRoutesSafe(): Promise<FetchResult<LlmRouteDto[]>> {
     const body = (await res.json()) as { data?: LlmRouteDto[] };
     return body.data ?? [];
   }, []);
+}
+
+export function fetchOpenAiCodexStatusSafe(): Promise<FetchResult<LlmProviderStatusDto>> {
+  const fallback: LlmProviderStatusDto = {
+    provider: "openai-codex",
+    status: "missing",
+    connected: false,
+    requiresReauth: false,
+    reason: "api_unreachable",
+    expiresAt: null,
+    scopes: null,
+    subject: null,
+    metadata: null,
+    updatedAt: null,
+  };
+
+  return guard<LlmProviderStatusDto>(async () => {
+    const baseUrl = resolveBaseUrl();
+    const res = await fetch(`${baseUrl}/api/llm/providers/openai-codex/status`, {
+      method: "GET",
+      headers: {
+        ...resolveOperatorHeaders(),
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new Error(`openai-codex status fetch failed: HTTP ${res.status}`);
+    }
+    const body = (await res.json()) as { data?: LlmProviderStatusDto };
+    return body.data ?? fallback;
+  }, fallback);
 }
 
 // ───────────────────────────────────────────

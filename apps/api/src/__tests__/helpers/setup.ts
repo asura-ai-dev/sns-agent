@@ -11,7 +11,7 @@
  * - ProviderRegistry はモック（成功応答）で差し替える。外部 HTTP は一切行わない。
  * - LLM / Skills も同様にモックを差し込む（必要になった時点で拡張）。
  */
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -47,15 +47,15 @@ import { setProviderRegistry, resetProviderRegistry } from "../../providers.js";
 const TEST_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const TEST_CREDS_PLAIN = '{"access_token":"test-token","refresh_token":"rt"}';
 
-/** マイグレーション SQL のパス */
-function getMigrationSql(): string {
-  // apps/api/src/__tests__/helpers/setup.ts → ../../../../packages/db/src/migrations/0000_*.sql
+/** マイグレーション SQL 一覧 */
+function getMigrationSqlFiles(): string[] {
+  // apps/api/src/__tests__/helpers/setup.ts → ../../../../packages/db/src/migrations/*.sql
   const here = dirname(fileURLToPath(import.meta.url));
-  const migrationPath = resolve(
-    here,
-    "../../../../../packages/db/src/migrations/0000_cynical_dakota_north.sql",
-  );
-  return readFileSync(migrationPath, "utf8");
+  const migrationsDir = resolve(here, "../../../../../packages/db/src/migrations");
+  return readdirSync(migrationsDir)
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => resolve(migrationsDir, name));
 }
 
 /** 個別テスト用 DB を作成 */
@@ -72,14 +72,16 @@ export function createTestDb(): {
   sqlite.pragma("foreign_keys = ON");
 
   // マイグレーション SQL を実行
-  const sql = getMigrationSql();
-  // drizzle の statement-breakpoint で分割
-  const statements = sql
-    .split(/-->\s*statement-breakpoint/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  for (const stmt of statements) {
-    sqlite.exec(stmt);
+  for (const file of getMigrationSqlFiles()) {
+    const sql = readFileSync(file, "utf8");
+    // drizzle の statement-breakpoint で分割
+    const statements = sql
+      .split(/-->\s*statement-breakpoint/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    for (const stmt of statements) {
+      sqlite.exec(stmt);
+    }
   }
 
   const db = drizzle(sqlite, { schema });
