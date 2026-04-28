@@ -264,6 +264,25 @@ export class XProvider implements SocialProvider {
 
 export { X_CAPABILITIES } from "./capabilities.js";
 export { XApiClient } from "./http-client.js";
+export { XApi } from "./x-api.js";
+export type {
+  XCreateDmConversationInput,
+  XCreateTweetInput,
+  XDataResponse,
+  XDmEvent,
+  XDmEventOptions,
+  XDmMessageInput,
+  XIncludes,
+  XListResponse,
+  XPaginationMeta,
+  XPaginationQueryOptions,
+  XProblem,
+  XSearchRecentTweetsOptions,
+  XTimelineOptions,
+  XTweet,
+  XTweetQueryOptions,
+  XUser,
+} from "./x-api.js";
 export {
   generatePkcePair,
   getAuthUrl,
