@@ -227,6 +227,21 @@ export interface EngagementConditionResult {
   followed: boolean;
 }
 
+export type EngagementActionType = "like" | "repost";
+
+export interface PerformEngagementActionInput {
+  accountCredentials: string;
+  accountExternalId: string;
+  actionType: EngagementActionType;
+  targetPostId: string;
+}
+
+export interface EngagementActionResult {
+  success: boolean;
+  externalActionId: string | null;
+  error?: string;
+}
+
 // ───────────────────────────────────────────
 // SocialProvider インターフェース
 // ───────────────────────────────────────────
@@ -272,4 +287,9 @@ export interface SocialProvider {
   checkEngagementConditions?(
     input: CheckEngagementConditionsInput,
   ): Promise<EngagementConditionResult>;
+
+  /** Inbox reply 管理用の like/repost 操作（対応プロバイダのみ） */
+  performEngagementAction?(
+    input: PerformEngagementActionInput,
+  ): Promise<EngagementActionResult>;
 }

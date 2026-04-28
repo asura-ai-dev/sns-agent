@@ -122,6 +122,9 @@ export type {
   EngagementReplyListResult,
   CheckEngagementConditionsInput,
   EngagementConditionResult,
+  EngagementActionType,
+  PerformEngagementActionInput,
+  EngagementActionResult,
   JobQueue,
 } from "./interfaces/index.js";
 export { ProviderRegistry } from "./interfaces/index.js";

@@ -31,6 +31,8 @@ import type {
   EngagementReplyListResult,
   CheckEngagementConditionsInput,
   EngagementConditionResult,
+  PerformEngagementActionInput,
+  EngagementActionResult,
 } from "@sns-agent/core";
 import { ProviderError } from "@sns-agent/core";
 import { XApiClient } from "./http-client.js";
@@ -50,6 +52,7 @@ import {
   checkEngagementConditions as checkEngagementConditionsImpl,
   listEngagementReplies as listEngagementRepliesImpl,
 } from "./engagement-gates.js";
+import { performEngagementAction as performEngagementActionImpl } from "./engagement-actions.js";
 
 export interface XProviderOptions {
   /** X OAuth 2.0 クライアント設定 */
@@ -219,6 +222,12 @@ export class XProvider implements SocialProvider {
     input: CheckEngagementConditionsInput,
   ): Promise<EngagementConditionResult> {
     return checkEngagementConditionsImpl(input, this.httpClient);
+  }
+
+  async performEngagementAction(
+    input: PerformEngagementActionInput,
+  ): Promise<EngagementActionResult> {
+    return performEngagementActionImpl(input, this.httpClient);
   }
 
   /**

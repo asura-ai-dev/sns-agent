@@ -72,6 +72,9 @@ export type {
   EngagementReplyListResult,
   CheckEngagementConditionsInput,
   EngagementConditionResult,
+  EngagementActionType,
+  PerformEngagementActionInput,
+  EngagementActionResult,
 } from "./social-provider.js";
 
 // JobQueue

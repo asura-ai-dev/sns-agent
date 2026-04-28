@@ -297,4 +297,46 @@ describe("XProvider inbox", () => {
       attachments: [{ media_id: "media-1" }],
     });
   });
+
+  it("likes and reposts a reply target through X engagement actions", async () => {
+    const calls: Array<{ url: string; body: unknown }> = [];
+    const httpClient = new XApiClient({
+      fetchImpl: async (url: string, init?: RequestInit) => {
+        calls.push({
+          url,
+          body: init?.body ? JSON.parse(String(init.body)) : null,
+        });
+        return new Response(JSON.stringify({ data: { liked: true, retweeted: true } }), {
+          status: 200,
+        });
+      },
+    });
+    const provider = new XProvider({ oauth: { clientId: "cid" }, httpClient });
+
+    const liked = await provider.performEngagementAction!({
+      accountCredentials: JSON.stringify({ accessToken: "tok", xUserId: "123" }),
+      accountExternalId: "123",
+      actionType: "like",
+      targetPostId: "tweet-200",
+    });
+    const reposted = await provider.performEngagementAction!({
+      accountCredentials: JSON.stringify({ accessToken: "tok", xUserId: "123" }),
+      accountExternalId: "123",
+      actionType: "repost",
+      targetPostId: "tweet-200",
+    });
+
+    expect(liked.success).toBe(true);
+    expect(reposted.success).toBe(true);
+    expect(calls).toEqual([
+      expect.objectContaining({
+        url: expect.stringContaining("/2/users/123/likes"),
+        body: { tweet_id: "tweet-200" },
+      }),
+      expect.objectContaining({
+        url: expect.stringContaining("/2/users/123/retweets"),
+        body: { tweet_id: "tweet-200" },
+      }),
+    ]);
+  });
 });
