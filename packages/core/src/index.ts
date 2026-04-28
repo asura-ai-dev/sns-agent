@@ -21,6 +21,9 @@ export type {
   EngagementGateDeliveryStatus,
   EngagementGateStatus,
   EngagementGateTriggerType,
+  EngagementAction,
+  InboxEngagementActionType,
+  EngagementActionStatus,
   ProviderCapabilities,
   MediaAttachment,
   PostProviderMetadata,
@@ -76,6 +79,10 @@ export type {
   EngagementGateDeliveryRepository,
   EngagementGateDeliveryCreateInput,
   EngagementGateDeliveryCreateResult,
+  EngagementActionRepository,
+  EngagementActionCreateInput,
+  EngagementActionCreateResult,
+  EngagementActionDedupeInput,
   PostRepository,
   PostListFilters,
   PostOrderBy,
@@ -274,6 +281,7 @@ export {
   processInboundMessage,
   syncInboxFromProvider,
   sendReply as sendInboxReply,
+  performInboxEngagementAction,
 } from "./usecases/inbox.js";
 export type {
   InboxUsecaseDeps,
@@ -286,6 +294,8 @@ export type {
   SyncInboxFromProviderResult,
   SendReplyInput as InboxSendReplyInput,
   SendReplyResult as InboxSendReplyResult,
+  PerformInboxEngagementActionInput,
+  PerformInboxEngagementActionResult,
 } from "./usecases/inbox.js";
 
 export {

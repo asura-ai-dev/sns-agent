@@ -27,10 +27,13 @@ import type {
   SocialAccount,
   ThreadProviderMetadata,
   ThreadStatus,
+  InboxEngagementActionType,
+  EngagementAction,
 } from "../domain/entities.js";
 import type {
   AccountRepository,
   ConversationRepository,
+  EngagementActionRepository,
   MessageRepository,
   UsageRepository,
 } from "../interfaces/repositories.js";
@@ -45,6 +48,7 @@ import { decrypt } from "../domain/crypto.js";
 export interface InboxUsecaseDeps {
   conversationRepo: ConversationRepository;
   messageRepo: MessageRepository;
+  engagementActionRepo?: EngagementActionRepository;
   accountRepo: AccountRepository;
   usageRepo?: UsageRepository;
   /** platform -> SocialProvider */
@@ -76,6 +80,7 @@ export interface ListThreadsResult {
 export interface GetThreadResult {
   thread: ConversationThread;
   messages: Message[];
+  engagementActions: EngagementAction[];
 }
 
 /**
@@ -143,6 +148,20 @@ export interface SendReplyResult {
   externalMessageId: string | null;
 }
 
+export interface PerformInboxEngagementActionInput {
+  workspaceId: string;
+  threadId: string;
+  actionType: InboxEngagementActionType;
+  actorId: string;
+  targetMessageId?: string | null;
+  targetPostId?: string | null;
+}
+
+export interface PerformInboxEngagementActionResult {
+  action: EngagementAction;
+  created: boolean;
+}
+
 interface StoreThreadMessageInput extends InboundMessageInput {
   direction: Message["direction"];
 }
@@ -181,6 +200,13 @@ async function loadAccount(
     throw new NotFoundError("SocialAccount", socialAccountId);
   }
   return account;
+}
+
+function getEngagementActionRepo(deps: InboxUsecaseDeps): EngagementActionRepository {
+  if (!deps.engagementActionRepo) {
+    throw new ValidationError("Engagement action repository is required");
+  }
+  return deps.engagementActionRepo;
 }
 
 function decryptCredentials(credentialsEncrypted: string, encryptionKey: string): string {
@@ -399,9 +425,12 @@ export async function getThread(
   const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 500) : 200;
   const offset = options?.offset && options.offset >= 0 ? options.offset : 0;
 
-  const messages = await deps.messageRepo.findByThread(threadId, { limit, offset });
+  const [messages, engagementActions] = await Promise.all([
+    deps.messageRepo.findByThread(threadId, { limit, offset }),
+    deps.engagementActionRepo?.findByThread(threadId) ?? Promise.resolve([]),
+  ]);
 
-  return { thread, messages };
+  return { thread, messages, engagementActions };
 }
 
 // ───────────────────────────────────────────
@@ -655,4 +684,124 @@ export async function sendReply(
   });
 
   return { message, externalMessageId };
+}
+
+async function resolveEngagementTargetPostId(
+  deps: InboxUsecaseDeps,
+  thread: ConversationThread,
+  input: Pick<PerformInboxEngagementActionInput, "targetMessageId" | "targetPostId">,
+): Promise<{ targetPostId: string; messageId: string | null }> {
+  const explicitPostId = input.targetPostId?.trim();
+  if (explicitPostId) {
+    return { targetPostId: explicitPostId, messageId: null };
+  }
+
+  if (input.targetMessageId?.trim()) {
+    const messages = await deps.messageRepo.findByThread(thread.id, { limit: 500, offset: 0 });
+    const message = messages.find(
+      (row) =>
+        row.id === input.targetMessageId ||
+        (row.externalMessageId !== null && row.externalMessageId === input.targetMessageId),
+    );
+    if (!message) {
+      throw new NotFoundError("Message", input.targetMessageId);
+    }
+    const postId = message.providerMetadata?.x?.postId ?? message.externalMessageId;
+    if (!postId) {
+      throw new ValidationError("Message has no X post id");
+    }
+    return { targetPostId: postId, messageId: message.id };
+  }
+
+  const focusPostId = thread.providerMetadata?.x?.focusPostId;
+  if (focusPostId) {
+    return { targetPostId: focusPostId, messageId: null };
+  }
+
+  throw new ValidationError("targetPostId or X focusPostId is required");
+}
+
+export async function performInboxEngagementAction(
+  deps: InboxUsecaseDeps,
+  input: PerformInboxEngagementActionInput,
+): Promise<PerformInboxEngagementActionResult> {
+  const actionRepo = getEngagementActionRepo(deps);
+  const thread = await loadOwnedThread(deps, input.workspaceId, input.threadId);
+  const account = await loadAccount(deps, input.workspaceId, thread.socialAccountId);
+
+  if (account.status !== "active") {
+    throw new ValidationError(
+      `SocialAccount ${account.id} is not active (status=${account.status})`,
+    );
+  }
+
+  const { targetPostId, messageId } = await resolveEngagementTargetPostId(deps, thread, input);
+  const existing = await actionRepo.findByDedupeKey({
+    workspaceId: input.workspaceId,
+    socialAccountId: account.id,
+    actionType: input.actionType,
+    targetPostId,
+  });
+  if (existing) {
+    return { action: existing, created: false };
+  }
+
+  const provider = getProvider(deps, thread.platform);
+  if (!provider.performEngagementAction) {
+    throw new ProviderError(
+      `Provider for platform ${thread.platform} does not support engagement actions`,
+    );
+  }
+
+  const credentials = decryptCredentials(account.credentialsEncrypted, deps.encryptionKey);
+  let externalActionId: string | null = null;
+  try {
+    const result = await provider.performEngagementAction({
+      accountCredentials: credentials,
+      accountExternalId: account.externalAccountId,
+      actionType: input.actionType,
+      targetPostId,
+    });
+    if (!result.success) {
+      throw new ProviderError(
+        `performEngagementAction failed: ${result.error ?? "unknown error"}`,
+      );
+    }
+    externalActionId = result.externalActionId;
+    await recordProviderUsage(deps, {
+      workspaceId: input.workspaceId,
+      platform: thread.platform,
+      endpoint: `inbox.action.${input.actionType}`,
+      actorId: input.actorId,
+      success: true,
+    });
+  } catch (err) {
+    await recordProviderUsage(deps, {
+      workspaceId: input.workspaceId,
+      platform: thread.platform,
+      endpoint: `inbox.action.${input.actionType}`,
+      actorId: input.actorId,
+      success: false,
+    });
+    if (err instanceof ProviderError) throw err;
+    throw new ProviderError(
+      `performEngagementAction failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  const created = await actionRepo.createOnce({
+    workspaceId: input.workspaceId,
+    socialAccountId: account.id,
+    threadId: thread.id,
+    messageId,
+    actionType: input.actionType,
+    targetPostId,
+    actorId: input.actorId,
+    externalActionId,
+    status: "applied",
+    metadata: null,
+    performedAt: new Date(),
+  });
+
+  return created;
 }

@@ -170,6 +170,25 @@ export interface EngagementGateDelivery {
   createdAt: Date;
 }
 
+export type InboxEngagementActionType = "like" | "repost";
+export type EngagementActionStatus = "applied";
+
+export interface EngagementAction {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  threadId: string;
+  messageId: string | null;
+  actionType: InboxEngagementActionType;
+  targetPostId: string;
+  actorId: string;
+  externalActionId: string | null;
+  status: EngagementActionStatus;
+  metadata: Record<string, unknown> | null;
+  performedAt: Date;
+  createdAt: Date;
+}
+
 /** Provider が公開する能力セット */
 export interface ProviderCapabilities {
   textPost: boolean;

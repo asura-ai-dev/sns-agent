@@ -27,6 +27,7 @@ import type {
   EngagementGateDelivery,
   EngagementGateDeliveryStatus,
   EngagementGateStatus,
+  EngagementAction,
 } from "../domain/entities.js";
 import type { Platform } from "@sns-agent/config";
 
@@ -179,6 +180,30 @@ export interface EngagementGateDeliveryRepository {
     deliveryToken: string,
     consumedAt: Date,
   ): Promise<EngagementGateDeliveryConsumeResult | null>;
+}
+
+// ───────────────────────────────────────────
+// EngagementActionRepository
+// ───────────────────────────────────────────
+
+export type EngagementActionCreateInput = Omit<EngagementAction, "id" | "createdAt">;
+
+export interface EngagementActionDedupeInput {
+  workspaceId: string;
+  socialAccountId: string;
+  actionType: EngagementAction["actionType"];
+  targetPostId: string;
+}
+
+export interface EngagementActionCreateResult {
+  action: EngagementAction;
+  created: boolean;
+}
+
+export interface EngagementActionRepository {
+  findByThread(threadId: string): Promise<EngagementAction[]>;
+  findByDedupeKey(input: EngagementActionDedupeInput): Promise<EngagementAction | null>;
+  createOnce(input: EngagementActionCreateInput): Promise<EngagementActionCreateResult>;
 }
 
 // ───────────────────────────────────────────
