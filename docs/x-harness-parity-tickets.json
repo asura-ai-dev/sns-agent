@@ -248,7 +248,7 @@
     {
       "id": "XHP-006",
       "title": "Add gate verify API and LINE Harness handoff",
-      "status": "planned",
+      "status": "verified",
       "priority": "P0",
       "phase": "phase-2",
       "owner_role": "implementer",
