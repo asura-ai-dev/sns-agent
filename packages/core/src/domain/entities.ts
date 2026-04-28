@@ -96,6 +96,7 @@ export interface Post {
   status: PostStatus;
   contentText: string | null;
   contentMedia: MediaAttachment[] | null;
+  providerMetadata?: PostProviderMetadata | null;
   platformPostId: string | null;
   validationResult: unknown | null;
   idempotencyKey: string | null;
@@ -129,6 +130,43 @@ export interface ScheduledJob {
 // ───────────────────────────────────────────
 export type ThreadStatus = "open" | "closed" | "archived";
 export type MessageDirection = "inbound" | "outbound";
+export type InboxChannel = "direct" | "public";
+export type InboxInitiator = "self" | "external" | "mixed" | "unknown";
+export type XInboxEntryType = "mention" | "reply" | "thread" | "dm";
+
+/**
+ * provider 固有の受信メタデータ。
+ *
+ * 設計方針:
+ * - UI / CLI / API が共通で見たい項目は ConversationThread / Message 直下へ置く
+ * - X の conversation_id や reply 対象 post_id など、SNS 固有の項目はここへ分離する
+ */
+export interface XThreadProviderMetadata {
+  entryType: XInboxEntryType;
+  conversationId: string | null;
+  rootPostId: string | null;
+  focusPostId: string | null;
+  replyToPostId: string | null;
+  authorXUserId: string | null;
+  authorUsername: string | null;
+}
+
+export interface XMessageProviderMetadata {
+  entryType: XInboxEntryType;
+  conversationId: string | null;
+  postId: string | null;
+  replyToPostId: string | null;
+  authorUsername: string | null;
+  mentionedXUserIds: string[];
+}
+
+export interface ThreadProviderMetadata {
+  x?: XThreadProviderMetadata;
+}
+
+export interface MessageProviderMetadata {
+  x?: XMessageProviderMetadata;
+}
 
 export interface ConversationThread {
   id: string;
@@ -137,7 +175,11 @@ export interface ConversationThread {
   platform: Platform;
   externalThreadId: string | null;
   participantName: string | null;
+  participantExternalId: string | null;
+  channel: InboxChannel | null;
+  initiatedBy: InboxInitiator | null;
   lastMessageAt: Date | null;
+  providerMetadata: ThreadProviderMetadata | null;
   status: ThreadStatus;
   createdAt: Date;
 }
@@ -149,8 +191,32 @@ export interface Message {
   contentText: string | null;
   contentMedia: MediaAttachment[] | null;
   externalMessageId: string | null;
+  authorExternalId: string | null;
+  authorDisplayName: string | null;
   sentAt: Date | null;
+  providerMetadata: MessageProviderMetadata | null;
   createdAt: Date;
+}
+
+// ───────────────────────────────────────────
+// Post provider metadata
+// ───────────────────────────────────────────
+
+export interface XThreadPostSegment {
+  contentText: string;
+}
+
+export interface XPostProviderMetadata {
+  /** 引用対象の X post/tweet ID */
+  quotePostId?: string | null;
+  /** 1 件目の投稿に続けて self-reply で連投するセグメント */
+  threadPosts?: XThreadPostSegment[] | null;
+  /** 公開後に確定した thread 全体の post ID 群（root を含む） */
+  publishedThreadIds?: string[] | null;
+}
+
+export interface PostProviderMetadata {
+  x?: XPostProviderMetadata;
 }
 
 // ───────────────────────────────────────────
@@ -210,6 +276,31 @@ export interface LlmRoute {
 }
 
 // ───────────────────────────────────────────
+// LLM Provider Credential
+// ───────────────────────────────────────────
+export type LlmProviderCredentialProvider = "openai-codex";
+export type LlmProviderCredentialStatus = "connected" | "expired" | "reauth_required";
+
+export interface LlmProviderCredential {
+  id: string;
+  workspaceId: string;
+  provider: LlmProviderCredentialProvider;
+  status: LlmProviderCredentialStatus;
+  /**
+   * Encrypted token material only. Raw OAuth tokens must be encrypted before
+   * they enter the repository layer.
+   */
+  accessTokenEncrypted: string;
+  refreshTokenEncrypted: string | null;
+  expiresAt: Date | null;
+  scopes: string[] | null;
+  subject: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ───────────────────────────────────────────
 // SkillPackage
 // ───────────────────────────────────────────
 export interface SkillPackage {
@@ -235,6 +326,7 @@ export interface ApprovalRequest {
   workspaceId: string;
   resourceType: string;
   resourceId: string;
+  payload: unknown | null;
   requestedBy: string;
   requestedAt: Date;
   status: ApprovalStatus;

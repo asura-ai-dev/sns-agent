@@ -12,6 +12,7 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { AddressInfo } from "node:net";
 import { Command } from "commander";
 import { registerAccountsCommand } from "../commands/accounts.js";
+import { registerAgentCommand } from "../commands/agent.js";
 import { registerPostCommand } from "../commands/post.js";
 import { registerScheduleCommand } from "../commands/schedule.js";
 import { registerUsageCommand } from "../commands/usage.js";
@@ -139,6 +140,7 @@ async function runCli(argv: string[]): Promise<CaptureResult> {
   registerPostCommand(program);
   registerScheduleCommand(program);
   registerUsageCommand(program);
+  registerAgentCommand(program);
 
   process.exitCode = 0;
 
@@ -248,6 +250,133 @@ beforeAll(async () => {
       },
     },
     {
+      method: "POST",
+      path: "/api/schedules/run-due",
+      respond: (_req, body) => {
+        const parsed = body ? (JSON.parse(body) as Record<string, unknown>) : {};
+        return {
+          status: 200,
+          body: {
+            data: {
+              processedAt: new Date().toISOString(),
+              scanned: 1,
+              processed: 1,
+              skipped: 0,
+              succeeded: 1,
+              retrying: 0,
+              failed: 0,
+              jobs: [
+                {
+                  id: "job-1",
+                  postId: "post-1",
+                  beforeStatus: "pending",
+                  afterStatus: "succeeded",
+                  willRetry: false,
+                  recoveredStaleLock: false,
+                },
+              ],
+              requestedLimit: parsed.limit ?? null,
+            },
+          },
+        };
+      },
+    },
+    {
+      method: "GET",
+      path: /^\/api\/schedules\/[^/]+$/,
+      respond: () => ({
+        status: 200,
+        body: {
+          data: {
+            id: "job-1",
+            workspaceId: "ws-1",
+            postId: "post-1",
+            scheduledAt: new Date("2026-04-20T09:00:00+09:00").toISOString(),
+            status: "failed",
+            lockedAt: null,
+            startedAt: new Date("2026-04-20T09:00:01+09:00").toISOString(),
+            completedAt: new Date("2026-04-20T09:00:03+09:00").toISOString(),
+            attemptCount: 3,
+            maxAttempts: 3,
+            lastError: "Invalid X credentials",
+            nextRetryAt: null,
+            createdAt: new Date("2026-04-19T09:00:00+09:00").toISOString(),
+          },
+          detail: {
+            post: {
+              id: "post-1",
+              status: "failed",
+              platform: "x",
+              socialAccountId: "sa-1",
+              contentText: "mock scheduled post",
+              createdBy: "user-1",
+            },
+            retryPolicy: {
+              maxAttempts: 3,
+              backoffSeconds: [30, 120, 480],
+              retryableRule: "temporary failures are retried automatically",
+              nonRetryableRule: "validation/auth/resource issues stop immediately",
+            },
+            notificationTarget: {
+              type: "post_creator",
+              actorId: "user-1",
+              label: "投稿作成者 (user-1)",
+              reason: "owner should inspect credentials",
+            },
+            latestExecution: {
+              id: "log-1",
+              action: "schedule.execution.failed",
+              status: "failed",
+              createdAt: new Date("2026-04-20T09:00:03+09:00").toISOString(),
+              actorId: "scheduler",
+              actorType: "system",
+              message: "stopped without retry",
+              error: "Invalid X credentials",
+              willRetry: false,
+              retryable: false,
+              retryRule: "non_retryable",
+              classificationReason: "auth issue",
+              attemptCount: 3,
+              maxAttempts: 3,
+              nextRetryAt: null,
+              notificationTarget: {
+                type: "post_creator",
+                actorId: "user-1",
+                label: "投稿作成者 (user-1)",
+                reason: "owner should inspect credentials",
+              },
+            },
+            executionLogs: [
+              {
+                id: "log-1",
+                action: "schedule.execution.failed",
+                status: "failed",
+                createdAt: new Date("2026-04-20T09:00:03+09:00").toISOString(),
+                actorId: "scheduler",
+                actorType: "system",
+                message: "stopped without retry",
+                error: "Invalid X credentials",
+                willRetry: false,
+                retryable: false,
+                retryRule: "non_retryable",
+                classificationReason: "auth issue",
+                attemptCount: 3,
+                maxAttempts: 3,
+                nextRetryAt: null,
+                notificationTarget: {
+                  type: "post_creator",
+                  actorId: "user-1",
+                  label: "投稿作成者 (user-1)",
+                  reason: "owner should inspect credentials",
+                },
+              },
+            ],
+            recommendedAction: "投稿作成者が認証状態を確認してください。",
+          },
+        },
+      }),
+    },
+    {
       method: "GET",
       path: /^\/api\/usage(\?|$)/,
       respond: () => ({
@@ -271,6 +400,81 @@ beforeAll(async () => {
           },
         },
       }),
+    },
+    {
+      method: "POST",
+      path: "/api/agent/chat",
+      respond: (_req, body) => {
+        const parsed = body ? (JSON.parse(body) as Record<string, unknown>) : {};
+        const message = typeof parsed.message === "string" ? parsed.message : "";
+        const conversationId =
+          typeof parsed.conversationId === "string" && parsed.conversationId.length > 0
+            ? parsed.conversationId
+            : "agent-conv-1";
+
+        return {
+          status: 200,
+          body: {
+            data: {
+              kind: "preview",
+              conversationId,
+              content: `「${message}」を X の予約投稿として解釈しました。内容を確認してください。`,
+              intent: {
+                actionName: "post.schedule",
+                packageName: "sns-agent-x-openai",
+                args: {
+                  accountName: "Mock X",
+                  text: "明日9時の投稿です",
+                  scheduledAt: "2026-04-15T09:00:00+09:00",
+                },
+              },
+              preview: {
+                actionName: "post.schedule",
+                packageName: "sns-agent-x-openai",
+                description: "X のテキスト投稿を指定日時に予約投稿する",
+                preview: {
+                  platform: "x",
+                  targetAccountName: "Mock X",
+                  scheduledAt: "2026-04-15T09:00:00+09:00",
+                  text: "明日9時の投稿です",
+                },
+                requiredPermissions: ["schedule:create"],
+                missingPermissions: [],
+                argumentErrors: [],
+                mode: "approval-required",
+                allowed: true,
+                blockedReason: null,
+              },
+            },
+          },
+        };
+      },
+    },
+    {
+      method: "POST",
+      path: "/api/agent/execute",
+      respond: (_req, body) => {
+        const parsed = body ? (JSON.parse(body) as Record<string, unknown>) : {};
+        return {
+          status: 200,
+          body: {
+            data: {
+              outcome: {
+                actionName: parsed.actionName ?? "post.schedule",
+                packageName: parsed.packageName ?? "sns-agent-x-openai",
+                mode: parsed.mode ?? "approval-required",
+                result: {
+                  status: "scheduled",
+                  id: "job-agent-1",
+                  scheduledAt: "2026-04-15T09:00:00+09:00",
+                },
+              },
+              auditLogId: "audit-agent-1",
+              conversationId: parsed.conversationId ?? "agent-conv-1",
+            },
+          },
+        };
+      },
     },
   ]);
 });
@@ -331,6 +535,74 @@ describe("CLI integration", () => {
     expect(routeHits.some((h) => h.method === "POST" && h.url.startsWith("/api/posts"))).toBe(true);
   });
 
+  it("b-2. `sns post create --at` creates a draft and schedules it", async () => {
+    const futureAt = new Date(Date.now() + 86400000).toISOString();
+    const res = await runCli([
+      "--api-url",
+      `http://127.0.0.1:${mockPort}`,
+      "--api-key",
+      "test",
+      "--json",
+      "post",
+      "create",
+      "--platform",
+      "x",
+      "--account",
+      "0123456789abcdef0123456789abcdef",
+      "--text",
+      "Scheduled from CLI test",
+      "--at",
+      futureAt,
+    ]);
+
+    expect(res.exitCode).toBe(0);
+    expect(routeHits.some((h) => h.method === "POST" && h.url.startsWith("/api/posts"))).toBe(true);
+    expect(routeHits.some((h) => h.method === "POST" && h.url.startsWith("/api/schedules"))).toBe(
+      true,
+    );
+  });
+
+  it("b-3. `sns post create` forwards quote/thread metadata for X", async () => {
+    const res = await runCli([
+      "--api-url",
+      `http://127.0.0.1:${mockPort}`,
+      "--api-key",
+      "test",
+      "--json",
+      "post",
+      "create",
+      "--platform",
+      "x",
+      "--account",
+      "0123456789abcdef0123456789abcdef",
+      "--quote-post-id",
+      "tweet-42",
+      "--thread-segment",
+      "follow-up 1",
+      "--thread-segment",
+      "follow-up 2",
+    ]);
+
+    expect(res.exitCode).toBe(0);
+    const postRequest = routeHits.find(
+      (h) => h.method === "POST" && h.url.startsWith("/api/posts"),
+    );
+    expect(postRequest).toBeDefined();
+    const parsed = JSON.parse(postRequest?.body ?? "{}") as {
+      providerMetadata?: {
+        x?: {
+          quotePostId?: string | null;
+          threadPosts?: Array<{ contentText: string }>;
+        };
+      };
+    };
+    expect(parsed.providerMetadata?.x?.quotePostId).toBe("tweet-42");
+    expect(parsed.providerMetadata?.x?.threadPosts).toEqual([
+      { contentText: "follow-up 1" },
+      { contentText: "follow-up 2" },
+    ]);
+  });
+
   it("c. `sns schedule create` creates a schedule", async () => {
     const futureAt = new Date(Date.now() + 86400000).toISOString();
     const res = await runCli([
@@ -368,7 +640,109 @@ describe("CLI integration", () => {
     expect(routeHits.some((h) => h.method === "GET" && h.url.startsWith("/api/usage"))).toBe(true);
   });
 
-  it("e. unknown command exits with code 1", async () => {
+  it("e. `sns schedule run-due --limit 2` triggers manual dispatcher run", async () => {
+    const res = await runCli([
+      "--api-url",
+      `http://127.0.0.1:${mockPort}`,
+      "--api-key",
+      "test",
+      "--json",
+      "schedule",
+      "run-due",
+      "--limit",
+      "2",
+    ]);
+    expect(res.exitCode).toBe(0);
+    expect(
+      routeHits.some((h) => h.method === "POST" && h.url.startsWith("/api/schedules/run-due")),
+    ).toBe(true);
+  });
+
+  it("e-2. `sns schedule show job-1` fetches enriched schedule detail", async () => {
+    const res = await runCli([
+      "--api-url",
+      `http://127.0.0.1:${mockPort}`,
+      "--api-key",
+      "test",
+      "schedule",
+      "show",
+      "job-1",
+    ]);
+    expect(res.exitCode).toBe(0);
+    expect(routeHits.some((h) => h.method === "GET" && h.url === "/api/schedules/job-1")).toBe(
+      true,
+    );
+    expect(res.stdout).toContain("Operations");
+    expect(res.stdout).toContain("Execution logs");
+  });
+
+  it("e-3. `sns schedule logs job-1 --json` returns execution logs", async () => {
+    const res = await runCli([
+      "--api-url",
+      `http://127.0.0.1:${mockPort}`,
+      "--api-key",
+      "test",
+      "--json",
+      "schedule",
+      "logs",
+      "job-1",
+    ]);
+    expect(res.exitCode).toBe(0);
+    const parsed = JSON.parse(res.stdout) as { data: Array<{ status: string }> };
+    expect(Array.isArray(parsed.data)).toBe(true);
+    expect(parsed.data[0]?.status).toBe("failed");
+  });
+
+  it("f. `sns agent chat --json` returns a structured preview", async () => {
+    const res = await runCli([
+      "--api-url",
+      `http://127.0.0.1:${mockPort}`,
+      "--api-key",
+      "test",
+      "--json",
+      "agent",
+      "chat",
+      "明日9時に投稿して",
+    ]);
+
+    expect(res.exitCode).toBe(0);
+    const parsed = JSON.parse(res.stdout) as {
+      data: {
+        response: {
+          kind: string;
+          preview?: { preview?: { scheduledAt?: string } };
+        };
+        execution: { attempted: boolean };
+      };
+    };
+    expect(parsed.data.response.kind).toBe("preview");
+    expect(parsed.data.response.preview?.preview?.scheduledAt).toBe("2026-04-15T09:00:00+09:00");
+    expect(parsed.data.execution.attempted).toBe(false);
+    expect(routeHits.some((h) => h.method === "POST" && h.url === "/api/agent/chat")).toBe(true);
+  });
+
+  it("g. `sns agent chat --execute` previews and executes in one run", async () => {
+    const res = await runCli([
+      "--api-url",
+      `http://127.0.0.1:${mockPort}`,
+      "--api-key",
+      "test",
+      "agent",
+      "chat",
+      "明日9時に投稿して",
+      "--execute",
+    ]);
+
+    expect(res.exitCode).toBe(0);
+    expect(res.stdout).toContain("実行プレビュー");
+    expect(res.stdout).toContain("実行結果");
+    expect(routeHits.some((h) => h.method === "POST" && h.url === "/api/agent/chat")).toBe(true);
+    expect(routeHits.some((h) => h.method === "POST" && h.url === "/api/agent/execute")).toBe(
+      true,
+    );
+  });
+
+  it("h. unknown command exits with code 1", async () => {
     const res = await runCli([
       "--api-url",
       `http://127.0.0.1:${mockPort}`,

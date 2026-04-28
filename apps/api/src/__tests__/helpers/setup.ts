@@ -11,7 +11,7 @@
  * - ProviderRegistry はモック（成功応答）で差し替える。外部 HTTP は一切行わない。
  * - LLM / Skills も同様にモックを差し込む（必要になった時点で拡張）。
  */
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -34,6 +34,12 @@ import type {
   ConnectAccountInput,
   ConnectAccountResult,
   ProviderCapabilities,
+  ListThreadsInput,
+  ThreadListResult,
+  GetMessagesInput,
+  MessageListResult,
+  SendReplyInput,
+  SendReplyResult,
 } from "@sns-agent/core";
 import type { Platform } from "@sns-agent/config";
 import { setProviderRegistry, resetProviderRegistry } from "../../providers.js";
@@ -41,15 +47,15 @@ import { setProviderRegistry, resetProviderRegistry } from "../../providers.js";
 const TEST_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const TEST_CREDS_PLAIN = '{"access_token":"test-token","refresh_token":"rt"}';
 
-/** マイグレーション SQL のパス */
-function getMigrationSql(): string {
-  // apps/api/src/__tests__/helpers/setup.ts → ../../../../packages/db/src/migrations/0000_*.sql
+/** マイグレーション SQL 一覧 */
+function getMigrationSqlFiles(): string[] {
+  // apps/api/src/__tests__/helpers/setup.ts → ../../../../packages/db/src/migrations/*.sql
   const here = dirname(fileURLToPath(import.meta.url));
-  const migrationPath = resolve(
-    here,
-    "../../../../../packages/db/src/migrations/0000_cynical_dakota_north.sql",
-  );
-  return readFileSync(migrationPath, "utf8");
+  const migrationsDir = resolve(here, "../../../../../packages/db/src/migrations");
+  return readdirSync(migrationsDir)
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => resolve(migrationsDir, name));
 }
 
 /** 個別テスト用 DB を作成 */
@@ -66,14 +72,16 @@ export function createTestDb(): {
   sqlite.pragma("foreign_keys = ON");
 
   // マイグレーション SQL を実行
-  const sql = getMigrationSql();
-  // drizzle の statement-breakpoint で分割
-  const statements = sql
-    .split(/-->\s*statement-breakpoint/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  for (const stmt of statements) {
-    sqlite.exec(stmt);
+  for (const file of getMigrationSqlFiles()) {
+    const sql = readFileSync(file, "utf8");
+    // drizzle の statement-breakpoint で分割
+    const statements = sql
+      .split(/-->\s*statement-breakpoint/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    for (const stmt of statements) {
+      sqlite.exec(stmt);
+    }
   }
 
   const db = drizzle(sqlite, { schema });
@@ -96,7 +104,7 @@ export function createMockXProvider(): SocialProvider {
         textPost: true,
         imagePost: true,
         videoPost: true,
-        threadPost: false,
+        threadPost: true,
         directMessage: true,
         commentReply: true,
         broadcast: false,
@@ -147,6 +155,83 @@ export function createMockXProvider(): SocialProvider {
     },
     async deletePost(_input: DeletePostInput): Promise<DeleteResult> {
       return { success: true };
+    },
+    async listThreads(_input: ListThreadsInput): Promise<ThreadListResult> {
+      return {
+        threads: [
+          {
+            externalThreadId: "conv-sync-1",
+            participantName: "Alice",
+            participantExternalId: "user-sync-1",
+            channel: "public",
+            initiatedBy: "external",
+            lastMessageAt: new Date("2026-04-10T10:05:00Z"),
+            providerMetadata: {
+              x: {
+                entryType: "reply",
+                conversationId: "conv-sync-1",
+                rootPostId: "conv-sync-1",
+                focusPostId: "tweet-sync-2",
+                replyToPostId: "tweet-sync-root",
+                authorXUserId: "user-sync-1",
+                authorUsername: "alice",
+              },
+            },
+          },
+        ],
+        nextCursor: '{"sinceId":"tweet-sync-2"}',
+      };
+    },
+    async getMessages(_input: GetMessagesInput): Promise<MessageListResult> {
+      return {
+        messages: [
+          {
+            externalMessageId: "tweet-sync-1",
+            direction: "inbound",
+            contentText: "@brand hello",
+            contentMedia: null,
+            authorExternalId: "user-sync-1",
+            authorDisplayName: "Alice",
+            sentAt: new Date("2026-04-10T10:00:00Z"),
+            providerMetadata: {
+              x: {
+                entryType: "mention",
+                conversationId: "conv-sync-1",
+                postId: "tweet-sync-1",
+                replyToPostId: null,
+                authorUsername: "alice",
+                mentionedXUserIds: ["mock-ext-1"],
+              },
+            },
+          },
+          {
+            externalMessageId: "tweet-sync-2",
+            direction: "outbound",
+            contentText: "thanks!",
+            contentMedia: null,
+            authorExternalId: "mock-ext-1",
+            authorDisplayName: "Mock X Account",
+            sentAt: new Date("2026-04-10T10:05:00Z"),
+            providerMetadata: {
+              x: {
+                entryType: "reply",
+                conversationId: "conv-sync-1",
+                postId: "tweet-sync-2",
+                replyToPostId: "tweet-sync-root",
+                authorUsername: "brand",
+                mentionedXUserIds: ["user-sync-1"],
+              },
+            },
+          },
+        ],
+        nextCursor: null,
+      };
+    },
+    async sendReply(_input: SendReplyInput): Promise<SendReplyResult> {
+      return {
+        success: true,
+        externalMessageId: `mock-reply-${randomUUID()}`,
+      };
     },
   };
 }
@@ -244,7 +329,7 @@ export function seedTestData(sqlite: Database.Database): SeedResult {
         textPost: true,
         imagePost: true,
         videoPost: true,
-        threadPost: false,
+        threadPost: true,
         directMessage: true,
         commentReply: true,
         broadcast: false,

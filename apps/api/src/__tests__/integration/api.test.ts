@@ -80,6 +80,108 @@ afterAll(() => {
   cleanupTestContext(ctx);
 });
 
+async function publicReq(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const init: RequestInit = {
+    method,
+    headers: { "Content-Type": "application/json" },
+  };
+  if (body !== undefined) {
+    init.body = JSON.stringify(body);
+  }
+  const res = await app.fetch(new Request(`http://localhost${path}`, init));
+  const text = await res.text();
+  let parsed: Record<string, unknown> = {};
+  if (text) {
+    try {
+      parsed = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      parsed = { raw: text };
+    }
+  }
+  return { status: res.status, body: parsed };
+}
+
+// ───────────────────────────────────────────
+// 0. LLM provider credentials status (Task 5007 Phase A)
+// ───────────────────────────────────────────
+describe("0. openai-codex provider status", () => {
+  it("GET /api/llm/providers/openai-codex/status returns missing when not connected", async () => {
+    const res = await req("GET", "/api/llm/providers/openai-codex/status", seed.adminApiKey);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      provider: "openai-codex",
+      status: "missing",
+      connected: false,
+      requiresReauth: false,
+      reason: "not_connected",
+    });
+  });
+
+  it("GET /api/llm/providers/openai-codex/status returns connected credential metadata", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const expiresAt = now + 3600;
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO llm_provider_credentials (id, workspace_id, provider, status, access_token_encrypted, refresh_token_encrypted, expires_at, scopes, subject, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "llm-cred-openai-codex",
+        seed.workspaceId,
+        "openai-codex",
+        "connected",
+        "encrypted-access-token",
+        "encrypted-refresh-token",
+        expiresAt,
+        JSON.stringify(["codex"]),
+        "user@example.com",
+        JSON.stringify({ source: "integration-test" }),
+        now,
+        now,
+      );
+
+    const res = await req("GET", "/api/llm/providers/openai-codex/status", seed.adminApiKey);
+
+    expect(res.status).toBe(200);
+    const data = res.body.data as Record<string, unknown>;
+    expect(data).toMatchObject({
+      provider: "openai-codex",
+      status: "connected",
+      connected: true,
+      requiresReauth: false,
+      subject: "user@example.com",
+    });
+    expect(data.expiresAt).toBeTruthy();
+    expect(data.scopes).toEqual(["codex"]);
+  });
+
+  it("viewer cannot read llm provider status", async () => {
+    const res = await req("GET", "/api/llm/providers/openai-codex/status", seed.viewerApiKey);
+
+    expect(res.status).toBe(403);
+  });
+
+  it("DELETE /api/llm/providers/openai-codex/disconnect removes credentials", async () => {
+    const res = await req("DELETE", "/api/llm/providers/openai-codex/disconnect", seed.adminApiKey);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      provider: "openai-codex",
+      status: "missing",
+      connected: false,
+    });
+
+    const row = ctx.sqlite
+      .prepare("SELECT id FROM llm_provider_credentials WHERE workspace_id = ? AND provider = ?")
+      .get(seed.workspaceId, "openai-codex");
+    expect(row).toBeUndefined();
+  });
+});
+
 // ───────────────────────────────────────────
 // a. アカウント接続フロー (GET /api/accounts)
 // ───────────────────────────────────────────
@@ -140,12 +242,33 @@ describe("b. post draft→publish flow", () => {
     const data = res.body.data as { status: string };
     expect(["published", "scheduled"]).toContain(data.status);
   });
+
+  it("POST /api/posts accepts quote-only payload for X", async () => {
+    const res = await req("POST", "/api/posts", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      providerMetadata: {
+        x: {
+          quotePostId: "tweet-42",
+        },
+      },
+    });
+    expect(res.status).toBe(201);
+    const data = res.body.data as {
+      status: string;
+      providerMetadata?: { x?: { quotePostId?: string | null } };
+    };
+    expect(data.status).toBe("draft");
+    expect(data.providerMetadata?.x?.quotePostId).toBe("tweet-42");
+  });
 });
 
 // ───────────────────────────────────────────
 // c. 予約投稿フロー
 // ───────────────────────────────────────────
 describe("c. schedule flow", () => {
+  let scheduledPostId: string;
+  let scheduledJobId: string;
+
   it("creates a draft and schedules it", async () => {
     const draft = await req("POST", "/api/posts", seed.editorApiKey, {
       socialAccountId: seed.socialAccountId,
@@ -163,11 +286,43 @@ describe("c. schedule flow", () => {
     const job = sched.body.data as { id: string; status: string; postId: string };
     expect(job.status).toBe("pending");
     expect(job.postId).toBe(draftData.id);
+    scheduledPostId = draftData.id;
+    scheduledJobId = job.id;
 
     // GET /api/schedules/:id
     const got = await req("GET", `/api/schedules/${job.id}`, seed.editorApiKey);
     expect(got.status).toBe(200);
     expect((got.body.data as { id: string }).id).toBe(job.id);
+  });
+
+  it("POST /api/schedules/run-due executes due jobs manually", async () => {
+    const dueUnix = Math.floor((Date.now() - 60_000) / 1000);
+    ctx.sqlite
+      .prepare("UPDATE scheduled_jobs SET scheduled_at = ?, status = 'pending' WHERE id = ?")
+      .run(dueUnix, scheduledJobId);
+    ctx.sqlite.prepare("UPDATE posts SET status = 'scheduled' WHERE id = ?").run(scheduledPostId);
+
+    const run = await req("POST", "/api/schedules/run-due", seed.editorApiKey, {
+      limit: 5,
+    });
+    expect(run.status).toBe(200);
+    const data = run.body.data as {
+      processed: number;
+      succeeded: number;
+      jobs: Array<{ id: string; afterStatus: string }>;
+    };
+    expect(data.processed).toBeGreaterThanOrEqual(1);
+    expect(data.succeeded).toBeGreaterThanOrEqual(1);
+    expect(
+      data.jobs.some((job) => job.id === scheduledJobId && job.afterStatus === "succeeded"),
+    ).toBe(true);
+
+    const got = await req("GET", `/api/schedules/${scheduledJobId}`, seed.editorApiKey);
+    expect(got.status).toBe(200);
+    expect((got.body.data as { status: string }).status).toBe("succeeded");
+    expect(((got.body.detail as { executionLogs?: unknown[] })?.executionLogs ?? []).length).toBe(
+      1,
+    );
   });
 });
 
@@ -389,5 +544,261 @@ describe("j. usage records", () => {
     };
     expect(typeof data.totalCost).toBe("number");
     expect(typeof data.totalRequests).toBe("number");
+  });
+});
+
+// ───────────────────────────────────────────
+// k. X inbox model (P2-1)
+// ───────────────────────────────────────────
+describe("k. x inbox model", () => {
+  it("stores X mentions by conversation unit and keeps X-only metadata separated", async () => {
+    const webhook = await publicReq("POST", "/api/webhooks/x", {
+      for_user_id: "ext-mock-1",
+      tweet_create_events: [
+        {
+          id_str: "tweet-1",
+          conversation_id_str: "conv-1",
+          in_reply_to_status_id_str: "root-1",
+          text: "@brand 返信です",
+          user: {
+            id_str: "user-42",
+            name: "Alice",
+            screen_name: "alice",
+          },
+        },
+        {
+          id_str: "tweet-self",
+          conversation_id_str: "conv-self",
+          text: "自分の投稿は inbox へ入れない",
+          user: {
+            id_str: "ext-mock-1",
+            name: "Mock X Account",
+            screen_name: "brand",
+          },
+        },
+      ],
+    });
+
+    expect(webhook.status).toBe(200);
+    expect(webhook.body.received).toBe(1);
+
+    const inbox = await req("GET", "/api/inbox?platform=x", seed.editorApiKey);
+    expect(inbox.status).toBe(200);
+
+    const threads = inbox.body.data as Array<Record<string, unknown>>;
+    const xThread = threads.find((thread) => thread.externalThreadId === "conv-1");
+    expect(xThread).toBeDefined();
+    expect(xThread?.channel).toBe("public");
+    expect(xThread?.initiatedBy).toBe("external");
+    expect(xThread?.participantExternalId).toBe("user-42");
+
+    const metadata = xThread?.providerMetadata as
+      | { x?: { entryType?: string; conversationId?: string; focusPostId?: string } }
+      | undefined;
+    expect(metadata?.x?.entryType).toBe("reply");
+    expect(metadata?.x?.conversationId).toBe("conv-1");
+    expect(metadata?.x?.focusPostId).toBe("tweet-1");
+  });
+});
+
+// ───────────────────────────────────────────
+// l. X inbox sync (P2-2)
+// ───────────────────────────────────────────
+describe("l. x inbox sync", () => {
+  it("syncs mentions/replies from provider and records usage", async () => {
+    const sync = await req("POST", "/api/inbox/sync", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 10,
+    });
+
+    expect(sync.status).toBe(200);
+    expect(sync.body.data).toMatchObject({
+      syncedThreadCount: 1,
+      syncedMessageCount: 2,
+    });
+
+    const inbox = await req("GET", "/api/inbox?platform=x", seed.editorApiKey);
+    expect(inbox.status).toBe(200);
+    const threads = inbox.body.data as Array<Record<string, unknown>>;
+    const thread = threads.find((row) => row.externalThreadId === "conv-sync-1");
+    expect(thread).toBeDefined();
+
+    const threadId = thread?.id as string;
+
+    const now = Math.floor(Date.now() / 1000);
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO posts (id, workspace_id, social_account_id, platform, status, content_text, platform_post_id, created_by, created_at, updated_at, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "post-root-sync",
+        seed.workspaceId,
+        seed.socialAccountId,
+        "x",
+        "published",
+        "元投稿です",
+        "tweet-sync-root",
+        seed.editorUserId,
+        now,
+        now,
+        now,
+      );
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO posts (id, workspace_id, social_account_id, platform, status, content_text, platform_post_id, created_by, created_at, updated_at, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "post-focus-sync",
+        seed.workspaceId,
+        seed.socialAccountId,
+        "x",
+        "published",
+        "返信済みの自社投稿です",
+        "tweet-sync-2",
+        seed.editorUserId,
+        now,
+        now,
+        now,
+      );
+
+    const detail = await req("GET", `/api/inbox/${threadId}`, seed.editorApiKey);
+    expect(detail.status).toBe(200);
+    const detailData = detail.body.data as {
+      messages: Array<Record<string, unknown>>;
+      context: {
+        entryType: string | null;
+        relatedPosts: Array<Record<string, unknown>>;
+      };
+    };
+    const messages = detailData.messages;
+    expect(messages).toHaveLength(2);
+    expect(messages[0]?.direction).toBe("inbound");
+    expect(messages[1]?.direction).toBe("outbound");
+    expect(detailData.context.entryType).toBe("reply");
+    expect(detailData.context.relatedPosts).toHaveLength(2);
+    expect(detailData.context.relatedPosts[0]?.platformPostId).toBe("tweet-sync-2");
+    expect(detailData.context.relatedPosts[1]?.platformPostId).toBe("tweet-sync-root");
+
+    const usageRows = ctx.sqlite
+      .prepare(
+        "SELECT endpoint, success FROM usage_records WHERE workspace_id = ? AND platform = ? ORDER BY created_at DESC LIMIT 10",
+      )
+      .all(seed.workspaceId, "x") as Array<{ endpoint: string; success: number }>;
+
+    expect(usageRows.some((row) => row.endpoint === "inbox.list" && row.success === 1)).toBe(true);
+    expect(usageRows.some((row) => row.endpoint === "inbox.getMessages" && row.success === 1)).toBe(
+      true,
+    );
+  });
+});
+
+// ───────────────────────────────────────────
+// m. X reply send (P2-3)
+// ───────────────────────────────────────────
+describe("m. x reply send", () => {
+  it("editor can send a reply immediately and usage is recorded", async () => {
+    const sync = await req("POST", "/api/inbox/sync", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 10,
+    });
+    expect(sync.status).toBe(200);
+
+    const inbox = await req("GET", "/api/inbox?platform=x", seed.editorApiKey);
+    const thread = (inbox.body.data as Array<Record<string, unknown>>).find(
+      (row) => row.externalThreadId === "conv-sync-1",
+    );
+    expect(thread).toBeDefined();
+
+    const reply = await req("POST", `/api/inbox/${thread?.id}/reply`, seed.editorApiKey, {
+      contentText: "了解しました。対応します。",
+      contentMedia: [
+        {
+          type: "image",
+          url: "data:image/png;base64,ZmFrZQ==",
+          mimeType: "image/png",
+        },
+      ],
+    });
+    expect(reply.status).toBe(201);
+    const replyData = reply.body.data as {
+      externalMessageId: string | null;
+      message: { direction: string; contentMedia: Array<{ type: string }> | null };
+    };
+    expect(replyData.externalMessageId).toBeTruthy();
+    expect(replyData.message.direction).toBe("outbound");
+    expect(replyData.message.contentMedia).toHaveLength(1);
+
+    const usageRows = ctx.sqlite
+      .prepare(
+        "SELECT endpoint, success FROM usage_records WHERE workspace_id = ? AND platform = ? ORDER BY created_at DESC LIMIT 10",
+      )
+      .all(seed.workspaceId, "x") as Array<{ endpoint: string; success: number }>;
+    expect(usageRows.some((row) => row.endpoint === "inbox.reply" && row.success === 1)).toBe(true);
+  });
+
+  it("agent reply becomes pending approval and is sent after admin approval", async () => {
+    const sync = await req("POST", "/api/inbox/sync", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 10,
+    });
+    expect(sync.status).toBe(200);
+
+    const inbox = await req("GET", "/api/inbox?platform=x", seed.agentApiKey);
+    const thread = (inbox.body.data as Array<Record<string, unknown>>).find(
+      (row) => row.externalThreadId === "conv-sync-1",
+    );
+    expect(thread).toBeDefined();
+
+    const pending = await req("POST", `/api/inbox/${thread?.id}/reply`, seed.agentApiKey, {
+      contentText: "AI 返信案です。",
+      contentMedia: [
+        {
+          type: "image",
+          url: "data:image/png;base64,ZmFrZQ==",
+          mimeType: "image/png",
+        },
+      ],
+    });
+    expect(pending.status).toBe(202);
+    const pendingMeta = pending.body.meta as {
+      requiresApproval: boolean;
+      approvalId: string;
+    };
+    expect(pendingMeta.requiresApproval).toBe(true);
+    const approvalId = pendingMeta.approvalId;
+
+    const pendingRow = ctx.sqlite
+      .prepare("SELECT payload FROM approval_requests WHERE id = ?")
+      .get(approvalId) as { payload: string | null };
+    expect(pendingRow.payload).toContain("AI 返信案です。");
+    expect(pendingRow.payload).toContain("image/png");
+
+    const approvalRes = await req("POST", `/api/approvals/${approvalId}/approve`, seed.adminApiKey);
+    expect(approvalRes.status).toBe(200);
+    const approvalData = approvalRes.body.data as {
+      executorMissing: boolean;
+      executionError: string | null;
+    };
+    expect(approvalData.executorMissing).toBe(false);
+    expect(approvalData.executionError).toBeNull();
+
+    const detail = await req("GET", `/api/inbox/${thread?.id}`, seed.editorApiKey);
+    expect(detail.status).toBe(200);
+    const messages = (detail.body.data as { messages: Array<Record<string, unknown>> }).messages;
+    expect(messages.some((message) => message.contentText === "AI 返信案です。")).toBe(true);
+    expect(
+      messages.some(
+        (message) =>
+          message.contentText === "AI 返信案です。" &&
+          Array.isArray(message.contentMedia) &&
+          message.contentMedia.length === 1,
+      ),
+    ).toBe(true);
+
+    const approvalRow = ctx.sqlite
+      .prepare("SELECT status, payload FROM approval_requests WHERE id = ?")
+      .get(approvalId) as { status: string; payload: string | null };
+    expect(approvalRow.status).toBe("approved");
+    expect(approvalRow.payload).toContain("AI 返信案です。");
   });
 });

@@ -69,6 +69,14 @@ export interface ExecuteResponse {
     mode: ExecutionMode;
   };
   auditLogId?: string | null;
+  conversationId?: string | null;
+}
+
+export interface HistoryTranscript {
+  userMessage: string | null;
+  assistantMessage: string | null;
+  executionNote: string | null;
+  intent: SkillIntent | null;
 }
 
 export interface HistoryEntry {
@@ -78,6 +86,16 @@ export interface HistoryEntry {
   inputSummary: string | null;
   resultSummary: string | null;
   createdAt: string;
+  transcript: HistoryTranscript;
+}
+
+export interface ConversationMessage {
+  id: string;
+  role: "user" | "agent" | "system";
+  content: string;
+  createdAt: string;
+  executionNote?: string | null;
+  fallback?: boolean;
 }
 
 // ───────────────────────────────────────────
@@ -268,6 +286,7 @@ async function streamFallback(
 
 function executeFallback(params: {
   intent: SkillIntent;
+  conversationId: string | null;
   mode?: ExecutionMode;
 }): ApiResult<ExecuteResponse> {
   return {
@@ -285,6 +304,7 @@ function executeFallback(params: {
         },
       },
       auditLogId: null,
+      conversationId: params.conversationId,
     },
   };
 }
@@ -368,6 +388,19 @@ function buildDemoHistory(): HistoryEntry[] {
       inputSummary: "今朝の X 向けリリース原稿を一本書いてほしい",
       resultSummary: "draft を組版し、プレビューを提示しました",
       createdAt: new Date(now - 2 * hour).toISOString(),
+      transcript: {
+        userMessage: "今朝の X 向けリリース原稿を一本書いてほしい",
+        assistantMessage: "承知しました。ドラフト案を作成し、確認用のプレビューを用意します。",
+        executionNote: null,
+        intent: {
+          actionName: "post.create",
+          packageName: "sns-agent.demo",
+          args: {
+            platform: "x",
+            contentText: "今朝の X 向けリリース原稿を一本書いてほしい",
+          },
+        },
+      },
     },
     {
       id: "demo-h-2",
@@ -376,6 +409,12 @@ function buildDemoHistory(): HistoryEntry[] {
       inputSummary: "post.create を承認",
       resultSummary: "deferred (wire offline)",
       createdAt: new Date(now - 2 * hour + 60_000).toISOString(),
+      transcript: {
+        userMessage: null,
+        assistantMessage: null,
+        executionNote: "deferred (wire offline)",
+        intent: null,
+      },
     },
     {
       id: "demo-h-3",
@@ -384,6 +423,12 @@ function buildDemoHistory(): HistoryEntry[] {
       inputSummary: "LINE の予約投稿の状態を教えて",
       resultSummary: "3 件 pending、1 件 retrying と応答",
       createdAt: new Date(now - 26 * hour).toISOString(),
+      transcript: {
+        userMessage: "LINE の予約投稿の状態を教えて",
+        assistantMessage: "現在は pending が 3 件、retrying が 1 件です。",
+        executionNote: null,
+        intent: null,
+      },
     },
     {
       id: "demo-h-4",
@@ -392,6 +437,12 @@ function buildDemoHistory(): HistoryEntry[] {
       inputSummary: "Instagram の先週の使用量を要約",
       resultSummary: "総コール 142 件 / cost $0.48 を要約",
       createdAt: new Date(now - 3 * 24 * hour).toISOString(),
+      transcript: {
+        userMessage: "Instagram の先週の使用量を要約",
+        assistantMessage: "先週の Instagram 利用は総コール 142 件、推定コストは $0.48 でした。",
+        executionNote: null,
+        intent: null,
+      },
     },
   ];
 }
@@ -413,7 +464,13 @@ export function groupHistoryByConversation(entries: HistoryEntry[]): Conversatio
   for (const entry of entries) {
     const cid = entry.conversationId ?? "loose-" + entry.id;
     const existing = map.get(cid);
-    const snippet = entry.inputSummary ?? entry.resultSummary ?? "(no content)";
+    const snippet =
+      entry.transcript.userMessage ??
+      entry.transcript.assistantMessage ??
+      entry.transcript.executionNote ??
+      entry.inputSummary ??
+      entry.resultSummary ??
+      "(no content)";
     if (!existing) {
       map.set(cid, {
         id: cid,
@@ -432,5 +489,77 @@ export function groupHistoryByConversation(entries: HistoryEntry[]): Conversatio
   }
   return Array.from(map.values()).sort(
     (a, b) => new Date(b.lastActionAt).getTime() - new Date(a.lastActionAt).getTime(),
+  );
+}
+
+export function buildConversationMessages(entries: HistoryEntry[]): ConversationMessage[] {
+  const sorted = [...entries].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+
+  const messages: ConversationMessage[] = [];
+
+  for (const entry of sorted) {
+    const userMessage =
+      entry.transcript.userMessage ?? (entry.action === "agent.chat" ? entry.inputSummary : null);
+    const assistantMessage = entry.transcript.assistantMessage;
+    const executionNote =
+      entry.transcript.executionNote ??
+      (entry.action === "agent.execute" || entry.action === "agent.execute.failed"
+        ? entry.resultSummary
+        : null);
+
+    if (userMessage) {
+      messages.push({
+        id: `${entry.id}:user`,
+        role: "user",
+        content: userMessage,
+        createdAt: entry.createdAt,
+      });
+    }
+
+    if (assistantMessage) {
+      messages.push({
+        id: `${entry.id}:agent`,
+        role: "agent",
+        content: assistantMessage,
+        createdAt: entry.createdAt,
+      });
+    }
+
+    if (executionNote) {
+      messages.push({
+        id: `${entry.id}:system`,
+        role: "system",
+        content: executionNote,
+        createdAt: entry.createdAt,
+      });
+    }
+  }
+
+  return messages;
+}
+
+export function buildConversationMessageMap(
+  entries: HistoryEntry[],
+): Record<string, ConversationMessage[]> {
+  const grouped = new Map<string, HistoryEntry[]>();
+
+  for (const entry of entries) {
+    const cid = entry.conversationId;
+    if (!cid) continue;
+    const bucket = grouped.get(cid);
+    if (bucket) {
+      bucket.push(entry);
+    } else {
+      grouped.set(cid, [entry]);
+    }
+  }
+
+  return Object.fromEntries(
+    Array.from(grouped.entries()).map(([conversationId, conversationEntries]) => [
+      conversationId,
+      buildConversationMessages(conversationEntries),
+    ]),
   );
 }

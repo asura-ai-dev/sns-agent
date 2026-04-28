@@ -18,6 +18,18 @@ export interface MediaAttachment {
   name?: string | null;
 }
 
+export interface XThreadPostSegment {
+  contentText: string;
+}
+
+export interface PostProviderMetadata {
+  x?: {
+    quotePostId?: string | null;
+    threadPosts?: XThreadPostSegment[] | null;
+    publishedThreadIds?: string[] | null;
+  };
+}
+
 export interface PostSocialAccount {
   id: string;
   displayName: string;
@@ -30,6 +42,9 @@ export interface PostScheduleInfo {
   id: string;
   scheduledAt: string;
   status: "pending" | "locked" | "running" | "succeeded" | "failed" | "retrying";
+  nextRetryAt?: string | null;
+  lastError?: string | null;
+  lastExecutedAt?: string | null;
 }
 
 export interface Post {
@@ -40,6 +55,7 @@ export interface Post {
   status: PostStatus;
   contentText: string | null;
   contentMedia: MediaAttachment[] | null;
+  providerMetadata?: PostProviderMetadata | null;
   platformPostId?: string | null;
   validationResult?: unknown;
   idempotencyKey?: string | null;

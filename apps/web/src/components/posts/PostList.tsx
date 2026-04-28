@@ -18,6 +18,7 @@ import {
   LinkSimple,
 } from "@phosphor-icons/react";
 import { PlatformIcon, PLATFORM_VISUALS } from "@/components/settings/PlatformIcon";
+import { getStatusStyle } from "@/components/calendar/statusStyles";
 import { COMMON_ACTIONS, SECTION_KICKERS } from "@/lib/i18n/labels";
 import { StatusBadge } from "./StatusBadge";
 import type { Post } from "./types";
@@ -39,6 +40,13 @@ function formatDateTime(iso: string | null | undefined): string {
 
 function excerpt(text: string | null, max = 140): string {
   if (!text) return "(本文なし)";
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= max) return normalized;
+  return `${normalized.slice(0, max)}…`;
+}
+
+function truncateError(text: string | null | undefined, max = 84): string | null {
+  if (!text) return null;
   const normalized = text.replace(/\s+/g, " ").trim();
   if (normalized.length <= max) return normalized;
   return `${normalized.slice(0, max)}…`;
@@ -80,12 +88,13 @@ export function PostList({
         <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-warning">
           {SECTION_KICKERS.posts} offline · using local fallback
         </p>
-        <p className="mt-2 font-display text-base font-medium leading-snug text-base-content" style={{ fontFamily: "'Fraunces', serif" }}>
+        <p
+          className="mt-2 font-display text-base font-medium leading-snug text-base-content"
+          style={{ fontFamily: "'Fraunces', serif" }}
+        >
           投稿一覧を取得できませんでした
         </p>
-        <p className="mt-1 font-mono text-[10px] text-base-content/55">
-          · {error}
-        </p>
+        <p className="mt-1 font-mono text-[10px] text-base-content/55">· {error}</p>
         <p className="mt-2 text-xs text-base-content/55">
           API サーバー未起動時は 0 件として表示されます。再読み込みで再試行できます。
         </p>
@@ -208,6 +217,7 @@ function PostRow({
 
       <td className="px-4 py-4 align-top">
         <StatusBadge status={post.status} />
+        <ScheduleStatusPanel schedule={post.schedule} className="mt-2" />
       </td>
 
       <td className="px-4 py-4 align-top">
@@ -275,6 +285,7 @@ function PostCard({
           <p className="mt-2 line-clamp-3 font-display text-sm leading-snug text-base-content">
             {excerpt(post.contentText, 200)}
           </p>
+          <ScheduleStatusPanel schedule={post.schedule} className="mt-3" />
           <div className="mt-3 flex items-center justify-end gap-1">
             <RowActions
               post={post}
@@ -287,6 +298,55 @@ function PostCard({
         </div>
       </div>
     </article>
+  );
+}
+
+function ScheduleStatusPanel({
+  schedule,
+  className = "",
+}: {
+  schedule: Post["schedule"];
+  className?: string;
+}) {
+  if (!schedule) return null;
+
+  const status = getStatusStyle(schedule.status);
+  const lastError = truncateError(schedule.lastError);
+
+  return (
+    <div
+      className={["rounded-sm border border-base-300 bg-base-200/35 px-2.5 py-2", className].join(
+        " ",
+      )}
+    >
+      <p className="text-[0.58rem] font-semibold uppercase tracking-[0.18em] text-base-content/45">
+        Schedule
+      </p>
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <span
+          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.65rem] ${status.chipClass}`}
+        >
+          <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${status.dotClass}`} />
+          {status.label}
+        </span>
+        <span className="text-[0.72rem] tabular-nums text-base-content/70">
+          予約 {formatDateTime(schedule.scheduledAt)}
+        </span>
+      </div>
+      {schedule.nextRetryAt ? (
+        <p className="mt-1 text-[0.68rem] tabular-nums text-base-content/58">
+          次回再試行 {formatDateTime(schedule.nextRetryAt)}
+        </p>
+      ) : null}
+      {schedule.lastExecutedAt ? (
+        <p className="mt-1 text-[0.68rem] tabular-nums text-base-content/58">
+          最終実行 {formatDateTime(schedule.lastExecutedAt)}
+        </p>
+      ) : null}
+      {lastError ? (
+        <p className="mt-1 text-[0.68rem] leading-snug text-error/85">理由 {lastError}</p>
+      ) : null}
+    </div>
   );
 }
 

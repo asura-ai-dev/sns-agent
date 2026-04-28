@@ -6,6 +6,7 @@
  */
 
 import type { Platform } from "@sns-agent/config";
+import type { PostProviderMetadata } from "@sns-agent/core";
 
 // ───────────────────────────────────────────
 // core エンティティの re-export
@@ -13,6 +14,7 @@ import type { Platform } from "@sns-agent/config";
 export type {
   SocialAccount,
   Post,
+  PostProviderMetadata,
   ScheduledJob,
   UsageRecord,
   MediaAttachment,
@@ -73,6 +75,7 @@ export interface CreatePostInput {
   platform: Platform;
   contentText?: string;
   contentMedia?: { type: "image" | "video"; url: string; mimeType: string }[];
+  providerMetadata?: PostProviderMetadata | null;
   /** true で即時投稿、false/省略で下書き */
   publish?: boolean;
 }
@@ -80,6 +83,7 @@ export interface CreatePostInput {
 export interface UpdatePostInput {
   contentText?: string;
   contentMedia?: { type: "image" | "video"; url: string; mimeType: string }[];
+  providerMetadata?: PostProviderMetadata | null;
 }
 
 // ───────────────────────────────────────────
@@ -99,6 +103,31 @@ export interface CreateScheduleInput {
 
 export interface UpdateScheduleInput {
   scheduledAt?: string; // ISO 8601
+}
+
+export interface RunDueSchedulesInput {
+  limit?: number;
+}
+
+export interface RunDueSchedulesJobResult {
+  id: string;
+  postId: string;
+  beforeStatus: string;
+  afterStatus: string;
+  willRetry: boolean;
+  recoveredStaleLock: boolean;
+  error?: string;
+}
+
+export interface RunDueSchedulesResult {
+  processedAt: string;
+  scanned: number;
+  processed: number;
+  skipped: number;
+  succeeded: number;
+  retrying: number;
+  failed: number;
+  jobs: RunDueSchedulesJobResult[];
 }
 
 // ───────────────────────────────────────────
@@ -205,4 +234,89 @@ export interface UpdateBudgetPolicyDto {
   period?: BudgetPeriodType;
   limitAmountUsd?: number;
   actionOnExceed?: BudgetActionOnExceed;
+}
+
+// ───────────────────────────────────────────
+// Agent Gateway
+// ───────────────────────────────────────────
+
+export type AgentExecutionMode =
+  | "read-only"
+  | "draft"
+  | "approval-required"
+  | "direct-execute";
+
+export interface AgentSkillIntent {
+  actionName: string;
+  packageName: string;
+  args: Record<string, unknown>;
+}
+
+export interface AgentSkillPreview {
+  actionName: string;
+  packageName: string;
+  description?: string | null;
+  preview?: Record<string, unknown> | string | null;
+  requiredPermissions: string[];
+  missingPermissions: string[];
+  argumentErrors: string[];
+  mode: AgentExecutionMode;
+  allowed: boolean;
+  blockedReason?: string | null;
+}
+
+export interface AgentChatTextResponse {
+  kind: "text";
+  conversationId: string | null;
+  content: string;
+}
+
+export interface AgentChatPreviewResponse {
+  kind: "preview";
+  conversationId: string | null;
+  content: string;
+  intent: AgentSkillIntent;
+  preview: AgentSkillPreview;
+}
+
+export type AgentChatResponse = AgentChatTextResponse | AgentChatPreviewResponse;
+
+export interface AgentChatInput {
+  message: string;
+  conversationId?: string | null;
+  mode?: AgentExecutionMode;
+}
+
+export interface AgentExecuteInput {
+  actionName: string;
+  packageName: string;
+  args?: Record<string, unknown>;
+  conversationId?: string | null;
+  mode?: AgentExecutionMode;
+}
+
+export interface AgentExecuteResponse {
+  outcome: {
+    actionName: string;
+    packageName: string;
+    result: Record<string, unknown>;
+    mode: AgentExecutionMode;
+  };
+  auditLogId?: string | null;
+  conversationId?: string | null;
+}
+
+export interface AgentHistoryEntry {
+  id: string;
+  action: string;
+  conversationId: string | null;
+  inputSummary: string | null;
+  resultSummary: string | null;
+  createdAt: string;
+}
+
+export interface AgentHistoryParams {
+  conversationId?: string;
+  page?: number;
+  limit?: number;
 }

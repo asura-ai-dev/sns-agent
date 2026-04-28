@@ -20,6 +20,7 @@ export const posts = sqliteTable(
     }).notNull(),
     contentText: text("content_text"),
     contentMedia: text("content_media", { mode: "json" }),
+    providerMetadata: text("provider_metadata", { mode: "json" }),
     platformPostId: text("platform_post_id"),
     validationResult: text("validation_result", { mode: "json" }),
     idempotencyKey: text("idempotency_key").unique(),

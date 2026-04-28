@@ -10,6 +10,7 @@ import type {
   Platform,
   Post,
   PostListFilters,
+  PostProviderMetadata,
   PostListResponse,
   PostSocialAccount,
 } from "./types";
@@ -151,6 +152,7 @@ export interface CreatePostInput {
   socialAccountId: string;
   contentText: string;
   contentMedia: MediaAttachment[];
+  providerMetadata?: PostProviderMetadata | null;
   publishNow: boolean;
   idempotencyKey?: string | null;
 }
@@ -167,6 +169,7 @@ export async function createPostApi(input: CreatePostInput): Promise<ApiResult<P
         socialAccountId: input.socialAccountId,
         contentText: input.contentText,
         contentMedia: input.contentMedia.length > 0 ? input.contentMedia : null,
+        providerMetadata: input.providerMetadata ?? null,
         publishNow: input.publishNow,
       }),
     });
@@ -174,6 +177,40 @@ export async function createPostApi(input: CreatePostInput): Promise<ApiResult<P
       return await parseError(res);
     }
     const body = (await res.json()) as { data: Post };
+    return { ok: true, value: body.data };
+  } catch (err) {
+    return networkFailure(err);
+  }
+}
+
+// ───────────────────────────────────────────
+// 予約作成
+// ───────────────────────────────────────────
+
+interface ScheduleJobResponse {
+  data: {
+    id: string;
+    postId: string;
+    scheduledAt: string;
+    status: string;
+  };
+}
+
+export async function createScheduleApi(
+  postId: string,
+  scheduledAt: string,
+): Promise<ApiResult<ScheduleJobResponse["data"]>> {
+  try {
+    const res = await fetch(`${API_BASE}/api/schedules`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postId, scheduledAt }),
+    });
+    if (!res.ok && res.status !== 201) {
+      return await parseError(res);
+    }
+    const body = (await res.json()) as ScheduleJobResponse;
     return { ok: true, value: body.data };
   } catch (err) {
     return networkFailure(err);

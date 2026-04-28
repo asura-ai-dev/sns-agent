@@ -31,7 +31,11 @@ function threadRowToEntity(row: typeof conversationThreads.$inferSelect): Conver
     platform: row.platform as ConversationThread["platform"],
     externalThreadId: row.externalThreadId,
     participantName: row.participantName,
+    participantExternalId: row.participantExternalId,
+    channel: row.channel as ConversationThread["channel"],
+    initiatedBy: row.initiatedBy as ConversationThread["initiatedBy"],
     lastMessageAt: row.lastMessageAt,
+    providerMetadata: row.providerMetadata as ConversationThread["providerMetadata"],
     status: row.status as ConversationThread["status"],
     createdAt: row.createdAt,
   };
@@ -45,7 +49,10 @@ function messageRowToEntity(row: typeof messagesTable.$inferSelect): Message {
     contentText: row.contentText,
     contentMedia: row.contentMedia as Message["contentMedia"],
     externalMessageId: row.externalMessageId,
+    authorExternalId: row.authorExternalId,
+    authorDisplayName: row.authorDisplayName,
     sentAt: row.sentAt,
+    providerMetadata: row.providerMetadata as Message["providerMetadata"],
     createdAt: row.createdAt,
   };
 }
@@ -155,7 +162,11 @@ export class DrizzleConversationRepository implements ConversationRepository {
       platform: thread.platform,
       externalThreadId: thread.externalThreadId,
       participantName: thread.participantName,
+      participantExternalId: thread.participantExternalId,
+      channel: thread.channel,
+      initiatedBy: thread.initiatedBy,
       lastMessageAt: thread.lastMessageAt,
+      providerMetadata: thread.providerMetadata as Record<string, unknown> | null,
       status: thread.status,
       createdAt: now,
     });
@@ -217,6 +228,23 @@ export class DrizzleMessageRepository implements MessageRepository {
     return typeof raw === "number" ? raw : Number(raw);
   }
 
+  async findByExternalMessage(
+    threadId: string,
+    externalMessageId: string,
+  ): Promise<Message | null> {
+    const rows = await this.db
+      .select()
+      .from(messagesTable)
+      .where(
+        and(
+          eq(messagesTable.threadId, threadId),
+          eq(messagesTable.externalMessageId, externalMessageId),
+        ),
+      )
+      .limit(1);
+    return rows.length > 0 ? messageRowToEntity(rows[0]) : null;
+  }
+
   async create(message: Omit<Message, "id" | "createdAt">): Promise<Message> {
     const now = new Date();
     const id = randomUUID();
@@ -227,7 +255,10 @@ export class DrizzleMessageRepository implements MessageRepository {
       contentText: message.contentText,
       contentMedia: message.contentMedia as unknown as Record<string, unknown>[] | null,
       externalMessageId: message.externalMessageId,
+      authorExternalId: message.authorExternalId,
+      authorDisplayName: message.authorDisplayName,
       sentAt: message.sentAt,
+      providerMetadata: message.providerMetadata as Record<string, unknown> | null,
       createdAt: now,
     });
     return { ...message, id, createdAt: now };

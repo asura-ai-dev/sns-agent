@@ -13,7 +13,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   FloppyDisk,
   PaperPlaneTilt,
@@ -23,14 +23,18 @@ import {
   Trash,
   UploadSimple,
   CaretDown,
+  LinkSimple,
+  Plus,
+  Rows,
 } from "@phosphor-icons/react";
 import { PlatformIcon, PLATFORM_VISUALS } from "@/components/settings/PlatformIcon";
+import { toDatetimeLocalValue } from "@/components/calendar/dateUtils";
 import { COMMON_ACTIONS, SECTION_KICKERS } from "@/lib/i18n/labels";
 import { CharacterCounter } from "./CharacterCounter";
 import { PostPreview } from "./PostPreview";
 import { PLATFORM_LIMITS, getCounterZone } from "./platformLimits";
-import { createPostApi, fetchConnectedAccounts, type ApiFailure } from "./api";
-import type { MediaAttachment, Platform, PostSocialAccount } from "./types";
+import { createPostApi, createScheduleApi, fetchConnectedAccounts, type ApiFailure } from "./api";
+import type { MediaAttachment, Platform, PostProviderMetadata, PostSocialAccount } from "./types";
 
 // ───────────────────────────────────────────
 // バリデーション
@@ -43,13 +47,20 @@ interface ValidationReport {
   warnings: string[];
 }
 
+type XComposerMode = "standard" | "quote" | "thread";
+
 function validate(
   account: PostSocialAccount | null,
   text: string,
   media: MediaAttachment[],
+  xMode: XComposerMode,
+  quotePostId: string,
+  threadSegments: string[],
 ): ValidationReport {
   const errors: string[] = [];
   const warnings: string[] = [];
+  const trimmedQuotePostId = quotePostId.trim();
+  const normalizedSegments = threadSegments.map((segment) => segment.trim());
 
   if (!account) {
     errors.push("SNS アカウントを選択してください");
@@ -66,9 +77,31 @@ function validate(
     if (account.platform === "instagram" && media.length === 0) {
       warnings.push("Instagram は原則メディアが必須です（API 側で最終検証されます）");
     }
+
+    if (account.platform === "x") {
+      if (xMode === "quote" && trimmedQuotePostId.length === 0) {
+        errors.push("引用元の X ポスト ID を入力してください");
+      }
+
+      if (xMode === "thread") {
+        if (normalizedSegments.every((segment) => segment.length === 0)) {
+          errors.push("スレッドの続き本文を 1 件以上入力してください");
+        }
+        if (normalizedSegments.some((segment) => segment.length === 0)) {
+          errors.push("空のスレッド行があります。不要な行は削除してください");
+        }
+        normalizedSegments.forEach((segment, index) => {
+          if (segment.length > limit) {
+            errors.push(
+              `スレッド ${index + 2} 件目が上限 ${limit.toLocaleString()} 文字を超えています`,
+            );
+          }
+        });
+      }
+    }
   }
 
-  const hasContent = text.trim().length > 0 || media.length > 0;
+  const hasContent = text.trim().length > 0 || media.length > 0 || trimmedQuotePostId.length > 0;
   if (!hasContent) {
     errors.push("本文またはメディアを入力してください");
   }
@@ -80,12 +113,76 @@ function validate(
   return { canDraft, canPublish, errors, warnings };
 }
 
+function normalizeScheduledAtInput(value: string | null): string {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return toDatetimeLocalValue(parsed);
+}
+
+function getScheduleValidationMessage(value: string): string | null {
+  if (!value) return "予約日時を入力してください";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "予約日時の形式が正しくありません";
+  if (parsed.getTime() <= Date.now()) return "予約日時は現在より未来を指定してください";
+  return null;
+}
+
+function formatScheduledAtLabel(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${parsed.getFullYear()}/${pad(parsed.getMonth() + 1)}/${pad(parsed.getDate())} ${pad(
+    parsed.getHours(),
+  )}:${pad(parsed.getMinutes())}`;
+}
+
+function buildProviderMetadata(
+  platform: Platform | null,
+  xMode: XComposerMode,
+  quotePostId: string,
+  threadSegments: string[],
+): PostProviderMetadata | null {
+  if (platform !== "x" || xMode === "standard") return null;
+  const normalizedQuotePostId = quotePostId.trim();
+  const normalizedSegments =
+    xMode === "thread"
+      ? threadSegments
+          .map((segment) => segment.trim())
+          .filter((segment) => segment.length > 0)
+          .map((contentText) => ({ contentText }))
+      : [];
+
+  return {
+    x: {
+      quotePostId: normalizedQuotePostId || null,
+      threadPosts: normalizedSegments.length > 0 ? normalizedSegments : null,
+    },
+  };
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("ファイルを読み込めませんでした"));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("ファイルを読み込めませんでした"));
+    reader.readAsDataURL(file);
+  });
+}
+
 // ───────────────────────────────────────────
 // PostForm
 // ───────────────────────────────────────────
 
 export function PostForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [accounts, setAccounts] = useState<PostSocialAccount[] | null>(null);
   const [accountsError, setAccountsError] = useState<string | null>(null);
@@ -94,10 +191,21 @@ export function PostForm() {
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [text, setText] = useState("");
   const [media, setMedia] = useState<MediaAttachment[]>([]);
-  const [submitting, setSubmitting] = useState<"draft" | "publish" | null>(null);
+  const [xMode, setXMode] = useState<XComposerMode>("standard");
+  const [quotePostId, setQuotePostId] = useState("");
+  const [threadSegments, setThreadSegments] = useState<string[]>([""]);
+  const [scheduledAt, setScheduledAt] = useState("");
+  const [submitting, setSubmitting] = useState<"draft" | "publish" | "schedule" | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [lastSuccess, setLastSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const preset = normalizeScheduledAtInput(searchParams.get("scheduledAt"));
+    if (preset) {
+      setScheduledAt((current) => current || preset);
+    }
+  }, [searchParams]);
 
   // ───────── Fetch accounts ─────────
   useEffect(() => {
@@ -127,48 +235,61 @@ export function PostForm() {
   const platform: Platform | null = selectedAccount?.platform ?? null;
   const limit = platform ? PLATFORM_LIMITS[platform].textLimit : 280;
   const zone = getCounterZone(text.length, limit);
+  const providerMetadata = useMemo(
+    () => buildProviderMetadata(platform, xMode, quotePostId, threadSegments),
+    [platform, xMode, quotePostId, threadSegments],
+  );
 
   const report = useMemo(
-    () => validate(selectedAccount, text, media),
-    [selectedAccount, text, media],
+    () => validate(selectedAccount, text, media, xMode, quotePostId, threadSegments),
+    [selectedAccount, text, media, xMode, quotePostId, threadSegments],
   );
+  const scheduleValidation = useMemo(
+    () => getScheduleValidationMessage(scheduledAt),
+    [scheduledAt],
+  );
+  const canSchedule = report.canPublish && scheduleValidation === null;
+
+  useEffect(() => {
+    if (platform !== "x") {
+      setXMode("standard");
+      setQuotePostId("");
+      setThreadSegments([""]);
+    }
+  }, [platform]);
 
   // ───────── Media handling ─────────
   const handleFiles = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const next: MediaAttachment[] = [];
-    for (const f of Array.from(files)) {
-      const url = URL.createObjectURL(f);
-      const type = f.type.startsWith("video/") ? "video" : "image";
-      next.push({ type, url, mimeType: f.type || null, name: f.name });
-    }
-    setMedia((prev) => [...prev, ...next]);
+    void (async () => {
+      const next = await Promise.all(
+        Array.from(files).map(async (file) => {
+          const url = await readFileAsDataUrl(file);
+          const type = file.type.startsWith("video/") ? "video" : "image";
+          return {
+            type,
+            url,
+            mimeType: file.type || null,
+            name: file.name,
+          } satisfies MediaAttachment;
+        }),
+      );
+      setMedia((prev) => [...prev, ...next]);
+    })();
   }, []);
 
   const removeMedia = (idx: number) => {
-    setMedia((prev) => {
-      const item = prev[idx];
-      if (item && item.url.startsWith("blob:")) URL.revokeObjectURL(item.url);
-      return prev.filter((_, i) => i !== idx);
-    });
+    setMedia((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  useEffect(() => {
-    // unmount cleanup
-    return () => {
-      media.forEach((m) => {
-        if (m.url.startsWith("blob:")) URL.revokeObjectURL(m.url);
-      });
-    };
-  }, []);
-
   // ───────── Submit ─────────
-  const submit = async (publishNow: boolean) => {
+  const submit = async (mode: "draft" | "publish" | "schedule") => {
     if (!selectedAccount) return;
-    if (publishNow && !report.canPublish) return;
-    if (!publishNow && !report.canDraft) return;
+    if (mode === "publish" && !report.canPublish) return;
+    if (mode === "draft" && !report.canDraft) return;
+    if (mode === "schedule" && !canSchedule) return;
 
-    setSubmitting(publishNow ? "publish" : "draft");
+    setSubmitting(mode);
     setSubmitError(null);
     setLastSuccess(null);
 
@@ -181,18 +302,32 @@ export function PostForm() {
         mimeType: m.mimeType ?? null,
         name: m.name ?? null,
       })),
-      publishNow,
+      providerMetadata,
+      publishNow: mode === "publish",
     });
-
-    setSubmitting(null);
 
     if (!res.ok) {
       setSubmitError((res as ApiFailure).error.message);
+      setSubmitting(null);
       return;
     }
 
-    setLastSuccess(publishNow ? "投稿を公開しました" : "下書きを保存しました");
-    // 成功後は一覧に戻る
+    if (mode === "schedule") {
+      const scheduledIso = new Date(scheduledAt).toISOString();
+      const scheduleRes = await createScheduleApi(res.value.id, scheduledIso);
+      if (!scheduleRes.ok) {
+        setSubmitError(`${scheduleRes.error.message}（投稿自体は下書きとして保存されています）`);
+        setSubmitting(null);
+        return;
+      }
+      setLastSuccess(`${formatScheduledAtLabel(scheduledAt)} に予約しました`);
+      setSubmitting(null);
+      setTimeout(() => router.push("/calendar"), 600);
+      return;
+    }
+
+    setSubmitting(null);
+    setLastSuccess(mode === "publish" ? "投稿を公開しました" : "下書きを保存しました");
     setTimeout(() => router.push("/posts"), 600);
   };
 
@@ -292,7 +427,7 @@ export function PostForm() {
               ファイルを選択
             </button>
             <p className="mt-2 text-[0.6rem] uppercase tracking-wider text-base-content/40">
-              アップロード先は v1 ではプレースホルダ
+              X は画像・動画を投稿時にアップロードします
             </p>
             <input
               ref={fileInputRef}
@@ -335,6 +470,187 @@ export function PostForm() {
           )}
         </div>
 
+        {platform === "x" && (
+          <div className="rounded-box border border-base-300 bg-base-100 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-base-content/50">
+                  X 固有の投稿形式
+                </p>
+                <p className="mt-1 text-sm text-base-content/70">
+                  通常投稿に加えて、引用投稿とスレッド投稿をここで切り替えられます。
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(
+                [
+                  { value: "standard", label: "通常投稿", icon: null },
+                  {
+                    value: "quote",
+                    label: "引用投稿",
+                    icon: <LinkSimple size={14} weight="bold" />,
+                  },
+                  {
+                    value: "thread",
+                    label: "スレッド投稿",
+                    icon: <Rows size={14} weight="bold" />,
+                  },
+                ] as const
+              ).map((mode) => {
+                const active = xMode === mode.value;
+                return (
+                  <button
+                    key={mode.value}
+                    type="button"
+                    onClick={() => setXMode(mode.value)}
+                    className={[
+                      "inline-flex items-center gap-2 rounded-field border px-3 py-2 text-sm transition-colors",
+                      active
+                        ? "border-primary/40 bg-primary/10 font-semibold text-primary"
+                        : "border-base-300 bg-base-100 text-base-content/70 hover:border-base-content/25",
+                    ].join(" ")}
+                  >
+                    {mode.icon}
+                    {mode.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {(xMode === "quote" || xMode === "thread") && (
+              <div className="mt-4 space-y-2">
+                <label
+                  htmlFor="post-quote-id"
+                  className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-base-content/50"
+                >
+                  引用元ポスト ID
+                </label>
+                <input
+                  id="post-quote-id"
+                  type="text"
+                  value={quotePostId}
+                  onChange={(e) => setQuotePostId(e.target.value)}
+                  placeholder="例: 1912345678901234567"
+                  className="w-full rounded-field border border-base-300 bg-base-100 px-3 py-2 text-sm text-base-content focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                />
+                <p className="text-xs text-base-content/50">
+                  {xMode === "quote"
+                    ? "本文が空でも、引用元 ID があれば quote-only 投稿を作れます。"
+                    : "スレッドの 1 件目を引用投稿にしたい場合は、この ID を入れてください。"}
+                </p>
+              </div>
+            )}
+
+            {xMode === "thread" && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-base-content/50">
+                      スレッドの続き
+                    </p>
+                    <p className="mt-1 text-xs text-base-content/55">
+                      1 件目は上の本文欄です。ここでは 2 件目以降の self-reply を追加します。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setThreadSegments((current) => [...current, ""])}
+                    className="inline-flex items-center gap-1 rounded-field border border-base-300 bg-base-100 px-3 py-1.5 text-xs font-medium text-base-content/70 hover:border-base-content/25 hover:text-base-content"
+                  >
+                    <Plus size={12} weight="bold" />
+                    行を追加
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {threadSegments.map((segment, index) => (
+                    <div
+                      key={`thread-${index}`}
+                      className="rounded-field border border-base-300 bg-base-100 p-3"
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-base-content/45">
+                          #{index + 2}
+                        </p>
+                        {threadSegments.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setThreadSegments((current) =>
+                                current.filter((_, currentIndex) => currentIndex !== index),
+                              )
+                            }
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-field border border-base-300 text-base-content/55 hover:border-error/30 hover:text-error"
+                          >
+                            <Trash size={12} weight="bold" />
+                          </button>
+                        )}
+                      </div>
+                      <textarea
+                        value={segment}
+                        onChange={(e) =>
+                          setThreadSegments((current) =>
+                            current.map((value, currentIndex) =>
+                              currentIndex === index ? e.target.value : value,
+                            ),
+                          )
+                        }
+                        rows={4}
+                        placeholder={`スレッド ${index + 2} 件目の本文`}
+                        className="w-full resize-y rounded-field border border-base-300 bg-base-100 px-3 py-2 text-sm text-base-content focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Schedule */}
+        <div className="rounded-box border border-base-300 bg-base-100 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-base-content/50">
+                予約投稿
+              </p>
+              <p className="mt-1 text-sm text-base-content/70">
+                カレンダーから来た場合は日時が自動入力されます。ここで変えれば、その時刻で予約されます。
+              </p>
+            </div>
+            {scheduledAt ? (
+              <span className="rounded-field border border-primary/30 bg-primary/5 px-2 py-1 text-[0.65rem] font-medium text-primary">
+                {formatScheduledAtLabel(scheduledAt)}
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            <label
+              htmlFor="post-scheduled-at"
+              className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-base-content/50"
+            >
+              日時指定
+            </label>
+            <input
+              id="post-scheduled-at"
+              type="datetime-local"
+              value={scheduledAt}
+              onChange={(e) => setScheduledAt(e.target.value)}
+              className="w-full rounded-field border border-base-300 bg-base-100 px-3 py-2 text-sm text-base-content focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/15"
+            />
+            <p className="text-xs text-base-content/50">
+              空欄なら下書き保存か即時投稿、入力すると「予約投稿」ボタンが使えます。
+            </p>
+            {scheduleValidation ? (
+              <div className="rounded-field border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning-content">
+                {scheduleValidation}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
         {/* Validation */}
         <ValidationBlock report={report} />
 
@@ -346,14 +662,14 @@ export function PostForm() {
             ) : lastSuccess ? (
               <span className="text-primary">{lastSuccess}</span>
             ) : (
-              "下書き保存 or 即時投稿を選択してください"
+              "下書き保存・予約投稿・即時投稿から選べます"
             )}
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
               disabled={!report.canDraft || submitting !== null}
-              onClick={() => submit(false)}
+              onClick={() => submit("draft")}
               data-testid="post-submit-draft"
               className="inline-flex items-center gap-2 rounded-field border border-base-300 bg-base-100 px-4 py-2 text-sm font-medium text-base-content transition-colors hover:border-base-content/40 disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -362,8 +678,18 @@ export function PostForm() {
             </button>
             <button
               type="button"
+              disabled={!canSchedule || submitting !== null}
+              onClick={() => submit("schedule")}
+              data-testid="post-submit-schedule"
+              className="inline-flex items-center gap-2 rounded-field border border-primary/30 bg-primary/5 px-4 py-2 text-sm font-semibold text-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <FloppyDisk size={14} weight="bold" />
+              {submitting === "schedule" ? "予約中…" : "予約投稿"}
+            </button>
+            <button
+              type="button"
               disabled={!report.canPublish || submitting !== null}
-              onClick={() => submit(true)}
+              onClick={() => submit("publish")}
               data-testid="post-submit-publish"
               className="inline-flex items-center gap-2 rounded-field bg-primary px-4 py-2 text-sm font-semibold text-primary-content shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -375,11 +701,20 @@ export function PostForm() {
       </section>
 
       {/* ────────── Preview ────────── */}
-      <aside aria-label={SECTION_KICKERS.compose} className="space-y-3 lg:sticky lg:top-4 lg:self-start">
+      <aside
+        aria-label={SECTION_KICKERS.compose}
+        className="space-y-3 lg:sticky lg:top-4 lg:self-start"
+      >
         <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-base-content/50">
           Preview
         </p>
-        <PostPreview account={selectedAccount} platform={platform} text={text} media={media} />
+        <PostPreview
+          account={selectedAccount}
+          platform={platform}
+          text={text}
+          media={media}
+          providerMetadata={providerMetadata}
+        />
       </aside>
     </div>
   );
@@ -415,7 +750,8 @@ function AccountSelect({
           desk wire offline · using local fallback
         </p>
         <p className="mt-1 text-xs text-base-content/70">
-          アカウント一覧を取得できませんでした <span className="font-mono text-[10px] text-base-content/50">· {error}</span>
+          アカウント一覧を取得できませんでした{" "}
+          <span className="font-mono text-[10px] text-base-content/50">· {error}</span>
         </p>
       </div>
     );

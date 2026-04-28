@@ -16,17 +16,23 @@ import {
   rejectRequest,
   countPendingApprovals,
   publishPost,
+  sendInboxReply,
   ValidationError,
   type ApprovalExecutor,
   type ApprovalStatus,
   type ApprovalUsecaseDeps,
+  type InboxUsecaseDeps,
+  type MediaAttachment,
   type PostUsecaseDeps,
 } from "@sns-agent/core";
 import {
   DrizzleApprovalRepository,
+  DrizzleConversationRepository,
   DrizzleAuditLogRepository,
   DrizzlePostRepository,
   DrizzleAccountRepository,
+  DrizzleMessageRepository,
+  DrizzleUsageRepository,
 } from "@sns-agent/db";
 import { requirePermission } from "../middleware/rbac.js";
 import { getProviderRegistry } from "../providers.js";
@@ -50,12 +56,28 @@ function buildPostDeps(db: AppVariables["db"]): PostUsecaseDeps {
   };
 }
 
+function buildInboxDeps(db: AppVariables["db"]): InboxUsecaseDeps {
+  const encryptionKey =
+    process.env.ENCRYPTION_KEY ||
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+  return {
+    conversationRepo: new DrizzleConversationRepository(db),
+    messageRepo: new DrizzleMessageRepository(db),
+    accountRepo: new DrizzleAccountRepository(db),
+    usageRepo: new DrizzleUsageRepository(db),
+    providers: getProviderRegistry().getAll(),
+    encryptionKey,
+  };
+}
+
 /**
  * 承認後の元操作を実行する executors マップを構築する。
  * v1 では post の publish のみ対応。
  */
 function buildApprovalDeps(db: AppVariables["db"]): ApprovalUsecaseDeps {
   const postDeps = buildPostDeps(db);
+  const inboxDeps = buildInboxDeps(db);
 
   // Post は承認待ちで status='scheduled' になっているため、
   // publishPost (draft 限定) を呼ぶ前に draft に戻してから公開する。
@@ -73,8 +95,32 @@ function buildApprovalDeps(db: AppVariables["db"]): ApprovalUsecaseDeps {
     throw new Error(`Cannot publish post ${postId} from status ${current.status} after approval`);
   };
 
+  const inboxReplyExecutor: ApprovalExecutor = async (threadId, ctx, request) => {
+    const payload = (request.payload ?? {}) as {
+      contentText?: unknown;
+      contentMedia?: unknown;
+    };
+    const contentText = typeof payload.contentText === "string" ? payload.contentText : "";
+    const contentMedia = Array.isArray(payload.contentMedia)
+      ? (payload.contentMedia as MediaAttachment[])
+      : null;
+
+    if (contentText.trim().length === 0 && (!contentMedia || contentMedia.length === 0)) {
+      throw new Error(`Approval payload missing inbox reply content: ${request.id}`);
+    }
+
+    return sendInboxReply(inboxDeps, {
+      workspaceId: ctx.workspaceId,
+      threadId,
+      contentText,
+      contentMedia,
+      actorId: ctx.approvedBy,
+    });
+  };
+
   const executors = new Map<string, ApprovalExecutor>();
   executors.set("post", postExecutor);
+  executors.set("inbox_reply", inboxReplyExecutor);
 
   return {
     approvalRepo: new DrizzleApprovalRepository(db),
@@ -92,6 +138,7 @@ function serializeApproval(req: {
   workspaceId: string;
   resourceType: string;
   resourceId: string;
+  payload: unknown | null;
   requestedBy: string;
   requestedAt: Date;
   status: string;
@@ -104,6 +151,7 @@ function serializeApproval(req: {
     workspaceId: req.workspaceId,
     resourceType: req.resourceType,
     resourceId: req.resourceId,
+    payload: req.payload,
     requestedBy: req.requestedBy,
     requestedAt: req.requestedAt instanceof Date ? req.requestedAt.toISOString() : req.requestedAt,
     status: req.status,
@@ -209,6 +257,7 @@ approvals.post("/:id/approve", requirePermission("approval:manage"), async (c) =
     data: {
       request: serializeApproval(result.request),
       executorMissing: result.executorMissing,
+      executionError: result.executionError,
     },
   });
 });

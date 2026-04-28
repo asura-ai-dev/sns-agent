@@ -27,10 +27,15 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import {
   ArrowLeft,
   ArrowsClockwise,
+  FilmSlate,
+  Image as ImageIcon,
+  Paperclip,
   PaperPlaneTilt,
   ChatCircleDots as EmptyChatIcon,
   Tray,
 } from "@phosphor-icons/react";
+import { StatusBadge } from "@/components/posts/StatusBadge";
+import type { PostStatus } from "@/components/posts/types";
 import { PlatformIcon, PLATFORM_VISUALS } from "@/components/settings/PlatformIcon";
 import type { Platform } from "@/components/settings/PlatformIcon";
 import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
@@ -42,6 +47,28 @@ import { usePlatformViewMode } from "@/lib/view-mode/usePlatformViewMode";
 
 type ThreadStatus = "open" | "closed" | "archived";
 type MessageDirection = "inbound" | "outbound";
+type InboxChannel = "direct" | "public";
+type InboxInitiator = "self" | "external" | "mixed" | "unknown";
+type XEntryType = "mention" | "reply" | "thread" | "dm";
+
+interface XThreadProviderMetadata {
+  entryType: XEntryType;
+  conversationId: string | null;
+  rootPostId: string | null;
+  focusPostId: string | null;
+  replyToPostId: string | null;
+  authorXUserId: string | null;
+  authorUsername: string | null;
+}
+
+interface XMessageProviderMetadata {
+  entryType: XEntryType;
+  conversationId: string | null;
+  postId: string | null;
+  replyToPostId: string | null;
+  authorUsername: string | null;
+  mentionedXUserIds: string[];
+}
 
 interface ConversationThread {
   id: string;
@@ -50,7 +77,13 @@ interface ConversationThread {
   platform: Platform;
   externalThreadId: string | null;
   participantName: string | null;
+  participantExternalId: string | null;
+  channel: InboxChannel | null;
+  initiatedBy: InboxInitiator | null;
   lastMessageAt: string | null;
+  providerMetadata: {
+    x?: XThreadProviderMetadata;
+  } | null;
   status: ThreadStatus;
   createdAt: string;
 }
@@ -60,10 +93,36 @@ interface Message {
   threadId: string;
   direction: MessageDirection;
   contentText: string | null;
-  contentMedia: unknown;
+  contentMedia: Array<{
+    type: "image" | "video";
+    url: string;
+    mimeType: string;
+  }> | null;
   externalMessageId: string | null;
+  authorExternalId: string | null;
+  authorDisplayName: string | null;
   sentAt: string | null;
+  providerMetadata: {
+    x?: XMessageProviderMetadata;
+  } | null;
   createdAt: string;
+}
+
+interface ReplyMediaDraft {
+  type: "image" | "video";
+  url: string;
+  mimeType: string | null;
+  name: string;
+}
+
+interface RelatedPostSummary {
+  id: string;
+  platform: Platform;
+  status: PostStatus;
+  platformPostId: string | null;
+  contentText: string | null;
+  createdAt: string;
+  publishedAt: string | null;
 }
 
 interface ListThreadsResponse {
@@ -71,22 +130,74 @@ interface ListThreadsResponse {
   meta: { limit: number; offset: number; total: number };
 }
 
+type AccountStatus = "active" | "expired" | "revoked" | "error";
+
+interface SocialAccountSummary {
+  id: string;
+  platform: Platform;
+  status: AccountStatus;
+}
+
+interface ListAccountsResponse {
+  data: SocialAccountSummary[];
+}
+
 interface GetThreadResponse {
   data: {
     thread: ConversationThread;
     messages: Message[];
+    context: {
+      entryType: XEntryType | null;
+      conversationId: string | null;
+      rootPostId: string | null;
+      focusPostId: string | null;
+      replyToPostId: string | null;
+      relatedPosts: RelatedPostSummary[];
+    };
   };
 }
 
-interface SendReplyResponse {
-  data: {
-    message: Message;
-    externalMessageId: string | null;
-  };
-}
+type SendReplyResponse =
+  | {
+      data: {
+        message: Message;
+        externalMessageId: string | null;
+      };
+      meta?: {
+        requiresApproval?: false;
+      };
+    }
+  | {
+      data: {
+        threadId: string;
+        status: "pending_approval";
+        contentText: string;
+      };
+      meta: {
+        requiresApproval: true;
+        approvalId: string;
+      };
+    };
 
 interface ApiError {
   error?: { code?: string; message?: string };
+}
+
+type ReplyNotice =
+  | { kind: "sent"; message: string }
+  | {
+      kind: "pending";
+      message: string;
+      approvalId: string;
+      contentText: string;
+      mediaCount?: number;
+    }
+  | { kind: "failed"; message: string };
+
+function isPendingReplyResponse(
+  response: SendReplyResponse,
+): response is Extract<SendReplyResponse, { data: { status: "pending_approval" } }> {
+  return "status" in response.data && response.data.status === "pending_approval";
 }
 
 // ───────────────────────────────────────────
@@ -136,6 +247,103 @@ function formatClock(iso: string | null): string {
   return `${hh}:${mm}`;
 }
 
+function formatDateTime(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(
+    d.getDate(),
+  ).padStart(
+    2,
+    "0",
+  )} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function humanizeThreadStatus(status: ThreadStatus): string {
+  switch (status) {
+    case "open":
+      return "対応中";
+    case "closed":
+      return "完了";
+    case "archived":
+      return "保管";
+    default:
+      return status;
+  }
+}
+
+function humanizeChannel(channel: InboxChannel | null): string {
+  switch (channel) {
+    case "direct":
+      return "DM / 個別連絡";
+    case "public":
+      return "公開会話";
+    default:
+      return "未分類";
+  }
+}
+
+function humanizeInitiator(initiatedBy: InboxInitiator | null): string {
+  switch (initiatedBy) {
+    case "self":
+      return "こちらから開始";
+    case "external":
+      return "相手から開始";
+    case "mixed":
+      return "両方向で進行";
+    case "unknown":
+      return "開始元は不明";
+    default:
+      return "開始元は未判定";
+  }
+}
+
+function humanizeEntryType(entryType: XEntryType | null | undefined): string {
+  switch (entryType) {
+    case "mention":
+      return "メンション";
+    case "reply":
+      return "リプライ";
+    case "thread":
+      return "スレッド会話";
+    case "dm":
+      return "ダイレクトメッセージ";
+    default:
+      return "会話";
+  }
+}
+
+function summarizeThread(thread: ConversationThread): string {
+  const parts = [
+    humanizeEntryType(thread.providerMetadata?.x?.entryType),
+    humanizeChannel(thread.channel),
+    humanizeInitiator(thread.initiatedBy),
+  ].filter(Boolean);
+  return parts.join(" / ");
+}
+
+function truncateText(text: string | null | undefined, max = 56): string {
+  if (!text) return "本文はまだありません";
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= max) return normalized;
+  return `${normalized.slice(0, max)}…`;
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("ファイルを読み込めませんでした"));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("ファイルを読み込めませんでした"));
+    reader.readAsDataURL(file);
+  });
+}
+
 // ───────────────────────────────────────────
 // Page コンポーネント
 // ───────────────────────────────────────────
@@ -154,6 +362,7 @@ function InboxPageContent() {
   const [threads, setThreads] = useState<ConversationThread[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(false);
+  const [syncingInbox, setSyncingInbox] = useState(false);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<GetThreadResponse["data"] | null>(null);
@@ -161,19 +370,86 @@ function InboxPageContent() {
   const [detailError, setDetailError] = useState<string | null>(null);
 
   const [replyDraft, setReplyDraft] = useState("");
+  const [replyMedia, setReplyMedia] = useState<ReplyMediaDraft[]>([]);
   const [sendingReply, setSendingReply] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
+  const [replyNotice, setReplyNotice] = useState<ReplyNotice | null>(null);
 
   // モバイルの右ペイン表示切り替え
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  const handleReplyFiles = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    try {
+      const next = await Promise.all(
+        Array.from(files).map(async (file) => {
+          if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+            throw new Error("画像または動画ファイルを選んでください");
+          }
+
+          const url = await readFileAsDataUrl(file);
+          return {
+            type: file.type.startsWith("video/") ? "video" : "image",
+            url,
+            mimeType: file.type || null,
+            name: file.name,
+          } satisfies ReplyMediaDraft;
+        }),
+      );
+
+      setReplyMedia((prev) => [...prev, ...next]);
+      setReplyError(null);
+    } catch (err) {
+      setReplyError(err instanceof Error ? err.message : "添付ファイルの読み込みに失敗しました");
+    }
+  }, []);
+
+  const removeReplyMedia = useCallback((index: number) => {
+    setReplyMedia((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
+  }, []);
+
   // ───────── Fetch threads ─────────
-  const fetchThreads = useCallback(async () => {
+  const syncInbox = useCallback(async () => {
+    if (activeTab !== "all" && activeTab !== "x") {
+      return;
+    }
+
+    const accountsRes = await fetch("/api/accounts", { credentials: "include" });
+    if (!accountsRes.ok) {
+      const body = (await accountsRes.json().catch(() => ({}))) as ApiError;
+      throw new Error(
+        body.error?.message ?? `アカウント一覧の取得に失敗しました (${accountsRes.status})`,
+      );
+    }
+
+    const accountsBody = (await accountsRes.json()) as ListAccountsResponse;
+    const xAccounts = (accountsBody.data ?? []).filter(
+      (account) => account.platform === "x" && account.status === "active",
+    );
+
+    for (const account of xAccounts) {
+      const syncRes = await fetch("/api/inbox/sync", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ socialAccountId: account.id, limit: 20 }),
+      });
+      if (!syncRes.ok) {
+        const body = (await syncRes.json().catch(() => ({}))) as ApiError;
+        throw new Error(body.error?.message ?? `X の受信同期に失敗しました (${syncRes.status})`);
+      }
+    }
+  }, [activeTab]);
+
+  const refreshThreads = useCallback(async () => {
     setLoadingList(true);
     setListError(null);
     try {
+      setSyncingInbox(true);
+      await syncInbox();
       const url = new URL("/api/inbox", window.location.origin);
       if (activeTab !== "all") {
         url.searchParams.set("platform", activeTab);
@@ -190,13 +466,14 @@ function InboxPageContent() {
       setListError(err instanceof Error ? err.message : "スレッドの取得に失敗しました");
       setThreads([]);
     } finally {
+      setSyncingInbox(false);
       setLoadingList(false);
     }
-  }, [activeTab]);
+  }, [activeTab, syncInbox]);
 
   useEffect(() => {
-    void fetchThreads();
-  }, [fetchThreads]);
+    void refreshThreads();
+  }, [refreshThreads]);
 
   // ───────── Fetch thread detail ─────────
   const fetchDetail = useCallback(async (threadId: string) => {
@@ -239,36 +516,72 @@ function InboxPageContent() {
   const handleSelectThread = (id: string) => {
     setSelectedId(id);
     setReplyDraft("");
+    setReplyMedia([]);
     setReplyError(null);
+    setReplyNotice(null);
     setMobileDetailOpen(true);
   };
 
   // ───────── Send reply ─────────
   const handleSendReply = async () => {
-    if (!selectedId || !replyDraft.trim()) return;
+    const trimmedReply = replyDraft.trim();
+    if (!selectedId || (trimmedReply.length === 0 && replyMedia.length === 0)) return;
     setSendingReply(true);
     setReplyError(null);
+    setReplyNotice(null);
     try {
       const res = await fetch(`/api/inbox/${encodeURIComponent(selectedId)}/reply`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contentText: replyDraft }),
+        body: JSON.stringify({
+          contentText: trimmedReply,
+          contentMedia: replyMedia.map((media) => ({
+            type: media.type,
+            url: media.url,
+            mimeType: media.mimeType ?? "application/octet-stream",
+          })),
+        }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as ApiError;
         throw new Error(body.error?.message ?? `送信に失敗しました (${res.status})`);
       }
       const body = (await res.json()) as SendReplyResponse;
-      // 楽観的に messages に追加
-      setDetail((prev) =>
-        prev ? { ...prev, messages: [...prev.messages, body.data.message] } : prev,
-      );
-      setReplyDraft("");
-      // 一覧の last_message_at を更新するため再取得
-      void fetchThreads();
+      if (!isPendingReplyResponse(body)) {
+        const sentMessage = body.data.message;
+        setDetail((prev) => (prev ? { ...prev, messages: [...prev.messages, sentMessage] } : prev));
+        setReplyDraft("");
+        setReplyMedia([]);
+        setReplyNotice({
+          kind: "sent",
+          message:
+            replyMedia.length > 0
+              ? `返信を送信しました。画像・動画 ${replyMedia.length} 件も一緒に送られています。`
+              : "返信を送信しました。タイムラインにも反映されています。",
+        });
+        void refreshThreads();
+      } else {
+        setReplyDraft("");
+        setReplyMedia([]);
+        setReplyNotice({
+          kind: "pending",
+          message:
+            replyMedia.length > 0
+              ? "この返信と添付ファイルは承認待ちです。管理者が承認すると送信されます。"
+              : "この返信は承認待ちです。管理者が承認すると送信されます。",
+          approvalId: body.meta.approvalId,
+          contentText: trimmedReply,
+          mediaCount: replyMedia.length,
+        });
+      }
     } catch (err) {
-      setReplyError(err instanceof Error ? err.message : "送信に失敗しました");
+      const message = err instanceof Error ? err.message : "送信に失敗しました";
+      setReplyError(message);
+      setReplyNotice({
+        kind: "failed",
+        message: "返信はまだ送られていません。内容はこのまま残して再送できます。",
+      });
     } finally {
       setSendingReply(false);
     }
@@ -283,7 +596,12 @@ function InboxPageContent() {
     }
     return grouped;
   }, [filteredThreads]);
-  const selectedThread = detail?.thread;
+  const selectedThread =
+    detail?.thread?.id === selectedId
+      ? detail.thread
+      : (filteredThreads.find((thread) => thread.id === selectedId) ?? null);
+  const selectedContext = detail?.thread?.id === selectedId ? detail.context : null;
+  const canSendReply = replyDraft.trim().length > 0 || replyMedia.length > 0;
 
   return (
     <div className="relative flex h-[calc(100vh-5rem)] flex-col gap-6">
@@ -299,16 +617,25 @@ function InboxPageContent() {
         </div>
         <button
           type="button"
-          onClick={() => void fetchThreads()}
+          onClick={() => void refreshThreads()}
+          disabled={loadingList || syncingInbox}
           className="inline-flex items-center gap-2 rounded-field border border-base-300 bg-base-100 px-3 py-2 text-xs font-medium text-base-content/70 transition-colors hover:border-base-content/30 hover:text-base-content"
         >
-          <ArrowsClockwise size={14} weight="bold" />
-          更新
+          <ArrowsClockwise
+            size={14}
+            weight="bold"
+            className={loadingList || syncingInbox ? "animate-spin" : undefined}
+          />
+          同期して更新
         </button>
       </header>
 
       {/* ── Tab filter ─────────────────────────── */}
       <TabBar value={activeTab} onChange={setActiveTab} />
+
+      <p className="text-[0.72rem] text-base-content/55">
+        X のメンションと DM は、この画面を開いた時と「同期して更新」で取り込みます。
+      </p>
 
       {/* ── Body: 2 columns ────────────────────── */}
       <div className="relative flex min-h-0 flex-1 overflow-hidden rounded-box border border-base-300 bg-base-100/60 shadow-[0_1px_0_rgba(0,0,0,0.03),0_20px_50px_-30px_rgba(0,0,0,0.18)]">
@@ -383,13 +710,19 @@ function InboxPageContent() {
             <ConversationPanel
               thread={selectedThread}
               messages={detail?.messages ?? []}
+              context={selectedContext}
               loading={loadingDetail}
               error={detailError}
               replyDraft={replyDraft}
+              replyMedia={replyMedia}
               onReplyChange={setReplyDraft}
+              onReplyFiles={handleReplyFiles}
+              onRemoveReplyMedia={removeReplyMedia}
               onSend={handleSendReply}
+              canSend={canSendReply}
               sending={sendingReply}
               replyError={replyError}
+              replyNotice={replyNotice}
               onBack={() => setMobileDetailOpen(false)}
               messagesEndRef={messagesEndRef}
             />
@@ -535,7 +868,12 @@ function ThreadList({
                       </span>
                     </div>
                     <p className="mt-0.5 truncate text-xs text-base-content/60">
-                      {t.externalThreadId ?? "—"}
+                      {summarizeThread(t)}
+                    </p>
+                    <p className="mt-1 truncate text-[0.72rem] text-base-content/45">
+                      {t.participantExternalId
+                        ? `相手ID: ${t.participantExternalId}`
+                        : (t.externalThreadId ?? "スレッドID未設定")}
                     </p>
                     <div className="mt-1.5 flex items-center gap-1.5">
                       <span
@@ -548,7 +886,7 @@ function ThreadList({
                               : "bg-warning/15 text-warning-content",
                         ].join(" ")}
                       >
-                        {t.status}
+                        {humanizeThreadStatus(t.status)}
                       </span>
                       <span className="text-[0.65rem] text-base-content/40">{visual.label}</span>
                     </div>
@@ -569,28 +907,45 @@ function ThreadList({
 function ConversationPanel({
   thread,
   messages,
+  context,
   loading,
   error,
   replyDraft,
+  replyMedia,
   onReplyChange,
+  onReplyFiles,
+  onRemoveReplyMedia,
   onSend,
+  canSend,
   sending,
   replyError,
+  replyNotice,
   onBack,
   messagesEndRef,
 }: {
   thread: ConversationThread;
   messages: Message[];
+  context: GetThreadResponse["data"]["context"] | null;
   loading: boolean;
   error: string | null;
   replyDraft: string;
+  replyMedia: ReplyMediaDraft[];
   onReplyChange: (v: string) => void;
+  onReplyFiles: (files: FileList | null) => void;
+  onRemoveReplyMedia: (index: number) => void;
   onSend: () => void;
+  canSend: boolean;
   sending: boolean;
   replyError: string | null;
+  replyNotice: ReplyNotice | null;
   onBack: () => void;
   messagesEndRef: React.MutableRefObject<HTMLDivElement | null>;
 }) {
+  const conversationSummary = summarizeThread(thread);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const supportsReplyMedia = thread.platform === "x";
+  const isDirectMessage = thread.providerMetadata?.x?.entryType === "dm";
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* ヘッダ */}
@@ -609,16 +964,18 @@ function ConversationPanel({
             {thread.participantName ?? "(未設定)"}
           </p>
           <p className="mt-0.5 truncate text-xs text-base-content/50">
-            {thread.externalThreadId ?? "—"} · {PLATFORM_VISUALS[thread.platform].label}
+            {conversationSummary} · {PLATFORM_VISUALS[thread.platform].label}
           </p>
         </div>
         <span className="hidden rounded-full bg-base-200 px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-base-content/60 sm:inline">
-          {thread.status}
+          {humanizeThreadStatus(thread.status)}
         </span>
       </div>
 
       {/* メッセージ領域 */}
       <div className="min-h-0 flex-1 overflow-y-auto bg-base-100/80 px-4 py-6 sm:px-8">
+        <ConversationSummaryCards thread={thread} messages={messages} context={context} />
+
         {loading && (
           <div className="space-y-3">
             {[0, 1, 2].map((i) => (
@@ -653,9 +1010,78 @@ function ConversationPanel({
 
       {/* 返信入力 */}
       <div className="border-t border-base-300 bg-base-100 px-5 py-4">
+        <ReplyNoticeBanner notice={replyNotice} />
         {replyError && (
           <div className="mb-2 rounded-field border border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
             {replyError}
+          </div>
+        )}
+        {supportsReplyMedia && (
+          <div className="mb-3 rounded-box border border-base-300 bg-base-100/80 px-3 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-base-content/50">
+                  添付ファイル
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-base-content/60">
+                  {isDirectMessage
+                    ? "X DM では画像・動画を添えて送れます。本文を書かなくても、添付があれば送信できます。"
+                    : "X の返信に画像・動画を添えられます。本文がなくても、添付があれば送信できます。"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={sending}
+                className="inline-flex items-center gap-2 rounded-field border border-base-300 bg-base-100 px-3 py-2 text-xs font-medium text-base-content/70 transition-colors hover:border-base-content/30 hover:text-base-content disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Paperclip size={14} weight="bold" />
+                画像・動画を添付
+              </button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                void onReplyFiles(event.target.files);
+                event.currentTarget.value = "";
+              }}
+            />
+
+            {replyMedia.length > 0 && (
+              <ul className="mt-3 space-y-2">
+                {replyMedia.map((media, index) => (
+                  <li
+                    key={`${media.url}-${index}`}
+                    className="flex items-center gap-3 rounded-field border border-base-300 bg-base-100 px-3 py-2"
+                  >
+                    {media.type === "video" ? (
+                      <FilmSlate size={16} weight="bold" className="text-base-content/45" />
+                    ) : (
+                      <ImageIcon size={16} weight="bold" className="text-base-content/45" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-base-content">{media.name}</p>
+                      <p className="text-[0.65rem] uppercase tracking-[0.14em] text-base-content/45">
+                        {media.type === "video" ? "動画" : "画像"}
+                        {media.mimeType ? ` · ${media.mimeType}` : ""}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveReplyMedia(index)}
+                      disabled={sending}
+                      className="rounded-field border border-base-300 px-2 py-1 text-[0.7rem] text-base-content/60 transition-colors hover:border-error/30 hover:text-error disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      外す
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
         <div className="flex items-end gap-3 rounded-box border border-base-300 bg-base-100 p-2 focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/15">
@@ -677,7 +1103,7 @@ function ConversationPanel({
           <button
             type="button"
             onClick={onSend}
-            disabled={sending || replyDraft.trim().length === 0}
+            disabled={sending || !canSend}
             className="inline-flex h-10 items-center gap-1.5 rounded-field bg-primary px-4 text-sm font-medium text-primary-content transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <PaperPlaneTilt size={14} weight="fill" />
@@ -685,9 +1111,132 @@ function ConversationPanel({
           </button>
         </div>
         <p className="mt-1.5 text-[0.65rem] text-base-content/40">
-          ⌘/Ctrl + Enter で送信 · 返信は承認ポリシーに従って記録されます
+          ⌘/Ctrl + Enter で送信 · 本文または添付があれば送れます ·
+          返信は承認ポリシーに従って記録されます
         </p>
       </div>
+    </div>
+  );
+}
+
+function ConversationSummaryCards({
+  thread,
+  messages,
+  context,
+}: {
+  thread: ConversationThread;
+  messages: Message[];
+  context: GetThreadResponse["data"]["context"] | null;
+}) {
+  const inboundCount = messages.filter((message) => message.direction === "inbound").length;
+  const outboundCount = messages.length - inboundCount;
+
+  return (
+    <section className="mb-5 grid gap-3 md:grid-cols-3">
+      <article className="rounded-box border border-base-300 bg-base-100 px-4 py-3">
+        <p className="text-[0.65rem] font-medium uppercase tracking-[0.18em] text-base-content/45">
+          What
+        </p>
+        <p className="mt-1 font-display text-sm font-semibold text-base-content">
+          {humanizeEntryType(context?.entryType ?? thread.providerMetadata?.x?.entryType)}
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-base-content/60">
+          {humanizeChannel(thread.channel)} / {humanizeInitiator(thread.initiatedBy)}
+        </p>
+      </article>
+
+      <article className="rounded-box border border-base-300 bg-base-100 px-4 py-3">
+        <p className="text-[0.65rem] font-medium uppercase tracking-[0.18em] text-base-content/45">
+          How
+        </p>
+        <p className="mt-1 font-display text-sm font-semibold text-base-content">
+          {humanizeThreadStatus(thread.status)}
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-base-content/60">
+          受信 {inboundCount}件 / 送信 {outboundCount}件 / 最終更新{" "}
+          {formatDateTime(thread.lastMessageAt)}
+        </p>
+      </article>
+
+      <article className="rounded-box border border-base-300 bg-base-100 px-4 py-3">
+        <p className="text-[0.65rem] font-medium uppercase tracking-[0.18em] text-base-content/45">
+          Why
+        </p>
+        <p className="mt-1 font-display text-sm font-semibold text-base-content">
+          今どの会話に対応しているか
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-base-content/60">
+          {thread.participantName ?? "相手不明"} との会話です。
+          {context?.relatedPosts?.length
+            ? ` 自社投稿 ${context.relatedPosts.length} 件と関連づいています。`
+            : " まだひもづく自社投稿は見つかっていません。"}
+        </p>
+      </article>
+
+      <article className="rounded-box border border-base-300 bg-base-100 px-4 py-3 md:col-span-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-display text-sm font-semibold text-base-content">関連投稿</p>
+          {context?.conversationId && (
+            <span className="rounded-full bg-base-200 px-2 py-0.5 text-[0.65rem] text-base-content/55">
+              会話ID {context.conversationId}
+            </span>
+          )}
+        </div>
+
+        {context?.relatedPosts?.length ? (
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            {context.relatedPosts.map((post) => (
+              <article
+                key={post.id}
+                className="rounded-field border border-base-300 bg-base-100/80 px-3 py-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs text-base-content/45">
+                      {post.platformPostId ?? "外部投稿ID未設定"}
+                    </p>
+                    <p className="mt-1 text-sm leading-relaxed text-base-content">
+                      {truncateText(post.contentText, 88)}
+                    </p>
+                  </div>
+                  <StatusBadge status={post.status} />
+                </div>
+                <p className="mt-2 text-[0.7rem] text-base-content/45">
+                  公開 {formatDateTime(post.publishedAt)} / 作成 {formatDateTime(post.createdAt)}
+                </p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 text-xs leading-relaxed text-base-content/55">
+            自社の投稿データとまだ一致していないため、外部会話だけを表示しています。
+          </p>
+        )}
+      </article>
+    </section>
+  );
+}
+
+function ReplyNoticeBanner({ notice }: { notice: ReplyNotice | null }) {
+  if (!notice) return null;
+
+  const classes =
+    notice.kind === "sent"
+      ? "border-primary/30 bg-primary/5 text-primary"
+      : notice.kind === "pending"
+        ? "border-warning/30 bg-warning/10 text-warning-content"
+        : "border-error/30 bg-error/5 text-error";
+
+  return (
+    <div className={["mb-3 rounded-field border px-3 py-2 text-xs", classes].join(" ")}>
+      <p className="font-medium">{notice.message}</p>
+      {notice.kind === "pending" && (
+        <p className="mt-1 leading-relaxed">
+          承認ID: {notice.approvalId}
+          {notice.contentText ? ` / 返信案: ${truncateText(notice.contentText, 72)}` : ""}
+          {notice.mediaCount && notice.mediaCount > 0 ? ` / 添付: ${notice.mediaCount}件` : ""}
+        </p>
+      )}
     </div>
   );
 }
@@ -697,6 +1246,10 @@ function ConversationPanel({
 // ───────────────────────────────────────────
 function MessageBubble({ message }: { message: Message }) {
   const isOutbound = message.direction === "outbound";
+  const authorLabel = isOutbound
+    ? (message.authorDisplayName ?? "自社アカウント")
+    : (message.authorDisplayName ?? "相手");
+  const entryLabel = humanizeEntryType(message.providerMetadata?.x?.entryType);
   return (
     <li className={isOutbound ? "flex justify-end" : "flex justify-start"}>
       <div
@@ -707,10 +1260,42 @@ function MessageBubble({ message }: { message: Message }) {
             : "rounded-bl-sm border-base-300 bg-base-100 text-base-content",
         ].join(" ")}
       >
+        <div className="mb-1 flex items-center gap-2 text-[0.65rem] uppercase tracking-[0.14em]">
+          <span className={isOutbound ? "text-primary/80" : "text-base-content/45"}>
+            {authorLabel}
+          </span>
+          <span className={isOutbound ? "text-primary/55" : "text-base-content/35"}>
+            {entryLabel}
+          </span>
+        </div>
         {message.contentText ? (
           <p className="whitespace-pre-wrap break-words leading-relaxed">{message.contentText}</p>
         ) : (
           <p className="italic text-base-content/50">(メディアのみ)</p>
+        )}
+        {message.contentMedia && message.contentMedia.length > 0 && (
+          <ul className="mt-2 space-y-1.5">
+            {message.contentMedia.map((media, index) => (
+              <li
+                key={`${media.url}-${index}`}
+                className="flex items-center gap-2 rounded-field border border-base-300/80 bg-base-100/70 px-2.5 py-2 text-xs"
+              >
+                {media.type === "video" ? (
+                  <FilmSlate size={14} weight="bold" className="text-base-content/45" />
+                ) : (
+                  <ImageIcon size={14} weight="bold" className="text-base-content/45" />
+                )}
+                <a
+                  href={media.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="truncate text-base-content/70 underline decoration-base-300 underline-offset-2"
+                >
+                  {media.type === "video" ? "動画を開く" : "画像を開く"}
+                </a>
+              </li>
+            ))}
+          </ul>
         )}
         <p
           className={[

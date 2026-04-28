@@ -54,12 +54,28 @@ function resolveSessionUserId(): string {
   return process.env.SNS_AGENT_SESSION_USER_ID ?? "user-owner-00000000";
 }
 
-function resolveAuthHeaders(): Record<string, string> {
+/**
+ * Dashboard / settings pages are operator-facing surfaces, so they should
+ * authenticate as the current session user first. The API middleware resolves
+ * `Authorization` before `X-Session-User-Id`; sending both would downgrade the
+ * request to the agent identity in local dev and trip RBAC on admin-only pages.
+ */
+function resolveOperatorHeaders(): Record<string, string> {
   const h: Record<string, string> = {};
+  const sessionUserId = resolveSessionUserId();
+  if (sessionUserId) {
+    h["X-Session-User-Id"] = sessionUserId;
+    return h;
+  }
   const apiKey = resolveApiKey();
-  if (apiKey) h["Authorization"] = `Bearer ${apiKey}`;
-  h["X-Session-User-Id"] = resolveSessionUserId();
+  if (apiKey) {
+    h["Authorization"] = `Bearer ${apiKey}`;
+  }
   return h;
+}
+
+function resolvePreferredApiKey(): string {
+  return resolveSessionUserId() ? "" : resolveApiKey();
 }
 
 // ───────────────────────────────────────────
@@ -76,7 +92,7 @@ export function getApiClient(): SnsAgentClient {
   if (cachedClient) return cachedClient;
   cachedClient = new SnsAgentClient({
     baseUrl: resolveBaseUrl(),
-    apiKey: resolveApiKey(),
+    apiKey: resolvePreferredApiKey(),
     sessionUserId: resolveSessionUserId(),
   });
   return cachedClient;
@@ -239,6 +255,21 @@ export interface LlmRouteDto {
   updatedAt: string;
 }
 
+export type LlmProviderConnectionStatus = "missing" | "connected" | "expired" | "reauth_required";
+
+export interface LlmProviderStatusDto {
+  provider: "openai-codex";
+  status: LlmProviderConnectionStatus;
+  connected: boolean;
+  requiresReauth: boolean;
+  reason: string;
+  expiresAt: string | null;
+  scopes: string[] | null;
+  subject: string | null;
+  metadata: Record<string, unknown> | null;
+  updatedAt: string | null;
+}
+
 /**
  * Raw fetch against the Hono API for `GET /api/llm/routes`.
  *
@@ -253,7 +284,7 @@ export function fetchLlmRoutesSafe(): Promise<FetchResult<LlmRouteDto[]>> {
     const res = await fetch(`${baseUrl}/api/llm/routes`, {
       method: "GET",
       headers: {
-        ...resolveAuthHeaders(),
+        ...resolveOperatorHeaders(),
       },
       cache: "no-store",
     });
@@ -263,6 +294,37 @@ export function fetchLlmRoutesSafe(): Promise<FetchResult<LlmRouteDto[]>> {
     const body = (await res.json()) as { data?: LlmRouteDto[] };
     return body.data ?? [];
   }, []);
+}
+
+export function fetchOpenAiCodexStatusSafe(): Promise<FetchResult<LlmProviderStatusDto>> {
+  const fallback: LlmProviderStatusDto = {
+    provider: "openai-codex",
+    status: "missing",
+    connected: false,
+    requiresReauth: false,
+    reason: "api_unreachable",
+    expiresAt: null,
+    scopes: null,
+    subject: null,
+    metadata: null,
+    updatedAt: null,
+  };
+
+  return guard<LlmProviderStatusDto>(async () => {
+    const baseUrl = resolveBaseUrl();
+    const res = await fetch(`${baseUrl}/api/llm/providers/openai-codex/status`, {
+      method: "GET",
+      headers: {
+        ...resolveOperatorHeaders(),
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new Error(`openai-codex status fetch failed: HTTP ${res.status}`);
+    }
+    const body = (await res.json()) as { data?: LlmProviderStatusDto };
+    return body.data ?? fallback;
+  }, fallback);
 }
 
 // ───────────────────────────────────────────
@@ -292,7 +354,7 @@ export function fetchSkillPackagesSafe(): Promise<FetchResult<SkillPackageDto[]>
     const res = await fetch(`${baseUrl}/api/skills`, {
       method: "GET",
       headers: {
-        ...resolveAuthHeaders(),
+        ...resolveOperatorHeaders(),
       },
       cache: "no-store",
     });

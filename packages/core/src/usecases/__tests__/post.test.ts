@@ -182,7 +182,7 @@ function createMockProvider(options: MockProviderOptions = {}): SocialProvider {
       textPost: true,
       imagePost: true,
       videoPost: false,
-      threadPost: false,
+      threadPost: true,
       directMessage: false,
       commentReply: false,
       broadcast: false,
@@ -229,6 +229,7 @@ function makePost(overrides: Partial<Post> = {}): Post {
     status: "draft",
     contentText: "hello",
     contentMedia: null,
+    providerMetadata: null,
     platformPostId: null,
     validationResult: { valid: true, errors: [], warnings: [] },
     idempotencyKey: null,
@@ -362,6 +363,23 @@ describe("createPost", () => {
       }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
+
+  it("X 固有の quote / thread メタデータを保持できる", async () => {
+    const deps = createDeps();
+    const post = await createPost(deps, {
+      workspaceId: "ws-1",
+      socialAccountId: "acc-1",
+      contentText: null,
+      providerMetadata: {
+        x: {
+          quotePostId: "tweet-42",
+          threadPosts: [{ contentText: "thread follow-up" }],
+        },
+      },
+    });
+    expect(post.providerMetadata?.x?.quotePostId).toBe("tweet-42");
+    expect(post.providerMetadata?.x?.threadPosts).toEqual([{ contentText: "thread follow-up" }]);
+  });
 });
 
 // ───────────────────────────────────────────
@@ -407,6 +425,20 @@ describe("updatePost", () => {
       NotFoundError,
     );
   });
+
+  it("下書き更新時に X 固有メタデータも差し替えられる", async () => {
+    const deps = createDeps([createMockAccount()], [makePost()]);
+    const updated = await updatePost(deps, "ws-1", "post-1", {
+      providerMetadata: {
+        x: {
+          quotePostId: "tweet-99",
+          threadPosts: [{ contentText: "segment 1" }, { contentText: "segment 2" }],
+        },
+      },
+    });
+    expect(updated.providerMetadata?.x?.quotePostId).toBe("tweet-99");
+    expect(updated.providerMetadata?.x?.threadPosts).toHaveLength(2);
+  });
 });
 
 // ───────────────────────────────────────────
@@ -444,6 +476,38 @@ describe("publishPost", () => {
     const deps = createDeps([createMockAccount()], [makePost({ status: "published" })]);
     await expect(publishPost(deps, "ws-1", "post-1")).rejects.toBeInstanceOf(ValidationError);
   });
+
+  it("provider から返った thread 公開結果を保存する", async () => {
+    const deps = createDeps(
+      [createMockAccount()],
+      [
+        makePost({
+          providerMetadata: {
+            x: {
+              quotePostId: "tweet-123",
+              threadPosts: [{ contentText: "follow-up" }],
+            },
+          },
+        }),
+      ],
+    );
+    const provider = deps.providers.get("x") as SocialProvider;
+    provider.publishPost = vi.fn(async () => ({
+      success: true,
+      platformPostId: "root-1",
+      publishedAt: new Date("2026-04-10T10:00:00Z"),
+      providerMetadata: {
+        x: {
+          quotePostId: "tweet-123",
+          threadPosts: [{ contentText: "follow-up" }],
+          publishedThreadIds: ["root-1", "reply-1"],
+        },
+      },
+    }));
+
+    const published = await publishPost(deps, "ws-1", "post-1");
+    expect(published.providerMetadata?.x?.publishedThreadIds).toEqual(["root-1", "reply-1"]);
+  });
 });
 
 // ───────────────────────────────────────────
@@ -468,6 +532,32 @@ describe("deletePost", () => {
     const deleted = await deletePost(deps, "ws-1", "post-1");
     expect(deleted.status).toBe("deleted");
     expect(deleteSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("thread 投稿は reply から逆順で削除する", async () => {
+    const deleteSpy = vi.fn(async () => ({ success: true }));
+    const deps = createDeps(
+      [createMockAccount()],
+      [
+        makePost({
+          status: "published",
+          platformPostId: "root-1",
+          providerMetadata: {
+            x: {
+              publishedThreadIds: ["root-1", "reply-1", "reply-2"],
+            },
+          },
+        }),
+      ],
+    );
+    (deps.providers.get("x") as SocialProvider).deletePost = deleteSpy;
+
+    await deletePost(deps, "ws-1", "post-1");
+    expect(deleteSpy.mock.calls.map((call) => call[0].platformPostId)).toEqual([
+      "reply-2",
+      "reply-1",
+      "root-1",
+    ]);
   });
 
   it("Provider.deletePost が失敗すると ProviderError", async () => {

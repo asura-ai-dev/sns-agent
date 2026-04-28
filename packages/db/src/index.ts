@@ -20,6 +20,7 @@ export {
   DrizzleUsageRepository,
   DrizzleBudgetPolicyRepository,
   DrizzleLlmRouteRepository,
+  DrizzleLlmProviderCredentialRepository,
   DrizzleSkillPackageRepository,
   DrizzleAuditLogRepository,
   DrizzleUserRepository,

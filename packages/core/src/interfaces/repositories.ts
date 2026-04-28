@@ -11,6 +11,8 @@ import type {
   UsageRecord,
   BudgetPolicy,
   LlmRoute,
+  LlmProviderCredential,
+  LlmProviderCredentialProvider,
   AuditLog,
   ApprovalRequest,
   ApprovalStatus,
@@ -92,10 +94,16 @@ export interface ScheduledJobRepository {
   update(id: string, data: Partial<ScheduledJob>): Promise<ScheduledJob>;
   /**
    * ジョブをアトミックにロックする。
-   * pending 状態のジョブを locked に遷移し、locked_at を設定する。
+   * pending / retrying / 期限切れ locked 状態のジョブを locked に遷移し、locked_at を設定する。
    * 既にロックされている場合は null を返す。
    */
-  lockJob(id: string): Promise<ScheduledJob | null>;
+  lockJob(
+    id: string,
+    options?: {
+      now?: Date;
+      lockTimeoutMs?: number;
+    },
+  ): Promise<ScheduledJob | null>;
   /**
    * 指定した post_id 群に紐づく予約ジョブを返す。
    * 投稿一覧の schedule 情報（scheduledAt, status）を埋めるために使う。
@@ -180,6 +188,23 @@ export interface LlmRouteRepository {
 }
 
 // ───────────────────────────────────────────
+// LlmProviderCredentialRepository
+// ───────────────────────────────────────────
+export interface LlmProviderCredentialRepository {
+  findByWorkspaceAndProvider(
+    workspaceId: string,
+    provider: LlmProviderCredentialProvider,
+  ): Promise<LlmProviderCredential | null>;
+  upsert(
+    credential: Omit<LlmProviderCredential, "id" | "createdAt" | "updatedAt">,
+  ): Promise<LlmProviderCredential>;
+  deleteByWorkspaceAndProvider(
+    workspaceId: string,
+    provider: LlmProviderCredentialProvider,
+  ): Promise<void>;
+}
+
+// ───────────────────────────────────────────
 // AuditLogRepository
 // ───────────────────────────────────────────
 // 追記のみ: UPDATE / DELETE メソッドなし（design.md セクション 3）
@@ -189,6 +214,7 @@ export interface AuditLogFilterOptions {
   actorType?: string;
   action?: string;
   resourceType?: string;
+  resourceId?: string;
   platform?: string;
   startDate?: Date;
   endDate?: Date;
@@ -274,5 +300,6 @@ export interface MessageFilterOptions {
 export interface MessageRepository {
   findByThread(threadId: string, options?: MessageFilterOptions): Promise<Message[]>;
   countByThread(threadId: string): Promise<number>;
+  findByExternalMessage(threadId: string, externalMessageId: string): Promise<Message | null>;
   create(message: Omit<Message, "id" | "createdAt">): Promise<Message>;
 }

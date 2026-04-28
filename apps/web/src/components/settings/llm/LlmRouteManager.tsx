@@ -29,6 +29,7 @@ import {
   ArrowBendDownRight,
   Thermometer,
   Hash,
+  ArrowsClockwise,
 } from "@phosphor-icons/react";
 
 import { ConfirmDialog } from "@/components/settings/ConfirmDialog";
@@ -53,8 +54,11 @@ const PLATFORM_OPTIONS: { value: string; label: string; hint: string }[] = [
 
 const ACTION_OPTIONS: { value: string; label: string; hint: string }[] = [
   { value: "", label: "全体（デフォルト）", hint: "all" },
-  { value: "create_post", label: "投稿作成", hint: "create_post" },
-  { value: "schedule_post", label: "投稿予約", hint: "schedule_post" },
+  { value: "post.create", label: "投稿作成", hint: "post.create" },
+  { value: "post.schedule", label: "投稿予約", hint: "post.schedule" },
+  { value: "post.list", label: "投稿一覧", hint: "post.list" },
+  { value: "schedule.list", label: "予約一覧", hint: "schedule.list" },
+  { value: "inbox.list", label: "受信一覧", hint: "inbox.list" },
   { value: "reply", label: "返信", hint: "reply" },
   { value: "draft", label: "下書き", hint: "draft" },
   { value: "summarize", label: "要約", hint: "summarize" },
@@ -62,8 +66,32 @@ const ACTION_OPTIONS: { value: string; label: string; hint: string }[] = [
 
 const PROVIDER_OPTIONS: { value: string; label: string }[] = [
   { value: "openai", label: "openai" },
+  { value: "openai-codex", label: "openai-codex" },
   { value: "anthropic", label: "anthropic" },
 ];
+
+const PLATFORM_LABELS: Record<string, string> = {
+  x: "X",
+  line: "LINE",
+  instagram: "Instagram",
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  "post.create": "投稿を作る",
+  "post.schedule": "投稿を予約する",
+  "post.list": "投稿一覧を見る",
+  "schedule.list": "予約一覧を見る",
+  "inbox.list": "受信一覧を見る",
+  reply: "返信する",
+  draft: "下書きを扱う",
+  summarize: "内容を要約する",
+};
+
+const PROVIDER_LABELS: Record<string, string> = {
+  openai: "OpenAI",
+  "openai-codex": "OpenAI Codex",
+  anthropic: "Anthropic",
+};
 
 // Small helper – match platform string → icon platform. Non-matching platforms
 // (null / "common") render as an em-dash typographic glyph instead.
@@ -118,23 +146,23 @@ function routeToForm(r: LlmRouteDto): FormState {
 }
 
 function validateForm(form: FormState): string | null {
-  if (!form.provider) return "provider is required";
-  if (!form.model.trim()) return "model is required";
+  if (!form.provider) return "利用する AI 提供元を選択してください。";
+  if (!form.model.trim()) return "モデル名を入力してください。";
   const temp = Number(form.temperature);
   if (!Number.isFinite(temp) || temp < 0 || temp > 2) {
-    return "temperature must be between 0.0 and 2.0";
+    return "Temperature は 0.0 から 2.0 の範囲で指定してください。";
   }
   const max = Number(form.maxTokens);
   if (!Number.isFinite(max) || max <= 0 || !Number.isInteger(max)) {
-    return "maxTokens must be a positive integer";
+    return "Max Tokens は 1 以上の整数で入力してください。";
   }
   const pri = Number(form.priority);
   if (!Number.isFinite(pri) || !Number.isInteger(pri)) {
-    return "priority must be an integer";
+    return "Priority は整数で入力してください。";
   }
   if (form.fallbackEnabled) {
-    if (!form.fallbackProvider) return "fallback provider is required";
-    if (!form.fallbackModel.trim()) return "fallback model is required";
+    if (!form.fallbackProvider) return "Fallback 用の AI 提供元を選択してください。";
+    if (!form.fallbackModel.trim()) return "Fallback 用のモデル名を入力してください。";
   }
   return null;
 }
@@ -144,8 +172,11 @@ function validateForm(form: FormState): string | null {
 // ───────────────────────────────────────────
 
 function getApiBase(): string {
-  const env = (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_SNS_AGENT_API_URL) || "";
-  return env.replace(/\/+$/, "") || "http://localhost:3001";
+  const env =
+    (typeof process !== "undefined" &&
+      (process.env?.NEXT_PUBLIC_API_BASE_URL ?? process.env?.NEXT_PUBLIC_SNS_AGENT_API_URL)) ||
+    "";
+  return env.replace(/\/+$/, "");
 }
 
 async function apiFetch<T>(
@@ -155,6 +186,7 @@ async function apiFetch<T>(
 ): Promise<T> {
   const res = await fetch(`${getApiBase()}${path}`, {
     method,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       "X-Idempotency-Key":
@@ -183,20 +215,37 @@ async function apiFetch<T>(
 // ───────────────────────────────────────────
 
 function describePlatform(value: string | null): string {
-  if (!value) return "default";
-  return value;
+  if (!value) return "全体";
+  return PLATFORM_LABELS[value] ?? value;
 }
 
 function describeAction(value: string | null): string {
-  if (!value) return "default";
-  return value;
+  if (!value) return "全体";
+  return ACTION_LABELS[value] ?? value;
+}
+
+function describeProvider(value: string): string {
+  return PROVIDER_LABELS[value] ?? value;
 }
 
 function routeLabel(r: LlmRouteDto): string {
   if (!r.platform && !r.action) return "デフォルトルート";
-  const p = r.platform ?? "*";
-  const a = r.action ?? "*";
+  const p = describePlatform(r.platform);
+  const a = describeAction(r.action);
   return `${p} · ${a}`;
+}
+
+function describeRoutePurpose(r: LlmRouteDto): string {
+  if (!r.platform && !r.action) {
+    return "他に一致する設定がないときに使う共通ルートです。";
+  }
+  if (r.platform && r.action) {
+    return `${describePlatform(r.platform)} で「${describeAction(r.action)}」をするときに使います。`;
+  }
+  if (r.platform) {
+    return `${describePlatform(r.platform)} 全体で優先されるルートです。`;
+  }
+  return `すべての SNS で「${describeAction(r.action)}」をするときに使います。`;
 }
 
 // ───────────────────────────────────────────
@@ -205,7 +254,7 @@ function routeLabel(r: LlmRouteDto): string {
 
 export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerProps) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
+  const [isRefreshing, startTransition] = useTransition();
 
   const [routes, setRoutes] = useState<LlmRouteDto[]>(() =>
     [...initialRoutes].sort((a, b) => b.priority - a.priority),
@@ -286,7 +335,9 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
       setEditing(null);
       startTransition(() => router.refresh());
     } catch (submitError) {
-      setFormError(submitError instanceof Error ? submitError.message : "submit failed");
+      setFormError(
+        submitError instanceof Error ? submitError.message : "ルーティングの保存に失敗しました。",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -302,7 +353,7 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
       setDeleteTarget(null);
       startTransition(() => router.refresh());
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "delete failed");
+      setDeleteError(err instanceof Error ? err.message : "ルーティングの削除に失敗しました。");
     } finally {
       setDeleteBusy(false);
     }
@@ -325,6 +376,10 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
               {routes.length} on file
             </span>
           </h2>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-base-content/65">
+            ここで決めた内容は、チャット画面や Agent Gateway が AI を選ぶときの基準になります。
+            つまり「どの用途に、どの AI を使うか」を運用チームが見える形で管理する場所です。
+          </p>
         </div>
         <button
           type="button"
@@ -337,10 +392,62 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
         </button>
       </div>
 
+      <section className="grid gap-3 lg:grid-cols-[1.35fr_1fr]">
+        <div className="rounded-box border border-base-content/15 bg-base-100 px-4 py-4">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-base-content/45">
+            what this controls
+          </div>
+          <div className="mt-2 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-sm border border-base-content/15 bg-base-200/20 px-3 py-3">
+              <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-base-content/45">
+                1. 入力
+              </div>
+              <p className="mt-1 text-sm text-base-content/75">
+                Web UI のチャットや自動処理が、「何をしたいか」を Agent Gateway に渡します。
+              </p>
+            </div>
+            <div className="rounded-sm border border-base-content/15 bg-base-200/20 px-3 py-3">
+              <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-base-content/45">
+                2. 判定
+              </div>
+              <p className="mt-1 text-sm text-base-content/75">
+                この画面のルールを見て、用途に合う AI 提供元とモデルを選びます。
+              </p>
+            </div>
+            <div className="rounded-sm border border-base-content/15 bg-base-200/20 px-3 py-3">
+              <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-base-content/45">
+                3. 実行
+              </div>
+              <p className="mt-1 text-sm text-base-content/75">
+                選ばれた AI が応答し、必要なら Skills 実行や投稿処理につながります。
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-box border border-dashed border-base-content/20 bg-base-100 px-4 py-4">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-base-content/45">
+            routing rule
+          </div>
+          <ul className="mt-2 space-y-2 text-sm leading-relaxed text-base-content/70">
+            <li>一致条件が細かいルートほど優先されます。</li>
+            <li>Priority が大きいほど、その中で先に選ばれます。</li>
+            <li>Fallback を入れると、主経路が失敗したときに予備の AI を試します。</li>
+          </ul>
+        </div>
+      </section>
+
       {isFallback && (
         <div className="flex items-start gap-2 rounded-sm border border-dashed border-warning/60 bg-warning/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.15em] text-[#7a4b00]">
           <Warning size={12} weight="bold" className="mt-0.5 shrink-0" />
           <span>wire offline · 新規作成・編集は API 起動後に再試行してください</span>
+        </div>
+      )}
+
+      {isRefreshing && (
+        <div className="flex items-start gap-2 rounded-sm border border-info/30 bg-info/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.15em] text-info">
+          <ArrowsClockwise size={12} weight="bold" className="mt-0.5 shrink-0 animate-spin" />
+          <span>最新のルーティング状態に同期しています</span>
         </div>
       )}
 
@@ -349,20 +456,21 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-base-content/30 font-mono text-[9px] uppercase tracking-[0.18em] text-base-content/55">
-              <th className="px-3 py-2.5 text-center font-medium">pri</th>
               <th className="px-4 py-2.5 text-left font-medium">platform</th>
               <th className="px-4 py-2.5 text-left font-medium">action</th>
-              <th className="px-4 py-2.5 text-left font-medium">provider · model</th>
+              <th className="px-4 py-2.5 text-left font-medium">provider</th>
+              <th className="px-4 py-2.5 text-left font-medium">model</th>
               <th className="px-4 py-2.5 text-right font-medium tabular-nums">temp</th>
               <th className="px-4 py-2.5 text-right font-medium tabular-nums">max</th>
               <th className="px-4 py-2.5 text-left font-medium">fallback</th>
+              <th className="px-3 py-2.5 text-center font-medium">pri</th>
               <th className="px-4 py-2.5 text-right font-medium">&nbsp;</th>
             </tr>
           </thead>
           <tbody>
             {routes.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center">
+                <td colSpan={9} className="px-4 py-12 text-center">
                   <Brain
                     size={22}
                     weight="regular"
@@ -370,7 +478,7 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
                     aria-hidden
                   />
                   <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-base-content/45">
-                    no routes on file
+                    no routing rules yet
                   </div>
                   <div className="mt-1 text-xs text-base-content/55">
                     LLM
@@ -387,15 +495,6 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
                   key={r.id}
                   className="border-b border-dashed border-base-content/15 transition-colors hover:bg-accent/[0.03]"
                 >
-                  {/* priority drop-cap */}
-                  <td className="w-12 px-3 py-3 text-center align-middle">
-                    <span
-                      className="inline-flex h-8 min-w-[2rem] items-center justify-center rounded-sm border border-base-content/25 px-1 font-display text-sm font-semibold tabular-nums text-base-content/70"
-                      style={{ fontFamily: "'Fraunces', serif" }}
-                    >
-                      {r.priority}
-                    </span>
-                  </td>
                   {/* platform */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -420,28 +519,39 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
                     </div>
                   </td>
                   {/* action */}
-                  <td className="px-4 py-3 font-mono text-[11px] text-base-content/80">
-                    {isDefault ? (
-                      <span
-                        className="font-display text-sm italic text-base-content/55"
-                        style={{ fontFamily: "'Fraunces', serif" }}
-                      >
-                        デフォルト
-                      </span>
-                    ) : (
-                      describeAction(r.action)
-                    )}
+                  <td className="px-4 py-3">
+                    <div className="font-mono text-[11px] text-base-content/80">
+                      {isDefault ? (
+                        <span
+                          className="font-display text-sm italic text-base-content/55"
+                          style={{ fontFamily: "'Fraunces', serif" }}
+                        >
+                          デフォルト
+                        </span>
+                      ) : (
+                        describeAction(r.action)
+                      )}
+                    </div>
+                    <div className="mt-1 text-xs leading-relaxed text-base-content/55">
+                      {describeRoutePurpose(r)}
+                    </div>
                   </td>
-                  {/* provider · model */}
+                  {/* provider */}
+                  <td className="px-4 py-3">
+                    <div className="font-mono text-[11px] uppercase tracking-[0.15em] text-base-content/75">
+                      {describeProvider(r.provider)}
+                    </div>
+                    <div className="font-mono text-[9px] uppercase tracking-[0.15em] text-base-content/40">
+                      {r.provider}
+                    </div>
+                  </td>
+                  {/* model */}
                   <td className="px-4 py-3">
                     <div
                       className="font-display text-base font-medium text-base-content"
                       style={{ fontFamily: "'Fraunces', serif" }}
                     >
                       {r.model}
-                    </div>
-                    <div className="font-mono text-[9px] uppercase tracking-[0.15em] text-base-content/45">
-                      {r.provider}
                     </div>
                   </td>
                   {/* temp */}
@@ -462,13 +572,24 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
                           className="text-base-content/40"
                         />
                         <span className="text-base-content/75">{r.fallbackModel}</span>
-                        <span className="text-base-content/40">/ {r.fallbackProvider}</span>
+                        <span className="text-base-content/40">
+                          / {describeProvider(r.fallbackProvider)}
+                        </span>
                       </span>
                     ) : (
                       <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-base-content/30">
                         none
                       </span>
                     )}
+                  </td>
+                  {/* priority */}
+                  <td className="w-12 px-3 py-3 text-center align-middle">
+                    <span
+                      className="inline-flex h-8 min-w-[2rem] items-center justify-center rounded-sm border border-base-content/25 px-1 font-display text-sm font-semibold tabular-nums text-base-content/70"
+                      style={{ fontFamily: "'Fraunces', serif" }}
+                    >
+                      {r.priority}
+                    </span>
                   </td>
                   {/* actions */}
                   <td className="px-4 py-3 text-right">
@@ -528,15 +649,19 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
               <div className="flex items-start justify-between border-b border-base-content/25 px-6 py-4">
                 <div>
                   <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-base-content/45">
-                    dispatch · internal
+                    routing · editor
                   </div>
                   <h3
                     id="llm-modal-title"
                     className="mt-0.5 font-display text-2xl font-semibold text-base-content"
                     style={{ fontFamily: "'Fraunces', serif" }}
                   >
-                    {editing ? "Amend Dispatch Order" : "Issue New Dispatch"}
+                    {editing ? "ルーティングを編集" : "ルーティングを追加"}
                   </h3>
+                  <p className="mt-1 max-w-lg text-sm leading-relaxed text-base-content/60">
+                    Platform と Action の組み合わせに対して、どの AI を使うかを指定します。
+                    空欄に近い設定ほど広い用途に効き、細かい設定ほど個別の用途に効きます。
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -582,7 +707,7 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
 
                 {/* Provider + Model */}
                 <div className="grid grid-cols-[auto_1fr] gap-3">
-                  <Field label="provider" hint="LLM">
+                  <Field label="provider" hint="AI 提供元">
                     <select
                       value={form.provider}
                       onChange={(e) => setForm((f) => ({ ...f, provider: e.target.value }))}
@@ -600,7 +725,7 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
                       type="text"
                       value={form.model}
                       onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
-                      placeholder="model identifier"
+                      placeholder="使用するモデル名"
                       className="w-full rounded-sm border border-base-content/25 bg-base-100 px-3 py-2 font-display text-base tabular-nums text-base-content outline-none focus:border-primary"
                       style={{ fontFamily: "'Fraunces', serif" }}
                     />
@@ -613,7 +738,7 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
                     <div className="mb-2 flex items-center justify-between">
                       <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.15em] text-base-content/50">
                         <Thermometer size={12} weight="bold" />
-                        dial
+                        creativity
                       </span>
                       <span
                         className="font-display text-xl font-semibold tabular-nums text-base-content"
@@ -688,7 +813,7 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
                       className="checkbox checkbox-xs checkbox-primary"
                     />
                     <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-base-content/70">
-                      enable fallback
+                      fallback を有効化
                     </span>
                     <span className="font-mono text-[9px] italic tracking-[0.1em] text-base-content/40">
                       primary が失敗した時の予備経路
@@ -703,7 +828,7 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
                         }
                         className="rounded-sm border border-base-content/25 bg-base-100 px-2 py-1.5 font-mono text-xs text-base-content outline-none focus:border-primary"
                       >
-                        <option value="">— provider —</option>
+                        <option value="">— provider を選択 —</option>
                         {PROVIDER_OPTIONS.map((opt) => (
                           <option key={opt.value} value={opt.value}>
                             {opt.label}
@@ -714,7 +839,7 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
                         type="text"
                         value={form.fallbackModel}
                         onChange={(e) => setForm((f) => ({ ...f, fallbackModel: e.target.value }))}
-                        placeholder="fallback model"
+                        placeholder="予備で使うモデル名"
                         className="w-full rounded-sm border border-base-content/25 bg-base-100 px-2 py-1.5 font-mono text-xs text-base-content outline-none focus:border-primary"
                       />
                     </div>
@@ -744,7 +869,7 @@ export function LlmRouteManager({ initialRoutes, isFallback }: LlmRouteManagerPr
                     className="inline-flex items-center gap-2 rounded-sm border border-primary bg-primary px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-primary-content transition-colors hover:bg-primary/90 disabled:opacity-50"
                   >
                     <FloppyDisk size={12} weight="bold" />
-                    {submitting ? "saving…" : editing ? "amend" : "issue"}
+                    {submitting ? "保存中…" : editing ? "更新する" : "作成する"}
                   </button>
                 </div>
               </form>

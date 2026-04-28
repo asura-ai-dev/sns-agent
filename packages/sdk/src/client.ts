@@ -8,6 +8,12 @@
 
 import { SdkError } from "./errors.js";
 import type {
+  AgentChatInput,
+  AgentChatResponse,
+  AgentExecuteInput,
+  AgentExecuteResponse,
+  AgentHistoryEntry,
+  AgentHistoryParams,
   ApiResponse,
   BudgetPolicyDto,
   BudgetStatusDto,
@@ -18,6 +24,8 @@ import type {
   ListPostsParams,
   ListSchedulesParams,
   Post,
+  RunDueSchedulesInput,
+  RunDueSchedulesResult,
   ScheduledJob,
   SocialAccount,
   UpdateBudgetPolicyDto,
@@ -97,7 +105,8 @@ export interface SchedulesResource {
   list(params?: ListSchedulesParams): Promise<ApiResponse<ScheduledJob[]>>;
   create(input: CreateScheduleInput): Promise<ApiResponse<ScheduledJob>>;
   update(id: string, input: UpdateScheduleInput): Promise<ApiResponse<ScheduledJob>>;
-  cancel(id: string): Promise<ApiResponse<{ success: boolean }>>;
+  cancel(id: string): Promise<ApiResponse<ScheduledJob>>;
+  runDue(input?: RunDueSchedulesInput): Promise<ApiResponse<RunDueSchedulesResult>>;
 }
 
 export interface UsageResource {
@@ -126,6 +135,12 @@ export interface BudgetResource {
   status(): Promise<ApiResponse<BudgetStatusDto[]>>;
 }
 
+export interface AgentResource {
+  chat(input: AgentChatInput): Promise<ApiResponse<AgentChatResponse>>;
+  execute(input: AgentExecuteInput): Promise<ApiResponse<AgentExecuteResponse>>;
+  history(params?: AgentHistoryParams): Promise<ApiResponse<AgentHistoryEntry[]>>;
+}
+
 // ───────────────────────────────────────────
 // SnsAgentClient
 // ───────────────────────────────────────────
@@ -141,6 +156,7 @@ export class SnsAgentClient {
   public readonly schedules: SchedulesResource;
   public readonly usage: UsageResource;
   public readonly budget: BudgetResource;
+  public readonly agent: AgentResource;
 
   constructor(options: SnsAgentClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
@@ -154,6 +170,7 @@ export class SnsAgentClient {
     this.schedules = this._buildSchedules();
     this.usage = this._buildUsage();
     this.budget = this._buildBudget();
+    this.agent = this._buildAgent();
   }
 
   // ───────────────────────────────────────
@@ -292,7 +309,9 @@ export class SnsAgentClient {
         ),
       create: (input) => this.post<ApiResponse<ScheduledJob>>("/api/schedules", input),
       update: (id, input) => this.patch<ApiResponse<ScheduledJob>>(`/api/schedules/${id}`, input),
-      cancel: (id) => this.delete<ApiResponse<{ success: boolean }>>(`/api/schedules/${id}`),
+      cancel: (id) => this.delete<ApiResponse<ScheduledJob>>(`/api/schedules/${id}`),
+      runDue: (input) =>
+        this.post<ApiResponse<RunDueSchedulesResult>>("/api/schedules/run-due", input ?? {}),
     };
   }
 
@@ -323,6 +342,19 @@ export class SnsAgentClient {
       deletePolicy: (id) =>
         this.delete<ApiResponse<{ id: string; deleted: boolean }>>(`/api/budget/policies/${id}`),
       status: () => this.get<ApiResponse<BudgetStatusDto[]>>("/api/budget/status"),
+    };
+  }
+
+  private _buildAgent(): AgentResource {
+    return {
+      chat: (input) => this.post<ApiResponse<AgentChatResponse>>("/api/agent/chat", input),
+      execute: (input) =>
+        this.post<ApiResponse<AgentExecuteResponse>>("/api/agent/execute", input),
+      history: (params) =>
+        this.get<ApiResponse<AgentHistoryEntry[]>>(
+          "/api/agent/history",
+          params as Record<string, string | number | boolean | undefined>,
+        ),
     };
   }
 }

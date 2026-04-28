@@ -6,7 +6,14 @@
  */
 import type { Platform } from "@sns-agent/config";
 import { estimateCost } from "@sns-agent/config";
-import type { MediaAttachment, Post, ScheduledJob, SocialAccount } from "../domain/entities.js";
+import type {
+  MediaAttachment,
+  Post,
+  PostProviderMetadata,
+  ScheduledJob,
+  SocialAccount,
+  XThreadPostSegment,
+} from "../domain/entities.js";
 import type {
   AccountRepository,
   ApprovalRepository,
@@ -18,7 +25,11 @@ import type {
   ScheduledJobRepository,
   UsageRepository,
 } from "../interfaces/repositories.js";
-import type { SocialProvider, ValidationResult } from "../interfaces/social-provider.js";
+import type {
+  DeleteResult,
+  SocialProvider,
+  ValidationResult,
+} from "../interfaces/social-provider.js";
 import {
   BudgetExceededError,
   NotFoundError,
@@ -76,6 +87,7 @@ export interface CreatePostInput {
   socialAccountId: string;
   contentText: string | null;
   contentMedia?: MediaAttachment[] | null;
+  providerMetadata?: PostProviderMetadata | null;
   /** true で即時公開、false または省略で下書き保存 */
   publishNow?: boolean;
   /** 冪等性キー（指定時は同一キーで既存投稿を返す） */
@@ -87,6 +99,7 @@ export interface CreatePostInput {
 export interface UpdatePostInput {
   contentText?: string | null;
   contentMedia?: MediaAttachment[] | null;
+  providerMetadata?: PostProviderMetadata | null;
 }
 
 export interface ListPostsFilters {
@@ -122,8 +135,12 @@ export interface PostListItem extends Post {
   } | null;
   /** 予約ジョブが存在する場合のスケジュール情報 */
   schedule: {
+    id: string;
     scheduledAt: Date;
     status: ScheduledJob["status"];
+    nextRetryAt: Date | null;
+    lastError: string | null;
+    lastExecutedAt: Date | null;
   } | null;
 }
 
@@ -173,6 +190,61 @@ function getProvider(deps: PostUsecaseDeps, platform: Platform): SocialProvider 
     throw new ValidationError(`Unsupported platform: ${platform}`);
   }
   return provider;
+}
+
+function normalizeThreadSegments(value: unknown): XThreadPostSegment[] | null {
+  if (!Array.isArray(value)) return null;
+  const threadPosts = value
+    .map((segment) => {
+      if (!segment || typeof segment !== "object") return null;
+      const contentText =
+        typeof (segment as { contentText?: unknown }).contentText === "string"
+          ? (segment as { contentText: string }).contentText
+          : null;
+      if (contentText === null) return null;
+      return { contentText };
+    })
+    .filter((segment): segment is XThreadPostSegment => segment !== null);
+  return threadPosts.length > 0 ? threadPosts : null;
+}
+
+function normalizeProviderMetadata(
+  metadata: PostProviderMetadata | null | undefined,
+): PostProviderMetadata | null {
+  const x = metadata?.x;
+  if (!x) return null;
+
+  const quotePostId =
+    typeof x.quotePostId === "string" && x.quotePostId.trim().length > 0
+      ? x.quotePostId.trim()
+      : null;
+  const threadPosts = normalizeThreadSegments(x.threadPosts);
+  const publishedThreadIds =
+    Array.isArray(x.publishedThreadIds) && x.publishedThreadIds.length > 0
+      ? x.publishedThreadIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+      : null;
+
+  if (!quotePostId && !threadPosts && !publishedThreadIds) {
+    return null;
+  }
+
+  return {
+    x: {
+      quotePostId,
+      threadPosts,
+      publishedThreadIds,
+    },
+  };
+}
+
+function assertProviderMetadataCompatibility(
+  platform: Platform,
+  metadata: PostProviderMetadata | null,
+): void {
+  if (!metadata) return;
+  if (platform !== "x" && metadata.x) {
+    throw new ValidationError(`providerMetadata.x is only supported for platform x`);
+  }
 }
 
 /** Post の所有権チェック */
@@ -268,6 +340,8 @@ export async function createPost(deps: PostUsecaseDeps, input: CreatePostInput):
 
   // 2. アカウント確認
   const account = await loadAccountForWorkspace(deps, input.workspaceId, input.socialAccountId);
+  const providerMetadata = normalizeProviderMetadata(input.providerMetadata);
+  assertProviderMetadataCompatibility(account.platform, providerMetadata);
 
   // 3. Provider バリデーション
   const provider = getProvider(deps, account.platform);
@@ -275,6 +349,7 @@ export async function createPost(deps: PostUsecaseDeps, input: CreatePostInput):
     platform: account.platform,
     contentText: input.contentText,
     contentMedia: input.contentMedia ?? null,
+    providerMetadata,
   });
 
   if (!validation.valid) {
@@ -292,6 +367,7 @@ export async function createPost(deps: PostUsecaseDeps, input: CreatePostInput):
     status: "draft",
     contentText: input.contentText,
     contentMedia: input.contentMedia ?? null,
+    providerMetadata,
     platformPostId: null,
     validationResult: validation,
     idempotencyKey: input.idempotencyKey ?? null,
@@ -329,6 +405,11 @@ export async function updatePost(
 
   const newText = input.contentText !== undefined ? input.contentText : post.contentText;
   const newMedia = input.contentMedia !== undefined ? input.contentMedia : post.contentMedia;
+  const newProviderMetadata =
+    input.providerMetadata !== undefined
+      ? normalizeProviderMetadata(input.providerMetadata)
+      : normalizeProviderMetadata(post.providerMetadata);
+  assertProviderMetadataCompatibility(post.platform, newProviderMetadata);
 
   // 再バリデーション
   const provider = getProvider(deps, post.platform);
@@ -336,6 +417,7 @@ export async function updatePost(
     platform: post.platform,
     contentText: newText,
     contentMedia: newMedia,
+    providerMetadata: newProviderMetadata,
   });
 
   if (!validation.valid) {
@@ -348,6 +430,7 @@ export async function updatePost(
   return deps.postRepo.update(postId, {
     contentText: newText,
     contentMedia: newMedia,
+    providerMetadata: newProviderMetadata,
     validationResult: validation,
   });
 }
@@ -483,6 +566,7 @@ export async function publishPostChecked(
       accountCredentials: credentials,
       contentText: post.contentText,
       contentMedia: post.contentMedia,
+      providerMetadata: normalizeProviderMetadata(post.providerMetadata),
       idempotencyKey: post.idempotencyKey ?? undefined,
     });
 
@@ -512,6 +596,7 @@ export async function publishPostChecked(
     const published = await deps.postRepo.update(postId, {
       status: "published",
       platformPostId: result.platformPostId,
+      providerMetadata: normalizeProviderMetadata(result.providerMetadata ?? post.providerMetadata),
       publishedAt: result.publishedAt ?? new Date(),
     });
     await recordProviderUsage(deps, {
@@ -598,22 +683,33 @@ export async function deletePost(
     const provider = getProvider(deps, post.platform);
     const credentials = decryptCredentials(account.credentialsEncrypted, deps.encryptionKey);
 
-    const result = await provider.deletePost({
-      accountCredentials: credentials,
-      platformPostId: post.platformPostId,
-    });
+    const deleteTargets = Array.from(
+      new Set(post.providerMetadata?.x?.publishedThreadIds ?? [post.platformPostId]),
+    ).reverse();
+
+    let failedDelete: DeleteResult | null = null;
+    for (const platformPostId of deleteTargets) {
+      const result = await provider.deletePost({
+        accountCredentials: credentials,
+        platformPostId,
+      });
+      if (!result.success) {
+        failedDelete = result;
+        break;
+      }
+    }
 
     await recordProviderUsage(deps, {
       workspaceId,
       platform: post.platform,
       endpoint: "post.delete",
       actorId: post.createdBy ?? null,
-      success: result.success,
+      success: failedDelete === null,
     });
 
-    if (!result.success) {
+    if (failedDelete) {
       throw new ProviderError(
-        `Failed to delete post on platform: ${result.error ?? "unknown error"}`,
+        `Failed to delete post on platform: ${failedDelete.error ?? "unknown error"}`,
       );
     }
   }
@@ -693,15 +789,29 @@ export async function listPosts(
   );
 
   // 4. scheduled_jobs の一括取得 (scheduled_at 降順で返る想定)
-  const scheduleByPost = new Map<string, { scheduledAt: Date; status: ScheduledJob["status"] }>();
+  const scheduleByPost = new Map<
+    string,
+    {
+      id: string;
+      scheduledAt: Date;
+      status: ScheduledJob["status"];
+      nextRetryAt: Date | null;
+      lastError: string | null;
+      lastExecutedAt: Date | null;
+    }
+  >();
   if (deps.scheduledJobRepo && postIds.length > 0) {
     const jobs = await deps.scheduledJobRepo.findByPostIds(postIds);
     // scheduled_at 降順の先頭 = 最新ジョブを採用する
     for (const job of jobs) {
       if (!scheduleByPost.has(job.postId)) {
         scheduleByPost.set(job.postId, {
+          id: job.id,
           scheduledAt: job.scheduledAt,
           status: job.status,
+          nextRetryAt: job.nextRetryAt,
+          lastError: job.lastError,
+          lastExecutedAt: job.completedAt ?? job.startedAt ?? null,
         });
       }
     }

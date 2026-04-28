@@ -383,8 +383,8 @@ export async function executeSkillAction(
 export interface SkillDryRunResult {
   actionName: string;
   description: string;
-  /** LLM ユーザーに提示する人間向けプレビュー文字列 */
-  preview: string;
+  /** LLM ユーザーに提示するプレビュー。UI では key-value 表示にも使う。 */
+  preview: string | Record<string, unknown>;
   /** 必要な permissions (action.permissions) */
   requiredPermissions: Permission[];
   /** actor に欠けている permissions。空配列なら OK */
@@ -460,25 +460,99 @@ export function dryRunSkillAction(context: SkillExecutionContext): SkillDryRunRe
 }
 
 /**
- * 人間向けプレビュー文字列を作る (v1: テンプレートは素朴)。
- * より高度な表現 (platform ごとのメッセージ) は将来 action 側に `previewTemplate` を
- * 持たせるなどで拡張する。
+ * 人間向けプレビューを作る。
+ * X チャット運用で確認しやすいよう、主要 action では構造化 payload を返し、
+ * 未対応 action は従来どおり文字列へフォールバックする。
  */
 function buildPreviewText(
   action: SkillAction,
   args: Record<string, unknown>,
   mode: SkillExecutionMode,
-): string {
-  const argSummary = Object.entries(args ?? {})
-    .map(([k, v]) => {
-      const display =
-        typeof v === "string" ? (v.length > 120 ? `${v.slice(0, 117)}...` : v) : JSON.stringify(v);
-      return `  - ${k}: ${display}`;
-    })
-    .join("\n");
+): string | Record<string, unknown> {
+  switch (action.name) {
+    case "post.create":
+      return {
+        mode,
+        operation: args.publishNow === true ? "publish" : "draft",
+        account: pickText(args, "accountName") ?? pickText(args, "socialAccountId") ?? "(required)",
+        text: truncateText(pickText(args, "text")),
+        characterCount: countText(args.text),
+      };
 
-  const header = `[dry-run] ${action.name} (mode=${mode})`;
-  const body = action.description;
-  const argBlock = argSummary.length > 0 ? `arguments:\n${argSummary}` : "arguments: (none)";
-  return `${header}\n${body}\n${argBlock}`;
+    case "post.schedule":
+      return {
+        mode,
+        operation: "schedule",
+        account: pickText(args, "accountName") ?? pickText(args, "socialAccountId") ?? "(required)",
+        scheduledAt: pickText(args, "scheduledAt") ?? "(required)",
+        text: truncateText(pickText(args, "text")),
+        characterCount: countText(args.text),
+      };
+
+    case "post.list":
+      return {
+        mode,
+        operation: "list_posts",
+        platform: "x",
+        status: pickText(args, "status") ?? "all",
+        limit: pickNumber(args, "limit") ?? 50,
+      };
+
+    case "schedule.list":
+      return {
+        mode,
+        operation: "list_schedules",
+        platform: "x",
+        status: pickText(args, "status") ?? "all",
+        from: pickText(args, "from") ?? null,
+        to: pickText(args, "to") ?? null,
+        limit: pickNumber(args, "limit") ?? 50,
+      };
+
+    case "inbox.list":
+      return {
+        mode,
+        operation: "list_inbox_threads",
+        platform: "x",
+        status: pickText(args, "status") ?? "all",
+        limit: pickNumber(args, "limit") ?? 50,
+        offset: pickNumber(args, "offset") ?? 0,
+      };
+
+    default: {
+      const argSummary = Object.entries(args ?? {})
+        .map(([k, v]) => {
+          const display =
+            typeof v === "string"
+              ? (v.length > 120 ? `${v.slice(0, 117)}...` : v)
+              : JSON.stringify(v);
+          return `  - ${k}: ${display}`;
+        })
+        .join("\n");
+
+      const header = `[dry-run] ${action.name} (mode=${mode})`;
+      const body = action.description;
+      const argBlock = argSummary.length > 0 ? `arguments:\n${argSummary}` : "arguments: (none)";
+      return `${header}\n${body}\n${argBlock}`;
+    }
+  }
+}
+
+function pickText(args: Record<string, unknown>, key: string): string | null {
+  const value = args[key];
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+function pickNumber(args: Record<string, unknown>, key: string): number | null {
+  const value = args[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function truncateText(value: string | null, max = 140): string | null {
+  if (!value) return null;
+  return value.length > max ? `${value.slice(0, max - 3)}...` : value;
+}
+
+function countText(value: unknown): number {
+  return typeof value === "string" ? value.length : 0;
 }

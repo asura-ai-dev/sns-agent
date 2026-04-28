@@ -105,8 +105,8 @@ export interface AgentDryRunPreview {
   actionName: string;
   packageName: string;
   description: string;
-  /** 人間向けプレビュー文字列 */
-  preview: string;
+  /** 人間向けプレビュー。文字列または key-value payload。 */
+  preview: string | Record<string, unknown>;
   requiredPermissions: string[];
   missingPermissions: string[];
   argumentErrors: string[];
@@ -207,6 +207,18 @@ export async function handleChatMessage(
     conversationId: input.conversationId ?? null,
   });
 
+  const resultSummary =
+    decision.type === "text"
+      ? {
+          decisionType: decision.type,
+          content: decision.content,
+        }
+      : {
+          decisionType: decision.type,
+          content: decision.content,
+          intent: decision.intent,
+        };
+
   // 監査: chat.send (LLM 呼び出し自体を記録)
   await safeRecordAudit(deps.auditRepo, {
     workspaceId: input.workspaceId,
@@ -216,7 +228,7 @@ export async function handleChatMessage(
     resourceType: "agent_conversation",
     resourceId: input.conversationId ?? null,
     inputSummary: { message: input.message, mode },
-    resultSummary: { decisionType: decision.type },
+    resultSummary,
   });
 
   if (decision.type === "text") {
@@ -356,9 +368,14 @@ export async function executeAgentAction(
  *  - 不正な shape は無視する (壊れた manifest が 1 件あっても他を諦めない)
  */
 export function buildSystemPrompt(enabledSkills: SkillPackage[], mode: AgentExecutionMode): string {
+  const promptSkills = selectSkillsForPrompt(enabledSkills);
+  const focus = inferPromptFocus(promptSkills);
   const header = [
-    "You are the SNS Agent operator assistant.",
-    "You can help the user with managing X / LINE / Instagram accounts.",
+    `You are the SNS Agent operator assistant focused on ${focus} operations.`,
+    "Think in this flow: user request -> structured intent JSON -> dry-run preview -> approval/execution.",
+    focus === "X"
+      ? "Only expose and use X-related skills in this conversation when X skills are available."
+      : "Use only the skills listed below for this conversation.",
     "",
     `Current execution mode: ${mode}.`,
     mode === "read-only"
@@ -369,16 +386,33 @@ export function buildSystemPrompt(enabledSkills: SkillPackage[], mode: AgentExec
           ? "All write actions require explicit user approval before execution."
           : "Write actions will be executed immediately without further approval.",
     "",
+    "Primary goal: map the request to one available skill action whenever possible.",
+    "Prefer structured intent JSON over free-form answers.",
+    "Use plain text only when the request is outside scope or missing critical information.",
+    "",
     "When you want to perform an action, respond with a single JSON object of the form:",
     `  {"action":"<action name>","args":{...},"package":"<skill package name>"}`,
+    "Do not wrap the JSON in markdown fences. Do not add extra commentary around the JSON.",
     "Otherwise respond with plain text only.",
+    "",
+    "Rules for write actions:",
+    "- Never invent an action name, package name, account name, or missing argument.",
+    "- For accountName, only emit a value when the user clearly specified the target account. Never choose between multiple accounts with similar names. If the target account is omitted or ambiguous, ask a short follow-up question in plain text.",
+    "- For post.schedule, convert relative or natural-language timing (for example, tomorrow 9am) into a timezone-aware ISO 8601 string such as 2026-04-15T09:00:00+09:00.",
+    "- Never emit a naive datetime like 2026-04-15T09:00:00 without a timezone offset or Z suffix.",
+    "- If the date or time is ambiguous and you cannot convert it safely into timezone-aware ISO 8601, ask a short follow-up question instead of guessing.",
+    "- For read/list requests, prefer the matching read-only action over a generic textual summary.",
+    "",
+    "Response strategy:",
+    "- Use post.create for creating a draft or immediate X post.",
+    "- Use post.schedule for reservation requests.",
+    "- Use post.list, schedule.list, or inbox.list for lookup requests when they match the user's ask.",
     "",
     "Available skill packages and actions:",
   ];
 
   const lines: string[] = [];
-  for (const pkg of enabledSkills) {
-    if (!pkg.enabled) continue;
+  for (const pkg of promptSkills) {
     const manifestActions = extractActionsForPrompt(pkg.manifest);
     if (manifestActions.length === 0) {
       lines.push(`- package ${pkg.name}@${pkg.version} (platform=${pkg.platform}): (no actions)`);
@@ -387,6 +421,24 @@ export function buildSystemPrompt(enabledSkills: SkillPackage[], mode: AgentExec
     lines.push(`- package ${pkg.name}@${pkg.version} (platform=${pkg.platform}):`);
     for (const action of manifestActions) {
       lines.push(`    - ${action.name}: ${action.description}`);
+      lines.push(
+        `      mode=${action.readOnly === true ? "read-only" : action.readOnly === false ? "write" : "unknown"}; requiredArgs=${
+          action.requiredArgs.length > 0 ? action.requiredArgs.join(", ") : "(none)"
+        }; permissions=${action.permissions.length > 0 ? action.permissions.join(", ") : "(none)"}`,
+      );
+      lines.push(
+        `      args=${
+          action.args.length > 0
+            ? action.args
+                .map((arg) =>
+                  arg.description
+                    ? `${arg.name}:${arg.type} (${arg.description})`
+                    : `${arg.name}:${arg.type}`,
+                )
+                .join(", ")
+            : "(no args)"
+        }`,
+      );
     }
   }
   if (lines.length === 0) {
@@ -399,6 +451,10 @@ export function buildSystemPrompt(enabledSkills: SkillPackage[], mode: AgentExec
 interface PromptAction {
   name: string;
   description: string;
+  requiredArgs: string[];
+  args: Array<{ name: string; type: string; description?: string }>;
+  readOnly: boolean | null;
+  permissions: string[];
 }
 
 function extractActionsForPrompt(manifest: unknown): PromptAction[] {
@@ -410,11 +466,68 @@ function extractActionsForPrompt(manifest: unknown): PromptAction[] {
     if (a === null || typeof a !== "object") continue;
     const name = (a as { name?: unknown }).name;
     const description = (a as { description?: unknown }).description;
+    const parameters = (a as { parameters?: unknown }).parameters;
+    const requiredArgs =
+      parameters !== null &&
+      typeof parameters === "object" &&
+      Array.isArray((parameters as { required?: unknown }).required)
+        ? ((parameters as { required?: unknown }).required as unknown[]).filter(
+            (value): value is string => typeof value === "string",
+          )
+        : [];
+    const properties =
+      parameters !== null &&
+      typeof parameters === "object" &&
+      (parameters as { properties?: unknown }).properties !== null &&
+      typeof (parameters as { properties?: unknown }).properties === "object"
+        ? (((parameters as { properties?: Record<string, unknown> }).properties ?? {}) as Record<
+            string,
+            unknown
+          >)
+        : {};
+    const args = Object.entries(properties).map(([argName, schema]) => ({
+      name: argName,
+      type:
+        schema !== null &&
+        typeof schema === "object" &&
+        typeof (schema as { type?: unknown }).type === "string"
+          ? ((schema as { type?: string }).type ?? "unknown")
+          : "unknown",
+      description:
+        schema !== null &&
+        typeof schema === "object" &&
+        typeof (schema as { description?: unknown }).description === "string"
+          ? ((schema as { description?: string }).description ?? undefined)
+          : undefined,
+    }));
+    const readOnly =
+      typeof (a as { readOnly?: unknown }).readOnly === "boolean"
+        ? ((a as { readOnly?: boolean }).readOnly ?? null)
+        : null;
+    const permissions = Array.isArray((a as { permissions?: unknown }).permissions)
+      ? ((a as { permissions?: unknown }).permissions as unknown[]).filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [];
     if (typeof name === "string" && typeof description === "string") {
-      result.push({ name, description });
+      result.push({ name, description, requiredArgs, args, readOnly, permissions });
     }
   }
   return result;
+}
+
+function selectSkillsForPrompt(enabledSkills: SkillPackage[]): SkillPackage[] {
+  const activeSkills = enabledSkills.filter((pkg) => pkg.enabled);
+  const hasXSkills = activeSkills.some((pkg) => pkg.platform === "x");
+  if (!hasXSkills) return activeSkills;
+  return activeSkills.filter((pkg) => pkg.platform === "x" || pkg.platform === "common");
+}
+
+function inferPromptFocus(skills: SkillPackage[]): string {
+  if (skills.some((pkg) => pkg.platform === "x")) return "X";
+  if (skills.some((pkg) => pkg.platform === "line")) return "LINE";
+  if (skills.some((pkg) => pkg.platform === "instagram")) return "Instagram";
+  return "SNS";
 }
 
 // ───────────────────────────────────────────

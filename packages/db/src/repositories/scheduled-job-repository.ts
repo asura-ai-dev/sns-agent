@@ -91,15 +91,19 @@ export class DrizzleScheduledJobRepository implements ScheduledJobRepository {
    *
    * 対象となる前提状態:
    * - status = 'pending'
-   * - status = 'retrying'（next_retry_at チェックはワーカー側 findExecutable で実施）
+   * - status = 'retrying'（next_retry_at チェックは findExecutable 側で実施）
    * - status = 'locked' かつ locked_at が古い（デッドロック回復）
    *
    * status が上記以外だった場合は null を返す。
    */
-  async lockJob(id: string): Promise<ScheduledJob | null> {
-    const now = new Date();
+  async lockJob(
+    id: string,
+    options?: { now?: Date; lockTimeoutMs?: number },
+  ): Promise<ScheduledJob | null> {
+    const now = options?.now ?? new Date();
+    const lockTimeoutMs = options?.lockTimeoutMs ?? 0;
+    const staleBefore = new Date(now.getTime() - lockTimeoutMs);
 
-    // Atomic lock: pending / retrying のみを locked に遷移させる。
     // SQLite の UPDATE ... WHERE は原子的であり、複数ワーカーが同時に呼んでも
     // 1 プロセスのみが .returning() で行を得られる。
     const result = await this.db
@@ -108,7 +112,15 @@ export class DrizzleScheduledJobRepository implements ScheduledJobRepository {
         status: "locked",
         lockedAt: now,
       })
-      .where(and(eq(scheduledJobs.id, id), inArray(scheduledJobs.status, ["pending", "retrying"])))
+      .where(
+        and(
+          eq(scheduledJobs.id, id),
+          or(
+            inArray(scheduledJobs.status, ["pending", "retrying"]),
+            and(eq(scheduledJobs.status, "locked"), lte(scheduledJobs.lockedAt, staleBefore)),
+          ),
+        ),
+      )
       .returning();
 
     if (result.length === 0) {

@@ -24,6 +24,7 @@ function parseFilters(query: Record<string, string | undefined>) {
     actorType?: string;
     action?: string;
     resourceType?: string;
+    resourceId?: string;
     platform?: string;
     startDate?: Date;
     endDate?: Date;
@@ -35,6 +36,7 @@ function parseFilters(query: Record<string, string | undefined>) {
   }
   if (query.action) filters.action = query.action;
   if (query.resourceType) filters.resourceType = query.resourceType;
+  if (query.resourceId) filters.resourceId = query.resourceId;
   if (query.platform && ["x", "line", "instagram"].includes(query.platform)) {
     filters.platform = query.platform;
   }

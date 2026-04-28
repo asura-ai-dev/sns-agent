@@ -18,6 +18,12 @@ import type {
   PublishResult,
   DeletePostInput,
   DeleteResult,
+  ListThreadsInput,
+  ThreadListResult,
+  GetMessagesInput,
+  MessageListResult,
+  SendReplyInput,
+  SendReplyResult,
   RefreshResult,
 } from "@sns-agent/core";
 import { ProviderError } from "@sns-agent/core";
@@ -32,6 +38,7 @@ import {
   type TokenResult,
 } from "./auth.js";
 import { validatePost, publishPost, deletePost } from "./post.js";
+import { listThreads, getMessages, sendReply as sendReplyImpl } from "./inbox.js";
 
 export interface XProviderOptions {
   /** X OAuth 2.0 クライアント設定 */
@@ -146,7 +153,7 @@ export class XProvider implements SocialProvider {
     // /2/users/me でアカウント情報を取得
     const me = await this.fetchMe(token.accessToken);
 
-    const credentials = serializeCredentials(token);
+    const credentials = serializeCredentials(token, me.id);
 
     return {
       account: {
@@ -171,6 +178,18 @@ export class XProvider implements SocialProvider {
     return deletePost(input, this.httpClient);
   }
 
+  async listThreads(input: ListThreadsInput): Promise<ThreadListResult> {
+    return listThreads(input, this.httpClient);
+  }
+
+  async getMessages(input: GetMessagesInput): Promise<MessageListResult> {
+    return getMessages(input, this.httpClient);
+  }
+
+  async sendReply(input: SendReplyInput): Promise<SendReplyResult> {
+    return sendReplyImpl(input, this.httpClient);
+  }
+
   /**
    * トークンリフレッシュ
    *
@@ -186,10 +205,14 @@ export class XProvider implements SocialProvider {
    */
   async refreshToken(accountIdOrCredentials: string): Promise<RefreshResult> {
     let refreshTokenValue: string | null = null;
+    let xUserId: string | null = null;
     try {
       const parsed = JSON.parse(accountIdOrCredentials) as Record<string, unknown>;
       if (typeof parsed.refreshToken === "string") {
         refreshTokenValue = parsed.refreshToken;
+      }
+      if (typeof parsed.xUserId === "string") {
+        xUserId = parsed.xUserId;
       }
     } catch {
       // plain string の場合 refresh_token 自体を直接受け取ったとみなす
@@ -211,7 +234,7 @@ export class XProvider implements SocialProvider {
       const token = await refreshOAuthToken(this.oauth, refreshTokenValue, this.httpClient);
       return {
         success: true,
-        credentialsEncrypted: serializeCredentials(token),
+        credentialsEncrypted: serializeCredentials(token, xUserId),
         tokenExpiresAt: token.expiresAt,
       };
     } catch (err) {
@@ -250,13 +273,14 @@ export class XProvider implements SocialProvider {
 }
 
 /** credentials JSON をシリアライズ (usecase 側で暗号化する) */
-function serializeCredentials(token: TokenResult): string {
+function serializeCredentials(token: TokenResult, xUserId: string | null): string {
   return JSON.stringify({
     accessToken: token.accessToken,
     refreshToken: token.refreshToken,
     expiresAt: token.expiresAt ? token.expiresAt.toISOString() : null,
     scope: token.scope,
     tokenType: token.tokenType,
+    xUserId,
   });
 }
 
@@ -275,4 +299,5 @@ export {
 } from "./auth.js";
 export type { XOAuthConfig, TokenResult, PkcePair } from "./auth.js";
 export { validatePost, publishPost, deletePost } from "./post.js";
+export { listThreads, getMessages, sendReply } from "./inbox.js";
 export { InMemoryVerifierStore };

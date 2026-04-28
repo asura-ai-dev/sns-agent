@@ -8,7 +8,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["src/__tests__/**/*.test.ts"],
+    include: ["src/__tests__/**/*.test.ts", "src/routes/__tests__/**/*.test.ts"],
     // 統合テストは DB 共有を避けるため直列実行
     fileParallelism: false,
     testTimeout: 30_000,

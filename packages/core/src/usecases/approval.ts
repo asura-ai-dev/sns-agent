@@ -32,7 +32,11 @@ export interface ApprovalExecutor {
    * @param context 実行コンテキスト（workspaceId, approvedBy など）
    * @returns 実行結果（任意の形）
    */
-  (resourceId: string, context: { workspaceId: string; approvedBy: string }): Promise<unknown>;
+  (
+    resourceId: string,
+    context: { workspaceId: string; approvedBy: string },
+    request: ApprovalRequest,
+  ): Promise<unknown>;
 }
 
 export interface ApprovalUsecaseDeps {
@@ -53,6 +57,7 @@ export interface CreateApprovalRequestInput {
   workspaceId: string;
   resourceType: string;
   resourceId: string;
+  payload?: unknown | null;
   requestedBy: string;
   requestedByType?: AuditActorType;
   reason?: string | null;
@@ -93,6 +98,8 @@ export interface ApproveResult {
   executionResult: unknown | null;
   /** executor が登録されていなかった場合 true */
   executorMissing: boolean;
+  /** executor 実行時に失敗した場合のメッセージ */
+  executionError: string | null;
 }
 
 // ───────────────────────────────────────────
@@ -131,6 +138,7 @@ export async function createApprovalRequest(
     workspaceId: input.workspaceId,
     resourceType: input.resourceType,
     resourceId: input.resourceId,
+    payload: input.payload ?? null,
     requestedBy: input.requestedBy,
     requestedAt: new Date(),
     status: "pending",
@@ -149,6 +157,7 @@ export async function createApprovalRequest(
     inputSummary: {
       resourceType: input.resourceType,
       resourceId: input.resourceId,
+      payload: input.payload ?? null,
       reason: input.reason ?? null,
     },
     resultSummary: { status: "pending" },
@@ -211,10 +220,14 @@ export async function approveRequest(
     executorMissing = true;
   } else {
     try {
-      executionResult = await executor(request.resourceId, {
-        workspaceId: request.workspaceId,
-        approvedBy: input.reviewerId,
-      });
+        executionResult = await executor(
+          request.resourceId,
+          {
+            workspaceId: request.workspaceId,
+            approvedBy: input.reviewerId,
+          },
+          request,
+        );
     } catch (err) {
       executionError = err instanceof Error ? err.message : String(err);
     }
@@ -243,6 +256,7 @@ export async function approveRequest(
     request: updated,
     executionResult,
     executorMissing,
+    executionError,
   };
 }
 

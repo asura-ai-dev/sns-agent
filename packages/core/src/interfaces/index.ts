@@ -13,6 +13,7 @@ export type {
   UsageAggregation,
   BudgetPolicyRepository,
   LlmRouteRepository,
+  LlmProviderCredentialRepository,
   SkillPackageRepository,
   AuditLogRepository,
   AuditLogFilterOptions,

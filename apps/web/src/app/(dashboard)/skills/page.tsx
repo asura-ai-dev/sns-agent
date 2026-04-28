@@ -27,7 +27,7 @@ export default async function SkillsPage() {
       <SkillsMasthead
         eyebrow={SECTION_KICKERS.skills}
         title={MASTHEAD_TITLES.skills}
-        description=""
+        description="AI が実行してよい操作のまとまりを管理する画面です。有効化した Skills だけが Agent Gateway 経由でチャットから使われます。"
         packageCount={packagesRes.data.length}
       />
       <SkillsManager initialPackages={packagesRes.data} isFallback={packagesRes.isFallback} />

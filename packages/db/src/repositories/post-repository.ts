@@ -22,6 +22,7 @@ function rowToEntity(row: typeof posts.$inferSelect): Post {
     status: row.status as Post["status"],
     contentText: row.contentText,
     contentMedia: row.contentMedia as Post["contentMedia"],
+    providerMetadata: (row.providerMetadata as Post["providerMetadata"]) ?? null,
     platformPostId: row.platformPostId,
     validationResult: row.validationResult,
     idempotencyKey: row.idempotencyKey,
@@ -162,6 +163,7 @@ export class DrizzlePostRepository implements PostRepository {
       status: post.status,
       contentText: post.contentText,
       contentMedia: post.contentMedia as unknown as Record<string, unknown>[] | null,
+      providerMetadata: (post.providerMetadata ?? null) as Record<string, unknown> | null,
       platformPostId: post.platformPostId,
       validationResult: post.validationResult as Record<string, unknown> | null,
       idempotencyKey: post.idempotencyKey,
@@ -183,6 +185,12 @@ export class DrizzlePostRepository implements PostRepository {
       updateData.contentMedia = updateData.contentMedia as unknown as
         | Record<string, unknown>[]
         | null;
+    }
+    if (updateData.providerMetadata !== undefined) {
+      updateData.providerMetadata = updateData.providerMetadata as unknown as Record<
+        string,
+        unknown
+      > | null;
     }
     if (updateData.validationResult !== undefined) {
       updateData.validationResult = updateData.validationResult as unknown as Record<

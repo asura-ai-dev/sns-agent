@@ -13,13 +13,26 @@ export type {
   SocialAccount,
   ProviderCapabilities,
   MediaAttachment,
+  PostProviderMetadata,
   Post,
   ScheduledJob,
   ConversationThread,
   Message,
+  InboxChannel,
+  InboxInitiator,
+  XInboxEntryType,
+  ThreadProviderMetadata,
+  MessageProviderMetadata,
+  XThreadProviderMetadata,
+  XMessageProviderMetadata,
+  XPostProviderMetadata,
+  XThreadPostSegment,
   UsageRecord,
   BudgetPolicy,
   LlmRoute,
+  LlmProviderCredential,
+  LlmProviderCredentialProvider,
+  LlmProviderCredentialStatus,
   SkillPackage,
   ApprovalRequest,
   AuditLog,
@@ -44,6 +57,7 @@ export type {
   UsageAggregation,
   BudgetPolicyRepository,
   LlmRouteRepository,
+  LlmProviderCredentialRepository,
   SkillPackageRepository,
   AuditLogRepository,
   AuditLogFilterOptions,
@@ -133,8 +147,10 @@ export {
   cancelSchedule,
   listSchedules,
   getSchedule,
+  getScheduleOperationalView,
   executeJob,
   findExecutableJobs,
+  dispatchDueJobs,
   RETRY_BACKOFF_SECONDS,
   LOCK_TIMEOUT_MS,
   POLL_BATCH_SIZE,
@@ -144,6 +160,11 @@ export type {
   SchedulePostInput,
   ListSchedulesFilters,
   ExecuteJobResult,
+  DispatchDueJobsItem,
+  DispatchDueJobsResult,
+  ScheduleNotificationTarget,
+  ScheduleExecutionLog,
+  ScheduleOperationalView,
 } from "./usecases/schedule.js";
 
 export {
@@ -168,6 +189,7 @@ export {
   listThreads,
   getThread,
   processInboundMessage,
+  syncInboxFromProvider,
   sendReply as sendInboxReply,
 } from "./usecases/inbox.js";
 export type {
@@ -177,6 +199,8 @@ export type {
   GetThreadResult,
   InboundMessageInput,
   InboundMessageResult,
+  SyncInboxFromProviderInput,
+  SyncInboxFromProviderResult,
   SendReplyInput as InboxSendReplyInput,
   SendReplyResult as InboxSendReplyResult,
 } from "./usecases/inbox.js";
@@ -195,6 +219,19 @@ export type {
   BudgetPolicyStatus,
   BudgetStatusResult,
 } from "./usecases/budget.js";
+
+export {
+  getLlmProviderCredential,
+  getLlmProviderStatus,
+  saveLlmProviderCredential,
+  disconnectLlmProvider,
+} from "./usecases/llm-provider-credentials.js";
+export type {
+  LlmProviderCredentialsDeps,
+  LlmProviderConnectionStatus,
+  LlmProviderStatusResult,
+  SaveLlmProviderCredentialInput,
+} from "./usecases/llm-provider-credentials.js";
 
 export { recordAudit, listAuditLogs, exportAuditLogs } from "./usecases/audit.js";
 export type {

@@ -117,19 +117,51 @@ webhooks.post("/x", async (c) => {
     if (!raw || typeof raw !== "object") continue;
     const ev = raw as Record<string, unknown>;
     const id = typeof ev.id_str === "string" ? ev.id_str : null;
+    const conversationId =
+      typeof ev.conversation_id_str === "string" ? ev.conversation_id_str : (id ?? null);
+    const replyToPostId =
+      typeof ev.in_reply_to_status_id_str === "string" ? ev.in_reply_to_status_id_str : null;
     const text = typeof ev.text === "string" ? ev.text : null;
     const user = (ev.user as Record<string, unknown> | undefined) ?? {};
     const senderId = typeof user.id_str === "string" ? user.id_str : null;
     const senderName = typeof user.name === "string" ? user.name : null;
+    const senderUsername = typeof user.screen_name === "string" ? user.screen_name : null;
     if (!senderId) continue;
+    if (senderId === forUserId) continue;
     inboundList.push({
       workspaceId: account.workspaceId,
       socialAccountId: account.id,
       platform: "x",
-      externalThreadId: senderId,
+      externalThreadId: conversationId ?? senderId,
       participantName: senderName,
+      participantExternalId: senderId,
+      channel: "public",
+      initiatedBy: "external",
       externalMessageId: id,
       contentText: text,
+      authorExternalId: senderId,
+      authorDisplayName: senderName,
+      threadProviderMetadata: {
+        x: {
+          entryType: replyToPostId ? "reply" : "mention",
+          conversationId,
+          rootPostId: conversationId,
+          focusPostId: id,
+          replyToPostId,
+          authorXUserId: senderId,
+          authorUsername: senderUsername,
+        },
+      },
+      messageProviderMetadata: {
+        x: {
+          entryType: replyToPostId ? "reply" : "mention",
+          conversationId,
+          postId: id,
+          replyToPostId,
+          authorUsername: senderUsername,
+          mentionedXUserIds: [],
+        },
+      },
       sentAt: new Date(),
     });
   }
@@ -145,14 +177,41 @@ webhooks.post("/x", async (c) => {
     const data = (create.message_data as Record<string, unknown> | undefined) ?? {};
     const text = typeof data.text === "string" ? data.text : null;
     if (!senderId) continue;
+    if (senderId === forUserId) continue;
     inboundList.push({
       workspaceId: account.workspaceId,
       socialAccountId: account.id,
       platform: "x",
-      externalThreadId: senderId,
+      externalThreadId: `dm:${senderId}`,
       participantName: null,
+      participantExternalId: senderId,
+      channel: "direct",
+      initiatedBy: "external",
       externalMessageId: id,
       contentText: text,
+      authorExternalId: senderId,
+      authorDisplayName: null,
+      threadProviderMetadata: {
+        x: {
+          entryType: "dm",
+          conversationId: null,
+          rootPostId: null,
+          focusPostId: id,
+          replyToPostId: null,
+          authorXUserId: senderId,
+          authorUsername: null,
+        },
+      },
+      messageProviderMetadata: {
+        x: {
+          entryType: "dm",
+          conversationId: null,
+          postId: id,
+          replyToPostId: null,
+          authorUsername: null,
+          mentionedXUserIds: [],
+        },
+      },
       sentAt: new Date(),
     });
   }
@@ -258,8 +317,13 @@ webhooks.post("/line", async (c) => {
         platform: "line",
         externalThreadId: ev.externalThreadId,
         participantName,
+        participantExternalId: participantName,
+        channel: "direct",
+        initiatedBy: "external",
         externalMessageId: ev.externalMessageId,
         contentText: text,
+        authorExternalId: participantName,
+        authorDisplayName: participantName,
         sentAt: ts,
       });
       stored += 1;
@@ -375,8 +439,13 @@ webhooks.post("/instagram", async (c) => {
           platform: "instagram",
           externalThreadId: threadId,
           participantName: senderId,
+          participantExternalId: senderId,
+          channel: "direct",
+          initiatedBy: "external",
           externalMessageId: mid,
           contentText: text,
+          authorExternalId: senderId,
+          authorDisplayName: senderId,
           sentAt: tsRaw ? new Date(tsRaw) : new Date(),
         });
         stored += 1;
@@ -411,8 +480,13 @@ webhooks.post("/instagram", async (c) => {
           platform: "instagram",
           externalThreadId: threadId,
           participantName: fromName,
+          participantExternalId: fromId,
+          channel: "public",
+          initiatedBy: "external",
           externalMessageId: commentId,
           contentText: text,
+          authorExternalId: fromId,
+          authorDisplayName: fromName,
           sentAt: new Date(),
         });
         stored += 1;
