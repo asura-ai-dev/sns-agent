@@ -27,6 +27,10 @@ import type {
   ListFollowersInput,
   FollowerListResult,
   RefreshResult,
+  ListEngagementRepliesInput,
+  EngagementReplyListResult,
+  CheckEngagementConditionsInput,
+  EngagementConditionResult,
 } from "@sns-agent/core";
 import { ProviderError } from "@sns-agent/core";
 import { XApiClient } from "./http-client.js";
@@ -42,6 +46,10 @@ import { extractXRefreshToken, serializeXOAuth2Credentials } from "./credentials
 import { validatePost, publishPost, deletePost } from "./post.js";
 import { listThreads, getMessages, sendReply as sendReplyImpl } from "./inbox.js";
 import { listFollowers, listFollowing } from "./followers.js";
+import {
+  checkEngagementConditions as checkEngagementConditionsImpl,
+  listEngagementReplies as listEngagementRepliesImpl,
+} from "./engagement-gates.js";
 
 export interface XProviderOptions {
   /** X OAuth 2.0 クライアント設定 */
@@ -201,6 +209,18 @@ export class XProvider implements SocialProvider {
     return listFollowing(input, this.httpClient);
   }
 
+  async listEngagementReplies(
+    input: ListEngagementRepliesInput,
+  ): Promise<EngagementReplyListResult> {
+    return listEngagementRepliesImpl(input, this.httpClient);
+  }
+
+  async checkEngagementConditions(
+    input: CheckEngagementConditionsInput,
+  ): Promise<EngagementConditionResult> {
+    return checkEngagementConditionsImpl(input, this.httpClient);
+  }
+
   /**
    * トークンリフレッシュ
    *
@@ -304,6 +324,7 @@ export {
 export type { XOAuthConfig, TokenResult, PkcePair } from "./auth.js";
 export { validatePost, publishPost, deletePost } from "./post.js";
 export { listThreads, getMessages, sendReply } from "./inbox.js";
+export { checkEngagementConditions, listEngagementReplies } from "./engagement-gates.js";
 export {
   X_CREDENTIAL_VERSION,
   X_OAUTH_1A_OPERATIONS,
