@@ -346,7 +346,7 @@
     {
       "id": "XHP-009",
       "title": "Implement X DM management",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-3",
       "owner_role": "implementer",

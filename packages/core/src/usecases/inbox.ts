@@ -38,7 +38,12 @@ import type {
   UsageRepository,
 } from "../interfaces/repositories.js";
 import type { SocialProvider } from "../interfaces/social-provider.js";
-import { NotFoundError, ValidationError, ProviderError } from "../errors/domain-error.js";
+import {
+  NotFoundError,
+  ValidationError,
+  ProviderError,
+  ProviderPermissionError,
+} from "../errors/domain-error.js";
 import { decrypt } from "../domain/crypto.js";
 
 // ───────────────────────────────────────────
@@ -215,6 +220,37 @@ function decryptCredentials(credentialsEncrypted: string, encryptionKey: string)
   } catch {
     throw new ProviderError("Failed to decrypt account credentials");
   }
+}
+
+function isXDirectMessageThread(thread: ConversationThread): boolean {
+  return thread.platform === "x" && (thread.externalThreadId ?? "").startsWith("dm:");
+}
+
+function isXDirectMessagePermissionMessage(message: string | null | undefined): boolean {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("x dm permission required") ||
+    (normalized.includes("direct message") &&
+      (normalized.includes("permission") ||
+        normalized.includes("permitted") ||
+        normalized.includes("forbidden") ||
+        normalized.includes("unauthorized"))) ||
+    normalized.includes("dm.write") ||
+    normalized.includes("dm.read")
+  );
+}
+
+function createXDirectMessagePermissionError(message?: string | null): ProviderPermissionError {
+  return new ProviderPermissionError(
+    message ??
+      "X DM permission required: enable dm.write and dm.read scopes in X Developer Portal, reconnect account, and retry.",
+    {
+      provider: "x",
+      operation: "dm.send",
+      requiredScopes: ["dm.write", "dm.read"],
+    },
+  );
 }
 
 function mergeInitiatedBy(
@@ -640,6 +676,9 @@ export async function sendReply(
       replyToMessageId,
     });
     if (!result.success) {
+      if (isXDirectMessageThread(thread) && isXDirectMessagePermissionMessage(result.error)) {
+        throw createXDirectMessagePermissionError(result.error);
+      }
       throw new ProviderError(`sendReply failed: ${result.error ?? "unknown error"}`);
     }
     externalMessageId = result.externalMessageId;
@@ -658,7 +697,14 @@ export async function sendReply(
       actorId: input.actorId,
       success: false,
     });
+    if (err instanceof ProviderPermissionError) throw err;
     if (err instanceof ProviderError) throw err;
+    if (
+      isXDirectMessageThread(thread) &&
+      isXDirectMessagePermissionMessage(err instanceof Error ? err.message : String(err))
+    ) {
+      throw createXDirectMessagePermissionError(err instanceof Error ? err.message : String(err));
+    }
     throw new ProviderError(
       `sendReply failed: ${err instanceof Error ? err.message : String(err)}`,
     );

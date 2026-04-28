@@ -298,6 +298,31 @@ describe("XProvider inbox", () => {
     });
   });
 
+  it("returns an actionable DM permission error when X denies DM send", async () => {
+    const httpClient = new XApiClient({
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            title: "Forbidden",
+            detail: "You are not permitted to send Direct Messages",
+          }),
+          { status: 403 },
+        ),
+    });
+    const provider = new XProvider({ oauth: { clientId: "cid" }, httpClient });
+
+    const result = await provider.sendReply!({
+      accountCredentials: JSON.stringify({ accessToken: "tok", xUserId: "123" }),
+      externalThreadId: "dm:42",
+      contentText: "お問い合わせありがとうございます",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("X DM permission required");
+    expect(result.error).toContain("dm.write");
+    expect(result.error).toContain("reconnect");
+  });
+
   it("likes and reposts a reply target through X engagement actions", async () => {
     const calls: Array<{ url: string; body: unknown }> = [];
     const httpClient = new XApiClient({

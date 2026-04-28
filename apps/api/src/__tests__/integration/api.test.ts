@@ -971,8 +971,8 @@ describe("l. x inbox sync", () => {
 
     expect(sync.status).toBe(200);
     expect(sync.body.data).toMatchObject({
-      syncedThreadCount: 1,
-      syncedMessageCount: 2,
+      syncedThreadCount: 2,
+      syncedMessageCount: 4,
     });
 
     const inbox = await req("GET", "/api/inbox?platform=x", seed.editorApiKey);
@@ -1039,7 +1039,7 @@ describe("l. x inbox sync", () => {
 
     const usageRows = ctx.sqlite
       .prepare(
-        "SELECT endpoint, success FROM usage_records WHERE workspace_id = ? AND platform = ? ORDER BY created_at DESC LIMIT 10",
+        "SELECT endpoint, success FROM usage_records WHERE workspace_id = ? AND platform = ? ORDER BY created_at DESC",
       )
       .all(seed.workspaceId, "x") as Array<{ endpoint: string; success: number }>;
 
@@ -1047,6 +1047,63 @@ describe("l. x inbox sync", () => {
     expect(usageRows.some((row) => row.endpoint === "inbox.getMessages" && row.success === 1)).toBe(
       true,
     );
+  });
+
+  it("syncs X DM conversations into generic threads/messages and returns actionable permission errors", async () => {
+    const sync = await req("POST", "/api/inbox/sync", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 10,
+    });
+    expect(sync.status).toBe(200);
+
+    const inbox = await req("GET", "/api/inbox?platform=x", seed.editorApiKey);
+    expect(inbox.status).toBe(200);
+    const threads = inbox.body.data as Array<Record<string, unknown>>;
+    const dmThread = threads.find((row) => row.externalThreadId === "dm:user-dm-1");
+    expect(dmThread).toMatchObject({
+      channel: "direct",
+      participantExternalId: "user-dm-1",
+    });
+    expect(
+      (dmThread?.providerMetadata as { x?: { entryType?: string } } | null)?.x?.entryType,
+    ).toBe("dm");
+
+    const detail = await req("GET", `/api/inbox/${dmThread?.id}`, seed.editorApiKey);
+    expect(detail.status).toBe(200);
+    const detailData = detail.body.data as {
+      messages: Array<Record<string, unknown>>;
+      context: { entryType: string | null };
+    };
+    expect(detailData.context.entryType).toBe("dm");
+    expect(detailData.messages).toEqual([
+      expect.objectContaining({
+        externalMessageId: "dm-sync-1",
+        direction: "inbound",
+      }),
+      expect.objectContaining({
+        externalMessageId: "dm-sync-2",
+        direction: "outbound",
+      }),
+    ]);
+
+    const permissionFailure = await req(
+      "POST",
+      `/api/inbox/${dmThread?.id}/reply`,
+      seed.editorApiKey,
+      {
+        contentText: "trigger dm permission failure",
+      },
+    );
+    expect(permissionFailure.status).toBe(403);
+    expect(permissionFailure.body.error).toMatchObject({
+      code: "PROVIDER_PERMISSION_REQUIRED",
+      message: expect.stringContaining("X DM permission required"),
+      details: {
+        provider: "x",
+        operation: "dm.send",
+        requiredScopes: ["dm.write", "dm.read"],
+      },
+    });
   });
 });
 
@@ -1088,7 +1145,7 @@ describe("m. x reply send", () => {
 
     const usageRows = ctx.sqlite
       .prepare(
-        "SELECT endpoint, success FROM usage_records WHERE workspace_id = ? AND platform = ? ORDER BY created_at DESC LIMIT 10",
+        "SELECT endpoint, success FROM usage_records WHERE workspace_id = ? AND platform = ? ORDER BY created_at DESC",
       )
       .all(seed.workspaceId, "x") as Array<{ endpoint: string; success: number }>;
     expect(usageRows.some((row) => row.endpoint === "inbox.reply" && row.success === 1)).toBe(true);

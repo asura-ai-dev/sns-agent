@@ -650,6 +650,70 @@ describe("sendReply", () => {
     );
   });
 
+  it("maps X DM permission failures to an actionable provider permission error", async () => {
+    const usageRepo = mockUsageRepo();
+    const thread: ConversationThread = {
+      id: "th-1",
+      workspaceId: "ws-1",
+      socialAccountId: "acc-1",
+      platform: "x",
+      externalThreadId: "dm:42",
+      participantName: "Alice",
+      participantExternalId: "user-42",
+      channel: "direct",
+      initiatedBy: "external",
+      lastMessageAt: new Date(),
+      providerMetadata: {
+        x: {
+          entryType: "dm",
+          conversationId: "123-42",
+          rootPostId: null,
+          focusPostId: "dm-99",
+          replyToPostId: null,
+          authorXUserId: "user-42",
+          authorUsername: "alice",
+        },
+      },
+      status: "open",
+      createdAt: new Date(),
+    };
+    const provider = {
+      ...mockProvider(),
+      sendReply: vi.fn(async () => ({
+        success: false,
+        externalMessageId: null,
+        error:
+          "X DM permission required: enable dm.write and dm.read scopes in X Developer Portal, reconnect account, and retry.",
+      })),
+    };
+    const deps = buildDeps({
+      conversationRepo: mockConversationRepo([thread]),
+      usageRepo,
+      providers: new Map([["x", provider]]),
+    });
+
+    await expect(
+      sendReply(deps, {
+        workspaceId: "ws-1",
+        threadId: "th-1",
+        contentText: "hello",
+        actorId: "user-1",
+      }),
+    ).rejects.toMatchObject({
+      code: "PROVIDER_PERMISSION_REQUIRED",
+      details: {
+        provider: "x",
+        operation: "dm.send",
+        requiredScopes: ["dm.write", "dm.read"],
+      },
+    });
+    expect(usageRepo.records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ endpoint: "inbox.reply", success: false }),
+      ]),
+    );
+  });
+
   it("rejects when both contentText and contentMedia are empty", async () => {
     const deps = buildDeps({
       conversationRepo: mockConversationRepo([

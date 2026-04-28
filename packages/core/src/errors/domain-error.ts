@@ -79,6 +79,17 @@ export class ProviderError extends DomainError {
 }
 
 /**
+ * プロバイダ権限エラー (PROVIDER_PERMISSION_REQUIRED)
+ * 外部SNS側のスコープ/権限不足で、ユーザーの再認可や設定変更が必要な場合に使う。
+ */
+export class ProviderPermissionError extends DomainError {
+  constructor(message: string, details?: unknown) {
+    super("PROVIDER_PERMISSION_REQUIRED", message, details);
+    this.name = "ProviderPermissionError";
+  }
+}
+
+/**
  * レート制限エラー (PROVIDER_RATE_LIMIT)
  * 外部 API のレート制限に到達した場合にスローする。
  */

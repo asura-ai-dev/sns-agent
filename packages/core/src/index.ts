@@ -401,6 +401,7 @@ export {
   NotFoundError,
   BudgetExceededError,
   ProviderError,
+  ProviderPermissionError,
   RateLimitError,
   LlmError,
 } from "./errors/index.js";

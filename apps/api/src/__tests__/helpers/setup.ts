@@ -182,11 +182,76 @@ export function createMockXProvider(): SocialProvider {
               },
             },
           },
+          {
+            externalThreadId: "dm:user-dm-1",
+            participantName: "Dora DM",
+            participantExternalId: "user-dm-1",
+            channel: "direct",
+            initiatedBy: "external",
+            lastMessageAt: new Date("2026-04-10T11:05:00Z"),
+            providerMetadata: {
+              x: {
+                entryType: "dm",
+                conversationId: "ext-mock-1-user-dm-1",
+                rootPostId: null,
+                focusPostId: "dm-sync-2",
+                replyToPostId: null,
+                authorXUserId: "user-dm-1",
+                authorUsername: "dora",
+              },
+            },
+          },
         ],
         nextCursor: '{"sinceId":"tweet-sync-2"}',
       };
     },
-    async getMessages(_input: GetMessagesInput): Promise<MessageListResult> {
+    async getMessages(input: GetMessagesInput): Promise<MessageListResult> {
+      if (input.externalThreadId === "dm:user-dm-1") {
+        return {
+          messages: [
+            {
+              externalMessageId: "dm-sync-1",
+              direction: "inbound",
+              contentText: "DMで相談したいです",
+              contentMedia: null,
+              authorExternalId: "user-dm-1",
+              authorDisplayName: "Dora DM",
+              sentAt: new Date("2026-04-10T11:00:00Z"),
+              providerMetadata: {
+                x: {
+                  entryType: "dm",
+                  conversationId: "ext-mock-1-user-dm-1",
+                  postId: "dm-sync-1",
+                  replyToPostId: null,
+                  authorUsername: "dora",
+                  mentionedXUserIds: [],
+                },
+              },
+            },
+            {
+              externalMessageId: "dm-sync-2",
+              direction: "outbound",
+              contentText: "DMありがとうございます",
+              contentMedia: null,
+              authorExternalId: "ext-mock-1",
+              authorDisplayName: "Mock X Account",
+              sentAt: new Date("2026-04-10T11:05:00Z"),
+              providerMetadata: {
+                x: {
+                  entryType: "dm",
+                  conversationId: "ext-mock-1-user-dm-1",
+                  postId: "dm-sync-2",
+                  replyToPostId: null,
+                  authorUsername: "brand",
+                  mentionedXUserIds: [],
+                },
+              },
+            },
+          ],
+          nextCursor: null,
+        };
+      }
+
       return {
         messages: [
           {
@@ -231,7 +296,19 @@ export function createMockXProvider(): SocialProvider {
         nextCursor: null,
       };
     },
-    async sendReply(_input: SendReplyInput): Promise<SendReplyResult> {
+    async sendReply(input: SendReplyInput): Promise<SendReplyResult> {
+      if (
+        input.externalThreadId.startsWith("dm:") &&
+        input.contentText === "trigger dm permission failure"
+      ) {
+        return {
+          success: false,
+          externalMessageId: null,
+          error:
+            "X DM permission required: enable dm.write and dm.read scopes in X Developer Portal, reconnect account, and retry.",
+        };
+      }
+
       return {
         success: true,
         externalMessageId: `mock-reply-${randomUUID()}`,
