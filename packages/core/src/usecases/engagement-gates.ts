@@ -4,6 +4,7 @@ import type {
   EngagementGate,
   EngagementGateActionType,
   EngagementGateConditions,
+  EngagementGateStealthConfig,
   SocialAccount,
 } from "../domain/entities.js";
 import { decrypt } from "../domain/crypto.js";
@@ -19,6 +20,15 @@ import type {
   SocialProvider,
 } from "../interfaces/social-provider.js";
 import { NotFoundError, ProviderError, ValidationError } from "../errors/domain-error.js";
+import {
+  isRateLimited,
+  jitterReadyAt,
+  nextBackoffUntil,
+  normalizeStealthConfig,
+  renderTemplateVariation,
+  serializeStealthConfig,
+  type DeliveryCounts,
+} from "./stealth.js";
 
 export interface EngagementGateUsecaseDeps {
   accountRepo: AccountRepository;
@@ -40,6 +50,7 @@ export interface CreateEngagementGateInput {
   lineHarnessApiKeyRef?: string | null;
   lineHarnessTag?: string | null;
   lineHarnessScenario?: string | null;
+  stealthConfig?: EngagementGateStealthConfig | null;
   createdBy?: string | null;
 }
 
@@ -56,10 +67,13 @@ export interface UpdateEngagementGateInput {
   lineHarnessApiKeyRef?: string | null;
   lineHarnessTag?: string | null;
   lineHarnessScenario?: string | null;
+  stealthConfig?: EngagementGateStealthConfig | null;
 }
 
 export interface ProcessEngagementGateRepliesInput {
   limit?: number;
+  now?: Date;
+  templateSeed?: string;
 }
 
 export interface ProcessEngagementGateRepliesResult {
@@ -69,6 +83,10 @@ export interface ProcessEngagementGateRepliesResult {
   skippedDuplicate: number;
   skippedIneligible: number;
   actionsSent: number;
+  skippedRateLimited: number;
+  skippedJitter: number;
+  skippedBackoff: number;
+  actionsBackedOff: number;
   lastReplySinceIdsUpdated: number;
 }
 
@@ -186,6 +204,10 @@ function createDeliveryToken(): string {
   return `egt_${randomUUID()}`;
 }
 
+function isRateLimitError(error: string | undefined): boolean {
+  return /\b429\b|rate\s*limit/i.test(error ?? "");
+}
+
 function conditionsFromMetadata(
   metadata: Record<string, unknown> | null,
 ): EngagementConditionResult {
@@ -221,9 +243,15 @@ async function deliverAction(
   gate: EngagementGate,
   reply: EngagementReply,
   accountCredentials: string,
-): Promise<{ status: "delivered" | "verified"; responseExternalId: string | null; sent: boolean }> {
+  actionText: string | null,
+): Promise<{
+  status: "delivered" | "verified";
+  responseExternalId: string | null;
+  sent: boolean;
+  rateLimited: boolean;
+}> {
   if (gate.actionType === "verify_only") {
-    return { status: "verified", responseExternalId: null, sent: false };
+    return { status: "verified", responseExternalId: null, sent: false, rateLimited: false };
   }
   if (!provider.sendReply) {
     throw new ProviderError(`Provider for platform ${gate.platform} does not support sendReply`);
@@ -235,23 +263,47 @@ async function deliverAction(
           accountCredentials,
           externalThreadId: `dm:${reply.externalUserId}`,
           replyToMessageId: null,
-          contentText: gate.actionText?.trim() ?? "",
+          contentText: actionText?.trim() ?? "",
         }
       : {
           accountCredentials,
           externalThreadId: reply.conversationId ?? reply.externalReplyId,
           replyToMessageId: reply.externalReplyId,
-          contentText: renderMentionText(reply, gate.actionText),
+          contentText: renderMentionText(reply, actionText),
         };
 
   const result = await provider.sendReply(input);
   if (!result.success) {
+    if (isRateLimitError(result.error)) {
+      return {
+        status: "delivered",
+        responseExternalId: null,
+        sent: false,
+        rateLimited: true,
+      };
+    }
     throw new ProviderError(`engagement gate action failed: ${result.error ?? "unknown error"}`);
   }
   return {
     status: "delivered",
     responseExternalId: result.externalMessageId,
     sent: true,
+    rateLimited: false,
+  };
+}
+
+async function deliveryCounts(
+  deps: EngagementGateUsecaseDeps,
+  gate: EngagementGate,
+  now: Date,
+): Promise<DeliveryCounts> {
+  const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+  const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  return {
+    gateHour: await deps.deliveryRepo.countByGateSince(gate.id, hourAgo),
+    gateDay: await deps.deliveryRepo.countByGateSince(gate.id, dayAgo),
+    accountHour: await deps.deliveryRepo.countByAccountSince(gate.socialAccountId, hourAgo),
+    accountDay: await deps.deliveryRepo.countByAccountSince(gate.socialAccountId, dayAgo),
   };
 }
 
@@ -278,6 +330,8 @@ export async function createEngagementGate(
     lineHarnessApiKeyRef: optionalTrim(input.lineHarnessApiKeyRef),
     lineHarnessTag: optionalTrim(input.lineHarnessTag),
     lineHarnessScenario: optionalTrim(input.lineHarnessScenario),
+    stealthConfig: serializeStealthConfig(input.stealthConfig),
+    deliveryBackoffUntil: null,
     lastReplySinceId: null,
     createdBy: input.createdBy ?? null,
   });
@@ -327,6 +381,9 @@ export async function updateEngagementGate(
   if (input.lineHarnessScenario !== undefined) {
     patch.lineHarnessScenario = optionalTrim(input.lineHarnessScenario);
   }
+  if (input.stealthConfig !== undefined) {
+    patch.stealthConfig = serializeStealthConfig(input.stealthConfig);
+  }
   return deps.gateRepo.update(input.id, patch);
 }
 
@@ -344,7 +401,9 @@ export async function processEngagementGateReplies(
   input: ProcessEngagementGateRepliesInput = {},
 ): Promise<ProcessEngagementGateRepliesResult> {
   const limit = input.limit && input.limit > 0 ? Math.min(input.limit, 100) : 50;
+  const now = input.now ?? new Date();
   const gates = await deps.gateRepo.findActiveReplyTriggers(limit);
+  const accountBackoffs = new Map<string, Date>();
   const summary: ProcessEngagementGateRepliesResult = {
     gatesScanned: gates.length,
     repliesScanned: 0,
@@ -352,10 +411,21 @@ export async function processEngagementGateReplies(
     skippedDuplicate: 0,
     skippedIneligible: 0,
     actionsSent: 0,
+    skippedRateLimited: 0,
+    skippedJitter: 0,
+    skippedBackoff: 0,
+    actionsBackedOff: 0,
     lastReplySinceIdsUpdated: 0,
   };
 
   for (const gate of gates) {
+    const stealthConfig = normalizeStealthConfig(gate.stealthConfig);
+    const accountBackoffUntil = accountBackoffs.get(gate.socialAccountId);
+    const backoffUntil = accountBackoffUntil ?? gate.deliveryBackoffUntil;
+    if (backoffUntil && backoffUntil > now) {
+      summary.skippedBackoff += 1;
+      continue;
+    }
     const account = await loadAccount(deps, gate.workspaceId, gate.socialAccountId);
     if (account.status !== "active") continue;
 
@@ -376,10 +446,29 @@ export async function processEngagementGateReplies(
     });
 
     summary.repliesScanned += listed.replies.length;
+    let shouldUpdateSinceId = true;
     for (const reply of listed.replies) {
       const existing = await deps.deliveryRepo.findByGateAndUser(gate.id, reply.externalUserId);
       if (existing) {
         summary.skippedDuplicate += 1;
+        continue;
+      }
+
+      const readyAt = jitterReadyAt({
+        replyCreatedAt: reply.createdAt,
+        config: stealthConfig,
+        seed: `${gate.id}:${input.templateSeed ?? "default"}:${reply.externalUserId}`,
+      });
+      if (readyAt && readyAt > now) {
+        summary.skippedJitter += 1;
+        shouldUpdateSinceId = false;
+        continue;
+      }
+
+      const counts = await deliveryCounts(deps, gate, now);
+      if (isRateLimited(stealthConfig, counts)) {
+        summary.skippedRateLimited += 1;
+        shouldUpdateSinceId = false;
         continue;
       }
 
@@ -402,7 +491,28 @@ export async function processEngagementGateReplies(
         continue;
       }
 
-      const action = await deliverAction(provider, gate, reply, accountCredentials);
+      const actionText = renderTemplateVariation({
+        fallbackText: gate.actionText,
+        config: stealthConfig,
+        seed: `${gate.id}:${input.templateSeed ?? "default"}:${reply.externalUserId}`,
+      });
+      const action = await deliverAction(provider, gate, reply, accountCredentials, actionText);
+      if (action.rateLimited) {
+        const backoffUntilNext = nextBackoffUntil(now, stealthConfig);
+        accountBackoffs.set(gate.socialAccountId, backoffUntilNext);
+        await Promise.all(
+          gates
+            .filter((candidate) => candidate.socialAccountId === gate.socialAccountId)
+            .map((candidate) =>
+              deps.gateRepo.update(candidate.id, {
+                deliveryBackoffUntil: backoffUntilNext,
+              }),
+            ),
+        );
+        summary.actionsBackedOff += 1;
+        shouldUpdateSinceId = false;
+        break;
+      }
       const delivery = await deps.deliveryRepo.createOnce({
         workspaceId: gate.workspaceId,
         engagementGateId: gate.id,
@@ -418,7 +528,7 @@ export async function processEngagementGateReplies(
           username: normalizeUsername(reply.username ?? reply.externalUserId),
           conditions: check,
         },
-        deliveredAt: new Date(),
+        deliveredAt: now,
       });
       if (delivery.created) {
         summary.deliveriesCreated += 1;
@@ -428,7 +538,7 @@ export async function processEngagementGateReplies(
       }
     }
 
-    if (listed.nextSinceId && listed.nextSinceId !== gate.lastReplySinceId) {
+    if (shouldUpdateSinceId && listed.nextSinceId && listed.nextSinceId !== gate.lastReplySinceId) {
       await deps.gateRepo.update(gate.id, { lastReplySinceId: listed.nextSinceId });
       summary.lastReplySinceIdsUpdated += 1;
     }

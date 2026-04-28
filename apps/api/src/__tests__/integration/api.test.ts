@@ -331,6 +331,16 @@ describe("a3. engagement gates flow", () => {
       },
       actionType: "verify_only",
       actionText: null,
+      stealthConfig: {
+        gateHourlyLimit: 10,
+        gateDailyLimit: 50,
+        accountHourlyLimit: 20,
+        accountDailyLimit: 100,
+        jitterMinSeconds: 30,
+        jitterMaxSeconds: 90,
+        backoffSeconds: 300,
+        templateVariants: ["secret A", "secret B"],
+      },
     });
 
     expect(created.status).toBe(201);
@@ -346,6 +356,17 @@ describe("a3. engagement gates flow", () => {
         requireFollow: true,
       },
       actionType: "verify_only",
+      stealthConfig: {
+        gateHourlyLimit: 10,
+        gateDailyLimit: 50,
+        accountHourlyLimit: 20,
+        accountDailyLimit: 100,
+        jitterMinSeconds: 30,
+        jitterMaxSeconds: 90,
+        backoffSeconds: 300,
+        templateVariants: ["secret A", "secret B"],
+      },
+      deliveryBackoffUntil: null,
       lastReplySinceId: null,
     });
     const gateId = (created.body.data as { id: string }).id;
@@ -362,6 +383,12 @@ describe("a3. engagement gates flow", () => {
       status: "paused",
       actionType: "dm",
       actionText: "secret",
+      stealthConfig: {
+        gateHourlyLimit: 2,
+        jitterMinSeconds: 0,
+        jitterMaxSeconds: 0,
+        templateVariants: ["dm secret"],
+      },
     });
     expect(updated.status).toBe(200);
     expect(updated.body.data).toMatchObject({
@@ -369,6 +396,16 @@ describe("a3. engagement gates flow", () => {
       status: "paused",
       actionType: "dm",
       actionText: "secret",
+      stealthConfig: {
+        gateHourlyLimit: 2,
+        gateDailyLimit: null,
+        accountHourlyLimit: null,
+        accountDailyLimit: null,
+        jitterMinSeconds: 0,
+        jitterMaxSeconds: 0,
+        backoffSeconds: null,
+        templateVariants: ["dm secret"],
+      },
     });
 
     const viewerCreate = await req("POST", "/api/engagement-gates", seed.viewerApiKey, {

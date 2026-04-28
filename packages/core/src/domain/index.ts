@@ -11,6 +11,7 @@ export type {
   EngagementGate,
   EngagementGateActionType,
   EngagementGateConditions,
+  EngagementGateStealthConfig,
   EngagementGateDelivery,
   EngagementGateDeliveryStatus,
   EngagementGateStatus,

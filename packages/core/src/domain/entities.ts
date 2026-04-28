@@ -118,6 +118,17 @@ export interface EngagementGateConditions {
   requireFollow?: boolean;
 }
 
+export interface EngagementGateStealthConfig {
+  gateHourlyLimit?: number | null;
+  gateDailyLimit?: number | null;
+  accountHourlyLimit?: number | null;
+  accountDailyLimit?: number | null;
+  jitterMinSeconds?: number | null;
+  jitterMaxSeconds?: number | null;
+  backoffSeconds?: number | null;
+  templateVariants?: string[] | null;
+}
+
 export interface EngagementGate {
   id: string;
   workspaceId: string;
@@ -134,6 +145,8 @@ export interface EngagementGate {
   lineHarnessApiKeyRef: string | null;
   lineHarnessTag: string | null;
   lineHarnessScenario: string | null;
+  stealthConfig: EngagementGateStealthConfig | null;
+  deliveryBackoffUntil: Date | null;
   lastReplySinceId: string | null;
   createdBy: string | null;
   createdAt: Date;

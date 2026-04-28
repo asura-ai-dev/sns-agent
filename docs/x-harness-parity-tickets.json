@@ -697,7 +697,7 @@
     {
       "id": "XHP-020",
       "title": "Add stealth delivery controls",
-      "status": "planned",
+      "status": "verified",
       "priority": "P0",
       "phase": "phase-2",
       "owner_role": "implementer",

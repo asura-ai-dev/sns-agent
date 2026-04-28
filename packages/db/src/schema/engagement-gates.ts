@@ -28,6 +28,8 @@ export const engagementGates = sqliteTable(
     lineHarnessApiKeyRef: text("line_harness_api_key_ref"),
     lineHarnessTag: text("line_harness_tag"),
     lineHarnessScenario: text("line_harness_scenario"),
+    stealthConfig: text("stealth_config", { mode: "json" }),
+    deliveryBackoffUntil: integer("delivery_backoff_until", { mode: "timestamp" }),
     lastReplySinceId: text("last_reply_since_id"),
     createdBy: text("created_by"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),

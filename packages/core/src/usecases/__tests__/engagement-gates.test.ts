@@ -8,7 +8,11 @@ import type {
   EngagementGateRepository,
 } from "../../interfaces/repositories.js";
 import type { EngagementGate, SocialAccount } from "../../domain/entities.js";
-import type { SocialProvider } from "../../interfaces/social-provider.js";
+import type {
+  EngagementReply,
+  SendReplyResult,
+  SocialProvider,
+} from "../../interfaces/social-provider.js";
 import { encrypt } from "../../domain/crypto.js";
 import {
   consumeEngagementGateDeliveryToken,
@@ -75,6 +79,8 @@ function buildGate(input: Partial<EngagementGate> = {}): EngagementGate {
     lineHarnessApiKeyRef: null,
     lineHarnessTag: null,
     lineHarnessScenario: null,
+    stealthConfig: null,
+    deliveryBackoffUntil: null,
     lastReplySinceId: null,
     createdBy: "user-1",
     createdAt: now,
@@ -152,6 +158,14 @@ function mockDeliveryRepo(): EngagementGateDeliveryRepository & {
         (delivery) =>
           delivery.engagementGateId === gateId && delivery.deliveryToken === deliveryToken,
       ) ?? null,
+    countByGateSince: async (gateId, since) =>
+      [...rows.values()].filter(
+        (delivery) => delivery.engagementGateId === gateId && delivery.deliveredAt >= since,
+      ).length,
+    countByAccountSince: async (socialAccountId, since) =>
+      [...rows.values()].filter(
+        (delivery) => delivery.socialAccountId === socialAccountId && delivery.deliveredAt >= since,
+      ).length,
     createOnce: async (input: EngagementGateDeliveryCreateInput) => {
       const key = `${input.engagementGateId}:${input.externalUserId}`;
       const existing = rows.get(key);
@@ -178,7 +192,27 @@ function mockDeliveryRepo(): EngagementGateDeliveryRepository & {
   };
 }
 
-function mockProvider(): SocialProvider {
+function buildReply(input: Partial<EngagementReply> = {}): EngagementReply {
+  return {
+    externalReplyId: "tweet-10",
+    externalUserId: "user-1",
+    username: "alice",
+    text: "@brand count me in",
+    createdAt: new Date("2026-04-28T00:10:00Z"),
+    conversationId: "tweet-root-1",
+    inReplyToPostId: "tweet-root-1",
+    ...input,
+  };
+}
+
+function mockProvider(
+  options: {
+    replies?: EngagementReply[];
+    sendReply?: (
+      input: Parameters<NonNullable<SocialProvider["sendReply"]>>[0],
+    ) => Promise<SendReplyResult>;
+  } = {},
+): SocialProvider {
   return {
     platform: "x",
     getCapabilities: () => ({
@@ -197,28 +231,21 @@ function mockProvider(): SocialProvider {
     publishPost: async () => ({ success: true, platformPostId: "post-1", publishedAt: null }),
     deletePost: async () => ({ success: true }),
     listEngagementReplies: vi.fn(async () => ({
-      replies: [
-        {
-          externalReplyId: "tweet-10",
-          externalUserId: "user-1",
-          username: "alice",
-          text: "@brand count me in",
-          createdAt: new Date("2026-04-28T00:10:00Z"),
-          conversationId: "tweet-root-1",
-          inReplyToPostId: "tweet-root-1",
-        },
-      ],
-      nextSinceId: "tweet-10",
+      replies: options.replies ?? [buildReply()],
+      nextSinceId: (options.replies ?? [buildReply()]).at(-1)?.externalReplyId ?? null,
     })),
     checkEngagementConditions: vi.fn(async () => ({
       liked: true,
       reposted: true,
       followed: true,
     })),
-    sendReply: vi.fn(async () => ({
-      success: true,
-      externalMessageId: "reply-secret-1",
-    })),
+    sendReply: vi.fn(
+      options.sendReply ??
+        (async () => ({
+          success: true,
+          externalMessageId: "reply-secret-1",
+        })),
+    ),
   };
 }
 
@@ -356,6 +383,198 @@ describe("engagement gate usecases", () => {
       status: "verified",
       responseExternalId: null,
     });
+  });
+
+  it("enforces configured gate rate limits before sending replies", async () => {
+    const provider = mockProvider({
+      replies: [
+        buildReply({ externalReplyId: "tweet-10", externalUserId: "user-1", username: "alice" }),
+        buildReply({ externalReplyId: "tweet-11", externalUserId: "user-2", username: "bob" }),
+      ],
+    });
+    const deps = buildDeps(
+      buildGate({
+        stealthConfig: {
+          gateHourlyLimit: 1,
+        },
+      }),
+      provider,
+    );
+
+    const result = await processEngagementGateReplies(deps, {
+      limit: 10,
+      now: new Date("2026-04-28T00:15:00Z"),
+    });
+
+    expect(result).toMatchObject({
+      deliveriesCreated: 1,
+      actionsSent: 1,
+      skippedRateLimited: 1,
+      lastReplySinceIdsUpdated: 0,
+    });
+    expect(provider.sendReply).toHaveBeenCalledTimes(1);
+    expect(deps.deliveryRepo.rows).toHaveLength(1);
+    expect(deps.gateRepo.rows.get("gate-1")?.lastReplySinceId).toBeNull();
+  });
+
+  it("defers jittered deliveries until their deterministic ready time", async () => {
+    const provider = mockProvider();
+    const deps = buildDeps(
+      buildGate({
+        stealthConfig: {
+          jitterMinSeconds: 60,
+          jitterMaxSeconds: 60,
+        },
+      }),
+      provider,
+    );
+
+    const early = await processEngagementGateReplies(deps, {
+      limit: 10,
+      now: new Date("2026-04-28T00:10:30Z"),
+    });
+
+    expect(early).toMatchObject({
+      deliveriesCreated: 0,
+      actionsSent: 0,
+      skippedJitter: 1,
+      lastReplySinceIdsUpdated: 0,
+    });
+    expect(provider.sendReply).not.toHaveBeenCalled();
+
+    const ready = await processEngagementGateReplies(deps, {
+      limit: 10,
+      now: new Date("2026-04-28T00:11:00Z"),
+    });
+
+    expect(ready).toMatchObject({
+      deliveriesCreated: 1,
+      actionsSent: 1,
+      lastReplySinceIdsUpdated: 1,
+    });
+    expect(provider.sendReply).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses deterministic template variation when seeded", async () => {
+    const provider = mockProvider();
+    const deps = buildDeps(
+      buildGate({
+        actionText: "fallback secret",
+        stealthConfig: {
+          templateVariants: ["secret A", "secret B", "secret C"],
+        },
+      }),
+      provider,
+    );
+
+    await processEngagementGateReplies(deps, {
+      limit: 10,
+      now: new Date("2026-04-28T00:15:00Z"),
+      templateSeed: "seed-1",
+    });
+
+    expect(provider.sendReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contentText: "@alice secret B",
+      }),
+    );
+  });
+
+  it("backs off the affected gate after a provider 429 without consuming later replies", async () => {
+    const provider = mockProvider({
+      replies: [
+        buildReply({ externalReplyId: "tweet-10", externalUserId: "user-1", username: "alice" }),
+        buildReply({ externalReplyId: "tweet-11", externalUserId: "user-2", username: "bob" }),
+      ],
+      sendReply: async () => ({
+        success: false,
+        externalMessageId: null,
+        error: "429 rate limited",
+      }),
+    });
+    const deps = buildDeps(
+      buildGate({
+        stealthConfig: {
+          backoffSeconds: 300,
+        },
+      }),
+      provider,
+    );
+
+    const result = await processEngagementGateReplies(deps, {
+      limit: 10,
+      now: new Date("2026-04-28T00:15:00Z"),
+    });
+
+    expect(result).toMatchObject({
+      deliveriesCreated: 0,
+      actionsSent: 0,
+      actionsBackedOff: 1,
+      lastReplySinceIdsUpdated: 0,
+    });
+    expect(provider.sendReply).toHaveBeenCalledTimes(1);
+    expect(deps.deliveryRepo.rows).toHaveLength(0);
+    expect(deps.gateRepo.rows.get("gate-1")?.deliveryBackoffUntil).toEqual(
+      new Date("2026-04-28T00:20:00Z"),
+    );
+
+    const backedOff = await processEngagementGateReplies(deps, {
+      limit: 10,
+      now: new Date("2026-04-28T00:19:59Z"),
+    });
+
+    expect(backedOff).toMatchObject({
+      deliveriesCreated: 0,
+      actionsSent: 0,
+      skippedBackoff: 1,
+    });
+    expect(provider.sendReply).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies provider 429 backoff to later gates on the same account in the run", async () => {
+    const provider = mockProvider({
+      sendReply: async () => ({
+        success: false,
+        externalMessageId: null,
+        error: "429 rate limited",
+      }),
+    });
+    const deps = buildDeps(
+      buildGate({
+        id: "gate-1",
+        stealthConfig: {
+          backoffSeconds: 300,
+        },
+      }),
+      provider,
+    );
+    deps.gateRepo.rows.set(
+      "gate-2",
+      buildGate({
+        id: "gate-2",
+        stealthConfig: {
+          backoffSeconds: 300,
+        },
+      }),
+    );
+
+    const result = await processEngagementGateReplies(deps, {
+      limit: 10,
+      now: new Date("2026-04-28T00:15:00Z"),
+    });
+
+    expect(result).toMatchObject({
+      actionsBackedOff: 1,
+      skippedBackoff: 1,
+      actionsSent: 0,
+    });
+    expect(provider.sendReply).toHaveBeenCalledTimes(1);
+    expect(deps.gateRepo.rows.get("gate-1")?.deliveryBackoffUntil).toEqual(
+      new Date("2026-04-28T00:20:00Z"),
+    );
+    expect(deps.gateRepo.rows.get("gate-2")?.deliveryBackoffUntil).toEqual(
+      new Date("2026-04-28T00:20:00Z"),
+    );
   });
 
   it("verifies a username and returns eligible conditions delivery token and LINE handoff", async () => {

@@ -11,6 +11,7 @@ import {
   type EngagementGate,
   type EngagementGateActionType,
   type EngagementGateConditions,
+  type EngagementGateStealthConfig,
   type EngagementGateUsecaseDeps,
   type EngagementGateStatus,
 } from "@sns-agent/core";
@@ -73,6 +74,46 @@ function parseNullableString(value: unknown): string | null | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function parseNullablePositiveInt(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function parseNullableNonNegativeInt(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function parseTemplateVariants(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const variants = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return variants.length ? variants : null;
+}
+
+function parseStealthConfig(value: unknown): EngagementGateStealthConfig | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const jitterMinSeconds = parseNullableNonNegativeInt(raw.jitterMinSeconds) ?? 0;
+  const jitterMaxSeconds = Math.max(
+    jitterMinSeconds,
+    parseNullableNonNegativeInt(raw.jitterMaxSeconds) ?? jitterMinSeconds,
+  );
+
+  return {
+    gateHourlyLimit: parseNullablePositiveInt(raw.gateHourlyLimit),
+    gateDailyLimit: parseNullablePositiveInt(raw.gateDailyLimit),
+    accountHourlyLimit: parseNullablePositiveInt(raw.accountHourlyLimit),
+    accountDailyLimit: parseNullablePositiveInt(raw.accountDailyLimit),
+    jitterMinSeconds,
+    jitterMaxSeconds,
+    backoffSeconds: parseNullablePositiveInt(raw.backoffSeconds),
+    templateVariants: parseTemplateVariants(raw.templateVariants),
+  };
+}
+
 function serializeGate(gate: EngagementGate): Record<string, unknown> {
   return {
     id: gate.id,
@@ -90,6 +131,8 @@ function serializeGate(gate: EngagementGate): Record<string, unknown> {
     lineHarnessApiKeyRef: gate.lineHarnessApiKeyRef,
     lineHarnessTag: gate.lineHarnessTag,
     lineHarnessScenario: gate.lineHarnessScenario,
+    stealthConfig: gate.stealthConfig,
+    deliveryBackoffUntil: gate.deliveryBackoffUntil,
     lastReplySinceId: gate.lastReplySinceId,
     createdBy: gate.createdBy,
     createdAt: gate.createdAt,
@@ -117,6 +160,7 @@ engagementGates.post("/", requirePermission("inbox:reply"), async (c) => {
   const body = await c.req.json<Record<string, unknown>>();
   const actionType = parseActionType(body.actionType);
   const conditions = parseConditions(body.conditions);
+  const stealthConfig = parseStealthConfig(body.stealthConfig);
 
   if (!body.socialAccountId || typeof body.socialAccountId !== "string") {
     return c.json(
@@ -136,6 +180,12 @@ engagementGates.post("/", requirePermission("inbox:reply"), async (c) => {
       400,
     );
   }
+  if (stealthConfig === null && body.stealthConfig !== null && body.stealthConfig !== undefined) {
+    return c.json(
+      { error: { code: "VALIDATION_ERROR", message: "stealthConfig must be an object" } },
+      400,
+    );
+  }
 
   const created = await createEngagementGate(deps, {
     workspaceId: actor.workspaceId,
@@ -149,6 +199,7 @@ engagementGates.post("/", requirePermission("inbox:reply"), async (c) => {
     lineHarnessApiKeyRef: parseNullableString(body.lineHarnessApiKeyRef) ?? null,
     lineHarnessTag: parseNullableString(body.lineHarnessTag) ?? null,
     lineHarnessScenario: parseNullableString(body.lineHarnessScenario) ?? null,
+    stealthConfig: stealthConfig ?? null,
     createdBy: actor.id,
   });
 
@@ -157,7 +208,7 @@ engagementGates.post("/", requirePermission("inbox:reply"), async (c) => {
 
 engagementGates.post("/process", requirePermission("inbox:reply"), async (c) => {
   const deps = buildDeps(c.get("db"));
-  const body = await c.req.json<{ limit?: number }>().catch(() => ({}));
+  const body = await c.req.json<{ limit?: number }>().catch((): { limit?: number } => ({}));
   const result = await processEngagementGateReplies(deps, { limit: body.limit });
   return c.json({ data: result });
 });
@@ -211,6 +262,7 @@ engagementGates.patch("/:id", requirePermission("inbox:reply"), async (c) => {
   const conditions = parseConditions(body.conditions);
   const actionType = body.actionType === undefined ? undefined : parseActionType(body.actionType);
   const status = body.status === undefined ? undefined : parseStatus(body.status);
+  const stealthConfig = parseStealthConfig(body.stealthConfig);
 
   if (body.actionType !== undefined && !actionType) {
     return c.json({ error: { code: "VALIDATION_ERROR", message: "actionType is invalid" } }, 400);
@@ -221,6 +273,12 @@ engagementGates.patch("/:id", requirePermission("inbox:reply"), async (c) => {
   if (conditions === null && body.conditions !== null && body.conditions !== undefined) {
     return c.json(
       { error: { code: "VALIDATION_ERROR", message: "conditions must be an object" } },
+      400,
+    );
+  }
+  if (stealthConfig === null && body.stealthConfig !== null && body.stealthConfig !== undefined) {
+    return c.json(
+      { error: { code: "VALIDATION_ERROR", message: "stealthConfig must be an object" } },
       400,
     );
   }
@@ -243,6 +301,7 @@ engagementGates.patch("/:id", requirePermission("inbox:reply"), async (c) => {
     lineHarnessApiKeyRef: parseNullableString(body.lineHarnessApiKeyRef),
     lineHarnessTag: parseNullableString(body.lineHarnessTag),
     lineHarnessScenario: parseNullableString(body.lineHarnessScenario),
+    stealthConfig,
   });
 
   return c.json({ data: serializeGate(updated) });

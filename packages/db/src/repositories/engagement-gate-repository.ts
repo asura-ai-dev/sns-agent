@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type {
   EngagementGate,
@@ -10,6 +10,7 @@ import type {
   EngagementGateDeliveryRepository,
   EngagementGateListFilters,
   EngagementGateRepository,
+  EngagementGateStealthConfig,
   EngagementGateUpdateInput,
 } from "@sns-agent/core";
 import { engagementGateDeliveries, engagementGates } from "../schema/engagement-gates.js";
@@ -32,6 +33,8 @@ function rowToGate(row: typeof engagementGates.$inferSelect): EngagementGate {
     lineHarnessApiKeyRef: row.lineHarnessApiKeyRef,
     lineHarnessTag: row.lineHarnessTag,
     lineHarnessScenario: row.lineHarnessScenario,
+    stealthConfig: (row.stealthConfig as EngagementGateStealthConfig | null) ?? null,
+    deliveryBackoffUntil: row.deliveryBackoffUntil,
     lastReplySinceId: row.lastReplySinceId,
     createdBy: row.createdBy,
     createdAt: row.createdAt,
@@ -131,6 +134,8 @@ export class DrizzleEngagementGateRepository implements EngagementGateRepository
       lineHarnessApiKeyRef: input.lineHarnessApiKeyRef,
       lineHarnessTag: input.lineHarnessTag,
       lineHarnessScenario: input.lineHarnessScenario,
+      stealthConfig: input.stealthConfig,
+      deliveryBackoffUntil: input.deliveryBackoffUntil,
       lastReplySinceId: input.lastReplySinceId,
       createdBy: input.createdBy,
       createdAt: now,
@@ -219,6 +224,32 @@ export class DrizzleEngagementGateDeliveryRepository implements EngagementGateDe
       )
       .limit(1);
     return rows[0] ? rowToDelivery(rows[0]) : null;
+  }
+
+  async countByGateSince(gateId: string, since: Date): Promise<number> {
+    const rows = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(engagementGateDeliveries)
+      .where(
+        and(
+          eq(engagementGateDeliveries.engagementGateId, gateId),
+          gte(engagementGateDeliveries.deliveredAt, since),
+        ),
+      );
+    return Number(rows[0]?.count ?? 0);
+  }
+
+  async countByAccountSince(socialAccountId: string, since: Date): Promise<number> {
+    const rows = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(engagementGateDeliveries)
+      .where(
+        and(
+          eq(engagementGateDeliveries.socialAccountId, socialAccountId),
+          gte(engagementGateDeliveries.deliveredAt, since),
+        ),
+      );
+    return Number(rows[0]?.count ?? 0);
   }
 
   async createOnce(

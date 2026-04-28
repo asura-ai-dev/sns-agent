@@ -133,6 +133,8 @@ export type EngagementGateUpdateInput = Partial<
     | "lineHarnessApiKeyRef"
     | "lineHarnessTag"
     | "lineHarnessScenario"
+    | "stealthConfig"
+    | "deliveryBackoffUntil"
     | "lastReplySinceId"
   >
 >;
@@ -169,6 +171,8 @@ export interface EngagementGateDeliveryRepository {
     gateId: string,
     deliveryToken: string,
   ): Promise<EngagementGateDelivery | null>;
+  countByGateSince(gateId: string, since: Date): Promise<number>;
+  countByAccountSince(socialAccountId: string, since: Date): Promise<number>;
   createOnce(input: EngagementGateDeliveryCreateInput): Promise<EngagementGateDeliveryCreateResult>;
   consumeToken(
     gateId: string,
