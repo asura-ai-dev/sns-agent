@@ -87,7 +87,7 @@
     {
       "id": "XHP-001",
       "title": "Align X account model and credentials",
-      "status": "ready",
+      "status": "verified",
       "priority": "P0",
       "phase": "phase-0",
       "owner_role": "implementer",

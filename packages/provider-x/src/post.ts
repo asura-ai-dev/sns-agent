@@ -28,6 +28,7 @@ import {
   X_TEXT_LIMIT_PREMIUM,
 } from "./capabilities.js";
 import { uploadMediaAttachments } from "./media.js";
+import { requireXAccessTokenCredentials } from "./credentials.js";
 
 export interface XValidateOptions {
   /** Premium プランの場合 true。デフォルトは Basic (280 文字) */
@@ -163,35 +164,6 @@ export function validatePost(
 // publishPost
 // ───────────────────────────────────────────
 
-/**
- * accountCredentials から access_token を抽出する。
- * credentials は JSON 文字列 { accessToken, refreshToken, expiresAt } を想定。
- * 呼び出し元 (usecase) が復号した状態で渡す。
- */
-interface AccessCredentials {
-  accessToken: string;
-  /** 既にアップロード済みの media_id のリスト (v1 は外部アップロード済みのみ対応) */
-  mediaIds?: string[];
-}
-
-function parseCredentials(raw: string): AccessCredentials {
-  try {
-    const obj = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof obj.accessToken !== "string" || obj.accessToken.length === 0) {
-      throw new Error("accessToken missing");
-    }
-    const mediaIds =
-      Array.isArray(obj.mediaIds) && obj.mediaIds.every((id) => typeof id === "string")
-        ? (obj.mediaIds as string[])
-        : undefined;
-    return { accessToken: obj.accessToken, mediaIds };
-  } catch (err) {
-    throw new ProviderError(`Invalid X credentials: ${(err as Error).message}`, {
-      cause: String(err),
-    });
-  }
-}
-
 function buildTweetBody(args: {
   contentText: string | null;
   mediaIds?: string[] | undefined;
@@ -246,7 +218,7 @@ async function createTweet(
 }
 
 async function rollbackPublishedTweets(
-  creds: AccessCredentials,
+  creds: { accessToken: string },
   publishedIds: string[],
   httpClient: XApiClient,
 ): Promise<string | null> {
@@ -270,7 +242,7 @@ export async function publishPost(
   input: PublishPostInput,
   httpClient: XApiClient,
 ): Promise<PublishResult> {
-  const creds = parseCredentials(input.accountCredentials);
+  const creds = requireXAccessTokenCredentials(input.accountCredentials, "post.create");
   const xMetadata = getXMetadata(input.providerMetadata);
   const mediaIds = await uploadMediaAttachments({
     accessToken: creds.accessToken,
@@ -348,7 +320,7 @@ export async function deletePost(
   input: DeletePostInput,
   httpClient: XApiClient,
 ): Promise<DeleteResult> {
-  const creds = parseCredentials(input.accountCredentials);
+  const creds = requireXAccessTokenCredentials(input.accountCredentials, "post.delete");
 
   try {
     const res = await httpClient.request<{ data?: { deleted?: boolean } }>({

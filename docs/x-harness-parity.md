@@ -26,6 +26,48 @@
 
 X Harness OSS と比べて、X 固有の CRM / marketing automation はまだ不足しています。
 
+## XHP-001 Credential Contract
+
+X account credentials stay in the shared `social_accounts.credentials_encrypted` field. The
+encrypted plaintext is a versioned JSON object with an explicit `credentialType`, so downstream X
+features can tell which operations are available without guessing field names.
+
+OAuth 2.0 PKCE credentials are used for the existing account connect, posting, inbox, and refresh
+flow:
+
+```json
+{
+  "version": 1,
+  "credentialType": "x-oauth2",
+  "accessToken": "x-access-token",
+  "refreshToken": "x-refresh-token-or-null",
+  "expiresAt": "2026-04-28T12:00:00.000Z",
+  "tokenType": "bearer",
+  "scope": "tweet.read tweet.write users.read offline.access",
+  "xUserId": "1234567890"
+}
+```
+
+OAuth 1.0a credentials are reserved for X-only operations that require request signing, such as
+media upload handoff, DM send/read, follow, like, repost, and full-archive search:
+
+```json
+{
+  "version": 1,
+  "credentialType": "x-oauth1a",
+  "accessToken": "oauth1-access-token",
+  "accessTokenSecret": "oauth1-access-token-secret",
+  "consumerKey": "optional-consumer-key",
+  "consumerSecret": "optional-consumer-secret",
+  "xUserId": "1234567890",
+  "screenName": "alice"
+}
+```
+
+`packages/provider-x/src/credentials.ts` owns parsing, serialization, legacy OAuth2 credential
+compatibility, and the explicit OAuth 1.0a operation gate. Provider modules should consume these
+helpers instead of reading raw credential JSON directly.
+
 ## Parity Capability Matrix
 
 | Capability | X Harness OSS | Local State | Ticket |
