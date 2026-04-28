@@ -12,7 +12,7 @@ import type {
   PostRepository,
   ScheduledJobRepository,
 } from "../../interfaces/repositories.js";
-import type { SocialProvider } from "../../interfaces/social-provider.js";
+import type { PublishPostInput, SocialProvider } from "../../interfaces/social-provider.js";
 import { encrypt } from "../../domain/crypto.js";
 import {
   schedulePost,
@@ -272,6 +272,7 @@ function makeProvider(
     publishSuccess?: boolean;
     publishError?: string;
     publishThrows?: boolean;
+    publishInputs?: PublishPostInput[];
   } = {},
 ): SocialProvider {
   return {
@@ -280,7 +281,7 @@ function makeProvider(
       textPost: true,
       imagePost: true,
       videoPost: false,
-      threadPost: false,
+      threadPost: true,
       directMessage: false,
       commentReply: false,
       broadcast: false,
@@ -289,7 +290,8 @@ function makeProvider(
     }),
     connectAccount: async () => ({}),
     validatePost: async () => ({ valid: true, errors: [], warnings: [] }),
-    publishPost: async () => {
+    publishPost: async (input) => {
+      opts.publishInputs?.push(input);
       if (opts.publishThrows) throw new Error("network failure");
       if (opts.publishSuccess === false) {
         return { success: false, error: opts.publishError ?? "publish failed" };
@@ -349,10 +351,7 @@ class InMemoryAuditRepo implements AuditLogRepository {
 
   async countByWorkspace(
     workspaceId: string,
-    options?: Omit<
-      Parameters<AuditLogRepository["findByWorkspace"]>[1],
-      "limit" | "offset"
-    >,
+    options?: Omit<Parameters<AuditLogRepository["findByWorkspace"]>[1], "limit" | "offset">,
   ): Promise<number> {
     const logs = await this.findByWorkspace(workspaceId, options);
     return logs.length;
@@ -615,6 +614,115 @@ describe("getSchedule", () => {
 // ───────────────────────────────────────────
 
 describe("executeJob", () => {
+  it.each([
+    {
+      name: "text",
+      post: makePost({
+        id: "post-text",
+        contentText: "scheduled text",
+      }),
+      expected: {
+        contentText: "scheduled text",
+        contentMedia: null,
+        providerMetadata: null,
+      },
+    },
+    {
+      name: "media",
+      post: makePost({
+        id: "post-media",
+        contentText: "scheduled media",
+        contentMedia: [
+          { type: "image", url: "data:image/png;base64,aGVsbG8=", mimeType: "image/png" },
+        ],
+      }),
+      expected: {
+        contentText: "scheduled media",
+        contentMedia: [
+          { type: "image", url: "data:image/png;base64,aGVsbG8=", mimeType: "image/png" },
+        ],
+        providerMetadata: null,
+      },
+    },
+    {
+      name: "thread",
+      post: makePost({
+        id: "post-thread",
+        contentText: "scheduled root",
+        providerMetadata: { x: { threadPosts: [{ contentText: "scheduled reply" }] } },
+      }),
+      expected: {
+        contentText: "scheduled root",
+        contentMedia: null,
+        providerMetadata: {
+          x: {
+            quotePostId: null,
+            threadPosts: [{ contentText: "scheduled reply" }],
+            publishedThreadIds: null,
+          },
+        },
+      },
+    },
+    {
+      name: "quote",
+      post: makePost({
+        id: "post-quote",
+        contentText: "",
+        providerMetadata: { x: { quotePostId: "tweet-42" } },
+      }),
+      expected: {
+        contentText: "",
+        contentMedia: null,
+        providerMetadata: {
+          x: { quotePostId: "tweet-42", threadPosts: null, publishedThreadIds: null },
+        },
+      },
+    },
+    {
+      name: "media thread quote",
+      post: makePost({
+        id: "post-combined",
+        contentText: "scheduled root with image",
+        contentMedia: [
+          { type: "image", url: "data:image/png;base64,aGVsbG8=", mimeType: "image/png" },
+        ],
+        providerMetadata: {
+          x: {
+            quotePostId: "tweet-42",
+            threadPosts: [{ contentText: "scheduled image follow-up" }],
+          },
+        },
+      }),
+      expected: {
+        contentText: "scheduled root with image",
+        contentMedia: [
+          { type: "image", url: "data:image/png;base64,aGVsbG8=", mimeType: "image/png" },
+        ],
+        providerMetadata: {
+          x: {
+            quotePostId: "tweet-42",
+            threadPosts: [{ contentText: "scheduled image follow-up" }],
+            publishedThreadIds: null,
+          },
+        },
+      },
+    },
+  ])("publishes scheduled X $name variants through the provider", async ({ post, expected }) => {
+    const publishInputs: PublishPostInput[] = [];
+    const deps = makeDeps(undefined, [post], [], { publishInputs });
+    const job = await schedulePost(deps, {
+      workspaceId: "ws-1",
+      postId: post.id,
+      scheduledAt: new Date("2026-04-10T12:00:00Z"),
+    });
+
+    const result = await executeJob(deps, job.id);
+
+    expect(result?.job.status).toBe("succeeded");
+    expect(publishInputs).toHaveLength(1);
+    expect(publishInputs[0]).toMatchObject(expected);
+  });
+
   it("executes a pending job successfully and marks succeeded", async () => {
     const post = makePost();
     const deps = makeDeps(undefined, [post]);
@@ -765,9 +873,9 @@ describe("executeJob", () => {
     expect(result!.willRetry).toBe(false);
 
     expect(deps.auditRepo.logs[0]?.action).toBe("schedule.execution.failed");
-    expect(
-      (deps.auditRepo.logs[0]?.resultSummary as { retryRule?: string }).retryRule,
-    ).toBe("non_retryable");
+    expect((deps.auditRepo.logs[0]?.resultSummary as { retryRule?: string }).retryRule).toBe(
+      "non_retryable",
+    );
   });
 
   it("resets failed posts back to draft before retrying a transient failure", async () => {
