@@ -582,6 +582,9 @@ export async function cancelSchedule(
   if (job.status === "running" || job.status === "locked") {
     throw new ValidationError(`Cannot cancel a ${job.status} job; wait for completion or retry`);
   }
+  if (job.status === "failed" && job.lastError === "canceled_by_user") {
+    return job;
+  }
 
   // 投稿を draft に戻す
   const post = await deps.postRepo.findById(job.postId);

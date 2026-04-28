@@ -526,6 +526,25 @@ describe("cancelSchedule", () => {
     expect(updatedPost?.status).toBe("draft");
   });
 
+  it("returns an already canceled job without rewriting cancellation state", async () => {
+    const post = makePost();
+    let now = new Date("2026-04-10T00:00:00Z");
+    const deps = makeDeps(undefined, [post], [], {}, () => now);
+    const job = await schedulePost(deps, {
+      workspaceId: "ws-1",
+      postId: post.id,
+      scheduledAt: new Date("2026-04-10T12:00:00Z"),
+    });
+
+    const first = await cancelSchedule(deps, "ws-1", job.id);
+    now = new Date("2026-04-10T01:00:00Z");
+    const second = await cancelSchedule(deps, "ws-1", job.id);
+
+    expect(second.status).toBe("failed");
+    expect(second.lastError).toBe("canceled_by_user");
+    expect(second.completedAt).toEqual(first.completedAt);
+  });
+
   it("rejects cancel if job is running", async () => {
     const post = makePost();
     const deps = makeDeps(undefined, [post]);
