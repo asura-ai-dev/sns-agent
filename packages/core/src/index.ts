@@ -116,6 +116,11 @@ export type {
   ListFollowersInput,
   FollowerProviderProfile,
   FollowerListResult,
+  EngagementReply,
+  ListEngagementRepliesInput,
+  EngagementReplyListResult,
+  CheckEngagementConditionsInput,
+  EngagementConditionResult,
   JobQueue,
 } from "./interfaces/index.js";
 export { ProviderRegistry } from "./interfaces/index.js";
@@ -173,6 +178,22 @@ export type {
   TagUsecaseDeps,
   UpdateTagInput,
 } from "./usecases/tags.js";
+
+export {
+  createEngagementGate,
+  deleteEngagementGate,
+  getEngagementGate,
+  listEngagementGates,
+  processEngagementGateReplies,
+  updateEngagementGate,
+} from "./usecases/engagement-gates.js";
+export type {
+  CreateEngagementGateInput,
+  EngagementGateUsecaseDeps,
+  ProcessEngagementGateRepliesInput,
+  ProcessEngagementGateRepliesResult,
+  UpdateEngagementGateInput,
+} from "./usecases/engagement-gates.js";
 
 export {
   createPost,

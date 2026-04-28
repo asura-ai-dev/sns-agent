@@ -67,6 +67,11 @@ export type {
   ListFollowersInput,
   FollowerProviderProfile,
   FollowerListResult,
+  EngagementReply,
+  ListEngagementRepliesInput,
+  EngagementReplyListResult,
+  CheckEngagementConditionsInput,
+  EngagementConditionResult,
 } from "./social-provider.js";
 
 // JobQueue

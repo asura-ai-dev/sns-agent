@@ -187,6 +187,46 @@ export interface FollowerListResult {
   nextCursor: string | null;
 }
 
+export interface EngagementReply {
+  externalReplyId: string;
+  externalUserId: string;
+  username: string | null;
+  text: string | null;
+  createdAt: Date | null;
+  conversationId?: string | null;
+  inReplyToPostId?: string | null;
+}
+
+export interface ListEngagementRepliesInput {
+  accountCredentials: string;
+  accountExternalId: string;
+  triggerPostId: string | null;
+  sinceId?: string | null;
+  limit?: number;
+}
+
+export interface EngagementReplyListResult {
+  replies: EngagementReply[];
+  nextSinceId: string | null;
+}
+
+export interface CheckEngagementConditionsInput {
+  accountCredentials: string;
+  triggerPostId: string | null;
+  externalUserId: string;
+  conditions: {
+    requireLike?: boolean;
+    requireRepost?: boolean;
+    requireFollow?: boolean;
+  };
+}
+
+export interface EngagementConditionResult {
+  liked: boolean;
+  reposted: boolean;
+  followed: boolean;
+}
+
 // ───────────────────────────────────────────
 // SocialProvider インターフェース
 // ───────────────────────────────────────────
@@ -224,4 +264,12 @@ export interface SocialProvider {
 
   /** フォロー中一覧取得（対応プロバイダのみ） */
   listFollowing?(input: ListFollowersInput): Promise<FollowerListResult>;
+
+  /** Engagement gate 用の reply-trigger 取得（対応プロバイダのみ） */
+  listEngagementReplies?(input: ListEngagementRepliesInput): Promise<EngagementReplyListResult>;
+
+  /** Engagement gate 用の like/repost/follow 条件確認（対応プロバイダのみ） */
+  checkEngagementConditions?(
+    input: CheckEngagementConditionsInput,
+  ): Promise<EngagementConditionResult>;
 }
