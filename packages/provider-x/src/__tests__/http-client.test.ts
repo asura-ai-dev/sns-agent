@@ -210,7 +210,12 @@ describe("XApi", () => {
     await api.getDmConversationEvents("participant/1", { maxResults: 20 });
     await api.sendDmToParticipant("participant/1", { text: "hello" });
     await api.sendDmToConversation("conversation/1", { text: "hello" });
-    await api.createDmConversation({ conversationType: "Group", participantIds: ["u-2"] });
+    await api.createDmConversation({
+      conversationType: "Group",
+      participantIds: ["u-2", "u-3"],
+      text: "group hello",
+      attachments: [{ mediaId: "media-1" }],
+    });
     await api.getQuoteTweets("tweet/1", { maxResults: 10 });
 
     expect(calls.map((call) => `${call.init.method} ${new URL(call.url).pathname}`)).toEqual([
@@ -222,5 +227,13 @@ describe("XApi", () => {
       "GET /2/tweets/tweet%2F1/quote_tweets",
     ]);
     expect(JSON.parse(String(calls[2]?.init.body))).toEqual({ text: "hello" });
+    expect(JSON.parse(String(calls[4]?.init.body))).toEqual({
+      conversation_type: "Group",
+      participant_ids: ["u-2", "u-3"],
+      message: {
+        text: "group hello",
+        attachments: [{ media_id: "media-1" }],
+      },
+    });
   });
 });

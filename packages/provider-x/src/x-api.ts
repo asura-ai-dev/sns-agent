@@ -326,7 +326,7 @@ export class XApi {
     return this.post<XDataResponse<XDmEvent>>("/2/dm_conversations", {
       conversation_type: input.conversationType,
       participant_ids: input.participantIds,
-      ...buildDmMessageBody(input),
+      message: buildDmMessageBody(input),
     });
   }
 
