@@ -39,7 +39,7 @@ jobs:
         run: pnpm run test
 
   workstream-flow:
-    name: Workstream checks
+    name: Issue-driven checks
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
