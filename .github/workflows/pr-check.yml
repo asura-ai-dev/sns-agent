@@ -38,7 +38,7 @@ jobs:
       - name: Test
         run: pnpm run test
 
-  issue-flow:
+  workstream-flow:
     name: Issue-driven checks
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -47,30 +47,30 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Detect feature paths
-        id: feat
+      - name: Detect workstreams
+        id: workstream
         run: |
-          paths=$(bash scripts/ci/detect-feature.sh origin/${{ github.base_ref }})
-          echo "paths<<EOF" >> $GITHUB_OUTPUT
-          echo "$paths" >> $GITHUB_OUTPUT
+          workstreams=$(bash scripts/ci/detect-workstream.sh origin/${{ github.base_ref }})
+          echo "workstreams<<EOF" >> $GITHUB_OUTPUT
+          echo "$workstreams" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-          echo "features: $paths"
+          echo "workstreams: $workstreams"
 
       - name: Check commit refs
         run: bash scripts/ci/check-commit-refs.sh origin/${{ github.base_ref }}
 
-      - name: Check tickets closed
-        if: steps.feat.outputs.paths != ''
+      - name: Check workstream tickets
+        if: steps.workstream.outputs.workstreams != ''
         run: |
           while IFS= read -r p; do
             [ -z "$p" ] && continue
-            bash scripts/ci/check-tickets-closed.sh "$p"
-          done <<< "${{ steps.feat.outputs.paths }}"
+            bash scripts/ci/check-workstream-tickets.sh "$p"
+          done <<< "${{ steps.workstream.outputs.workstreams }}"
 
-      - name: Run feature verify (optional)
-        if: steps.feat.outputs.paths != ''
+      - name: Run workstream verify (optional)
+        if: steps.workstream.outputs.workstreams != ''
         run: |
           while IFS= read -r p; do
             [ -z "$p" ] && continue
-            bash scripts/ci/run-feature-verify.sh "$p"
-          done <<< "${{ steps.feat.outputs.paths }}"
+            bash scripts/ci/run-workstream-verify.sh "$p"
+          done <<< "${{ steps.workstream.outputs.workstreams }}"

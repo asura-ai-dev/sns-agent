@@ -1,24 +1,24 @@
-<!-- 1 機能 1 PR / 1 issue 1 commit のルールに従ってください -->
+<!-- Current planning source: docs/x-harness-parity.md and docs/x-harness-parity-tickets.json -->
 
-## Feature
+## Workstream
 
-`feature/<name>`
+`x-harness-parity`
 
-## Spec
+## Reference
 
-<!-- spec.md からの抜粋 or リンク -->
+- Human plan: `docs/x-harness-parity.md`
+- Machine ticket registry: `docs/x-harness-parity-tickets.json`
 
-## Closed issues
+## Tickets
 
-<!-- このブランチで完了させた issue を列挙。commit message の (#NNN) と一致させること -->
+<!-- 完了・検証した XHP チケットを列挙 -->
 
-- [x] #001 ...
-- [x] #002 ...
+- [ ] XHP-...
 
 ## Test plan
 
 - [ ] PR check が green
-- [ ] ローカルで `feature/<name>/verify.sh`（あれば）が pass
+- [ ] 対象 XHP チケットの `verification` コマンドが pass
 - [ ] 主要ユーザーフローを手動で確認
 
 ## Deploy notes
