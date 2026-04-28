@@ -316,6 +316,86 @@ describe("a2. followers sync flow", () => {
 });
 
 // ───────────────────────────────────────────
+// a2b. Quote tweets
+// ───────────────────────────────────────────
+describe("a2b. quote tweets flow", () => {
+  it("syncs quote tweets, lists detail, and triggers engagement actions", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO posts (id, workspace_id, social_account_id, platform, status, content_text, content_media, provider_metadata, platform_post_id, validation_result, idempotency_key, created_by, created_at, updated_at, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "post-source-1",
+        seed.workspaceId,
+        seed.socialAccountId,
+        "x",
+        "published",
+        "launch source",
+        null,
+        null,
+        "source-post-1",
+        null,
+        null,
+        seed.editorUserId,
+        now,
+        now,
+        now,
+      );
+
+    const sync = await req("POST", "/api/quote-tweets/sync", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 50,
+    });
+    expect(sync.status).toBe(200);
+    expect(sync.body.data).toMatchObject({
+      sourceTweetsScanned: 1,
+      quotesScanned: 1,
+      quotesStored: 1,
+    });
+
+    const listed = await req(
+      "GET",
+      `/api/quote-tweets?socialAccountId=${seed.socialAccountId}`,
+      seed.viewerApiKey,
+    );
+    expect(listed.status).toBe(200);
+    const quotes = listed.body.data as Array<Record<string, unknown>>;
+    expect(quotes).toHaveLength(1);
+    expect(quotes[0]).toMatchObject({
+      socialAccountId: seed.socialAccountId,
+      sourceTweetId: "source-post-1",
+      quoteTweetId: "quote-sync-1",
+      authorUsername: "quote_alice",
+      authorDisplayName: "Quote Alice",
+      authorProfileImageUrl: "https://cdn.example.test/quote-alice.jpg",
+      authorVerified: true,
+    });
+
+    const quoteId = String(quotes[0].id);
+    const detail = await req("GET", `/api/quote-tweets/${quoteId}`, seed.viewerApiKey);
+    expect(detail.status).toBe(200);
+    expect(detail.body.data).toMatchObject({
+      id: quoteId,
+      contentText: "quoting this with a note",
+    });
+
+    const liked = await req("POST", `/api/quote-tweets/${quoteId}/actions`, seed.editorApiKey, {
+      actionType: "like",
+    });
+    expect(liked.status).toBe(201);
+    expect(liked.body.data).toMatchObject({
+      externalActionId: "mock-like-quote-sync-1",
+      quote: {
+        id: quoteId,
+        lastActionType: "like",
+        lastActionExternalId: "mock-like-quote-sync-1",
+      },
+    });
+  });
+});
+
+// ───────────────────────────────────────────
 // a3. Engagement gates
 // ───────────────────────────────────────────
 describe("a3. engagement gates flow", () => {

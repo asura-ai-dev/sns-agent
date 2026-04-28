@@ -28,6 +28,7 @@ import type {
   EngagementGateDeliveryStatus,
   EngagementGateStatus,
   EngagementAction,
+  QuoteTweet,
 } from "../domain/entities.js";
 import type { Platform } from "@sns-agent/config";
 
@@ -204,6 +205,41 @@ export interface EngagementActionRepository {
   findByThread(threadId: string): Promise<EngagementAction[]>;
   findByDedupeKey(input: EngagementActionDedupeInput): Promise<EngagementAction | null>;
   createOnce(input: EngagementActionCreateInput): Promise<EngagementActionCreateResult>;
+}
+
+// ───────────────────────────────────────────
+// QuoteTweetRepository
+// ───────────────────────────────────────────
+
+export interface QuoteTweetListFilters {
+  socialAccountId?: string;
+  sourceTweetId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export type QuoteTweetUpsertInput = Omit<
+  QuoteTweet,
+  "id" | "lastActionType" | "lastActionExternalId" | "lastActionAt" | "createdAt" | "updatedAt"
+>;
+
+export interface QuoteTweetActionRecordInput {
+  actionType: QuoteTweet["lastActionType"] extends infer T ? Exclude<T, null> : never;
+  externalActionId: string | null;
+  actedAt: Date;
+}
+
+export interface QuoteTweetRepository {
+  findById(id: string): Promise<QuoteTweet | null>;
+  findBySourceAndQuote(
+    workspaceId: string,
+    socialAccountId: string,
+    sourceTweetId: string,
+    quoteTweetId: string,
+  ): Promise<QuoteTweet | null>;
+  findByWorkspace(workspaceId: string, filters?: QuoteTweetListFilters): Promise<QuoteTweet[]>;
+  upsert(input: QuoteTweetUpsertInput): Promise<QuoteTweet>;
+  recordAction(id: string, input: QuoteTweetActionRecordInput): Promise<QuoteTweet>;
 }
 
 // ───────────────────────────────────────────

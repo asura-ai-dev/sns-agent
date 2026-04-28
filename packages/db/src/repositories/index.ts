@@ -26,3 +26,4 @@ export {
   DrizzleEngagementGateRepository,
 } from "./engagement-gate-repository.js";
 export { DrizzleEngagementActionRepository } from "./engagement-action-repository.js";
+export { DrizzleQuoteTweetRepository } from "./quote-tweet-repository.js";

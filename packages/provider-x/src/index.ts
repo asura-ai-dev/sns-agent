@@ -33,6 +33,8 @@ import type {
   EngagementConditionResult,
   PerformEngagementActionInput,
   EngagementActionResult,
+  ListQuoteTweetsInput,
+  QuoteTweetListResult,
 } from "@sns-agent/core";
 import { ProviderError } from "@sns-agent/core";
 import { XApiClient } from "./http-client.js";
@@ -53,6 +55,7 @@ import {
   listEngagementReplies as listEngagementRepliesImpl,
 } from "./engagement-gates.js";
 import { performEngagementAction as performEngagementActionImpl } from "./engagement-actions.js";
+import { listQuoteTweets as listQuoteTweetsImpl } from "./quote-tweets.js";
 
 export interface XProviderOptions {
   /** X OAuth 2.0 クライアント設定 */
@@ -230,6 +233,10 @@ export class XProvider implements SocialProvider {
     return performEngagementActionImpl(input, this.httpClient);
   }
 
+  async listQuoteTweets(input: ListQuoteTweetsInput): Promise<QuoteTweetListResult> {
+    return listQuoteTweetsImpl(input, this.httpClient);
+  }
+
   /**
    * トークンリフレッシュ
    *
@@ -334,6 +341,7 @@ export type { XOAuthConfig, TokenResult, PkcePair } from "./auth.js";
 export { validatePost, publishPost, deletePost } from "./post.js";
 export { listThreads, getMessages, sendReply } from "./inbox.js";
 export { checkEngagementConditions, listEngagementReplies } from "./engagement-gates.js";
+export { listQuoteTweets } from "./quote-tweets.js";
 export {
   X_CREDENTIAL_VERSION,
   X_OAUTH_1A_OPERATIONS,

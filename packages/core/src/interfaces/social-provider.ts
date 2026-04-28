@@ -242,6 +242,33 @@ export interface EngagementActionResult {
   error?: string;
 }
 
+export interface QuoteTweetProviderItem {
+  sourceTweetId: string;
+  quoteTweetId: string;
+  authorExternalId: string;
+  authorUsername: string | null;
+  authorDisplayName: string | null;
+  authorProfileImageUrl: string | null;
+  authorVerified: boolean;
+  contentText: string | null;
+  contentMedia: MediaAttachment[] | null;
+  quotedAt: Date | null;
+  metrics: Record<string, unknown> | null;
+  providerMetadata: Record<string, unknown> | null;
+}
+
+export interface ListQuoteTweetsInput {
+  accountCredentials: string;
+  sourceTweetId: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface QuoteTweetListResult {
+  quotes: QuoteTweetProviderItem[];
+  nextCursor: string | null;
+}
+
 // ───────────────────────────────────────────
 // SocialProvider インターフェース
 // ───────────────────────────────────────────
@@ -289,7 +316,8 @@ export interface SocialProvider {
   ): Promise<EngagementConditionResult>;
 
   /** Inbox reply 管理用の like/repost 操作（対応プロバイダのみ） */
-  performEngagementAction?(
-    input: PerformEngagementActionInput,
-  ): Promise<EngagementActionResult>;
+  performEngagementAction?(input: PerformEngagementActionInput): Promise<EngagementActionResult>;
+
+  /** Tracked source tweet の quote tweets 取得（対応プロバイダのみ） */
+  listQuoteTweets?(input: ListQuoteTweetsInput): Promise<QuoteTweetListResult>;
 }

@@ -19,6 +19,8 @@ export type {
   EngagementAction,
   InboxEngagementActionType,
   EngagementActionStatus,
+  QuoteTweet,
+  QuoteTweetActionType,
   ProviderCapabilities,
   MediaAttachment,
   PostProviderMetadata,

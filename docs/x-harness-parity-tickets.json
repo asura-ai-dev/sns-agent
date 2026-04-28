@@ -379,7 +379,7 @@
     {
       "id": "XHP-010",
       "title": "Persist and act on quote tweets",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-3",
       "owner_role": "implementer",

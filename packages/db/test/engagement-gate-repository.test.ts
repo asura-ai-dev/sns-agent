@@ -43,6 +43,12 @@ function createDb() {
       conditions text,
       action_type text NOT NULL,
       action_text text,
+      line_harness_url text,
+      line_harness_api_key_ref text,
+      line_harness_tag text,
+      line_harness_scenario text,
+      stealth_config text,
+      delivery_backoff_until integer,
       last_reply_since_id text,
       created_by text,
       created_at integer NOT NULL,
@@ -64,6 +70,8 @@ function createDb() {
       action_type text NOT NULL,
       status text NOT NULL,
       response_external_id text,
+      delivery_token text NOT NULL,
+      consumed_at integer,
       metadata text,
       delivered_at integer NOT NULL,
       created_at integer NOT NULL,
@@ -73,6 +81,10 @@ function createDb() {
     );
     CREATE UNIQUE INDEX idx_engagement_gate_deliveries_gate_user
       ON engagement_gate_deliveries (engagement_gate_id, external_user_id);
+    CREATE UNIQUE INDEX idx_engagement_gate_deliveries_token
+      ON engagement_gate_deliveries (delivery_token);
+    CREATE INDEX idx_engagement_gate_deliveries_gate
+      ON engagement_gate_deliveries (engagement_gate_id);
   `);
   const now = Math.floor(Date.now() / 1000);
   sqlite
@@ -119,6 +131,12 @@ describe("DrizzleEngagementGateRepository", () => {
       },
       actionType: "mention_post",
       actionText: "Thanks for joining!",
+      lineHarnessUrl: null,
+      lineHarnessApiKeyRef: null,
+      lineHarnessTag: null,
+      lineHarnessScenario: null,
+      stealthConfig: null,
+      deliveryBackoffUntil: null,
       lastReplySinceId: null,
       createdBy: "user-1",
     });
@@ -172,6 +190,12 @@ describe("DrizzleEngagementGateRepository", () => {
       },
       actionType: "dm",
       actionText: "Here is the secret.",
+      lineHarnessUrl: null,
+      lineHarnessApiKeyRef: null,
+      lineHarnessTag: null,
+      lineHarnessScenario: null,
+      stealthConfig: null,
+      deliveryBackoffUntil: null,
       lastReplySinceId: null,
       createdBy: null,
     });
@@ -185,6 +209,8 @@ describe("DrizzleEngagementGateRepository", () => {
       actionType: "dm",
       status: "delivered",
       responseExternalId: "dm-1",
+      deliveryToken: "token-1",
+      consumedAt: null,
       metadata: { eligible: true },
       deliveredAt: new Date("2026-04-28T00:00:00Z"),
     });
@@ -197,6 +223,8 @@ describe("DrizzleEngagementGateRepository", () => {
       actionType: "dm",
       status: "delivered",
       responseExternalId: "dm-2",
+      deliveryToken: "token-2",
+      consumedAt: null,
       metadata: { eligible: true },
       deliveredAt: new Date("2026-04-28T01:00:00Z"),
     });

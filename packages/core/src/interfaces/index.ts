@@ -26,6 +26,10 @@ export type {
   EngagementActionCreateInput,
   EngagementActionCreateResult,
   EngagementActionDedupeInput,
+  QuoteTweetRepository,
+  QuoteTweetListFilters,
+  QuoteTweetUpsertInput,
+  QuoteTweetActionRecordInput,
   PostRepository,
   PostListFilters,
   PostOrderBy,
@@ -79,6 +83,9 @@ export type {
   EngagementActionType,
   PerformEngagementActionInput,
   EngagementActionResult,
+  QuoteTweetProviderItem,
+  ListQuoteTweetsInput,
+  QuoteTweetListResult,
 } from "./social-provider.js";
 
 // JobQueue

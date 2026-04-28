@@ -12,6 +12,7 @@ import {
   ChatCircle,
   Question,
   GearSix,
+  Quotes,
 } from "@phosphor-icons/react";
 import { NAV_LABELS } from "@/lib/i18n/labels";
 
@@ -20,6 +21,7 @@ const NAV_ICONS: Record<string, typeof House> = {
   "/posts": PaperPlaneTilt,
   "/calendar": CalendarBlank,
   "/inbox": Tray,
+  "/quotes": Quotes,
   "/usage": ChartBar,
   "/skills": Package,
   "/agents": ChatCircle,

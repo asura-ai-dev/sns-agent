@@ -189,6 +189,33 @@ export interface EngagementAction {
   createdAt: Date;
 }
 
+export type QuoteTweetActionType = "reply" | "like" | "repost";
+
+export interface QuoteTweet {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  sourceTweetId: string;
+  quoteTweetId: string;
+  authorExternalId: string;
+  authorUsername: string | null;
+  authorDisplayName: string | null;
+  authorProfileImageUrl: string | null;
+  authorVerified: boolean;
+  contentText: string | null;
+  contentMedia: MediaAttachment[] | null;
+  quotedAt: Date | null;
+  metrics: Record<string, unknown> | null;
+  providerMetadata: Record<string, unknown> | null;
+  lastActionType: QuoteTweetActionType | null;
+  lastActionExternalId: string | null;
+  lastActionAt: Date | null;
+  discoveredAt: Date;
+  lastSeenAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 /** Provider が公開する能力セット */
 export interface ProviderCapabilities {
   textPost: boolean;

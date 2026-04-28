@@ -44,6 +44,8 @@ import type {
   EngagementActionResult,
   ListFollowersInput,
   FollowerListResult,
+  ListQuoteTweetsInput,
+  QuoteTweetListResult,
 } from "@sns-agent/core";
 import type { Platform } from "@sns-agent/config";
 import { setProviderRegistry, resetProviderRegistry } from "../../providers.js";
@@ -320,6 +322,27 @@ export function createMockXProvider(): SocialProvider {
       return {
         success: true,
         externalActionId: `mock-${input.actionType}-${input.targetPostId}`,
+      };
+    },
+    async listQuoteTweets(_input: ListQuoteTweetsInput): Promise<QuoteTweetListResult> {
+      return {
+        quotes: [
+          {
+            sourceTweetId: "source-post-1",
+            quoteTweetId: "quote-sync-1",
+            authorExternalId: "quote-user-1",
+            authorUsername: "quote_alice",
+            authorDisplayName: "Quote Alice",
+            authorProfileImageUrl: "https://cdn.example.test/quote-alice.jpg",
+            authorVerified: true,
+            contentText: "quoting this with a note",
+            contentMedia: null,
+            quotedAt: new Date("2026-04-29T00:05:00Z"),
+            metrics: { like_count: 4, retweet_count: 1 },
+            providerMetadata: { test: true },
+          },
+        ],
+        nextCursor: null,
       };
     },
     async listFollowers(_input: ListFollowersInput): Promise<FollowerListResult> {

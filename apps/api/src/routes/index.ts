@@ -16,3 +16,4 @@ export { inbox } from "./inbox.js";
 export { followers } from "./followers.js";
 export { tags } from "./tags.js";
 export { engagementGates } from "./engagement-gates.js";
+export { quoteTweets } from "./quote-tweets.js";

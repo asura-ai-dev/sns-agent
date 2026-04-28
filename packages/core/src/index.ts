@@ -24,6 +24,8 @@ export type {
   EngagementAction,
   InboxEngagementActionType,
   EngagementActionStatus,
+  QuoteTweet,
+  QuoteTweetActionType,
   ProviderCapabilities,
   MediaAttachment,
   PostProviderMetadata,
@@ -83,6 +85,10 @@ export type {
   EngagementActionCreateInput,
   EngagementActionCreateResult,
   EngagementActionDedupeInput,
+  QuoteTweetRepository,
+  QuoteTweetListFilters,
+  QuoteTweetUpsertInput,
+  QuoteTweetActionRecordInput,
   PostRepository,
   PostListFilters,
   PostOrderBy,
@@ -132,6 +138,9 @@ export type {
   EngagementActionType,
   PerformEngagementActionInput,
   EngagementActionResult,
+  QuoteTweetProviderItem,
+  ListQuoteTweetsInput,
+  QuoteTweetListResult,
   JobQueue,
 } from "./interfaces/index.js";
 export { ProviderRegistry } from "./interfaces/index.js";
@@ -211,6 +220,21 @@ export type {
   VerifyEngagementGateInput,
   VerifyEngagementGateResult,
 } from "./usecases/engagement-gates.js";
+
+export {
+  discoverQuoteTweetsForTrackedSources,
+  getQuoteTweet,
+  listQuoteTweets,
+  performQuoteTweetAction,
+} from "./usecases/quote-tweets.js";
+export type {
+  DiscoverQuoteTweetsInput,
+  DiscoverQuoteTweetsResult,
+  ListQuoteTweetsResult,
+  PerformQuoteTweetActionInput,
+  PerformQuoteTweetActionResult,
+  QuoteTweetUsecaseDeps,
+} from "./usecases/quote-tweets.js";
 
 export {
   createPost,
