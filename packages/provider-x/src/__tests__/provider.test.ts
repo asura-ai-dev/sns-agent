@@ -100,21 +100,26 @@ describe("XProvider", () => {
   });
 
   it("refreshToken returns new credentials when refresh_token is provided via JSON", async () => {
-    const httpClient = buildClient([
-      {
-        status: 200,
-        body: {
-          access_token: "acc-new",
-          refresh_token: "ref-new",
-          expires_in: 3600,
-          token_type: "bearer",
-        },
+    let capturedBody = "";
+    const httpClient = new XApiClient({
+      fetchImpl: async (_url, init) => {
+        capturedBody = String(init.body ?? "");
+        return new Response(
+          JSON.stringify({
+            access_token: "acc-new",
+            refresh_token: "ref-new",
+            expires_in: 3600,
+            token_type: "bearer",
+          }),
+          { status: 200 },
+        );
       },
-    ]);
+    });
     const provider = new XProvider({ oauth: { clientId: "cid" }, httpClient });
 
     const result = await provider.refreshToken(JSON.stringify({ refreshToken: "ref-old" }));
     expect(result.success).toBe(true);
+    expect(new URLSearchParams(capturedBody).get("refresh_token")).toBe("ref-old");
     const creds = JSON.parse(result.credentialsEncrypted ?? "{}") as { accessToken: string };
     expect(creds.accessToken).toBe("acc-new");
   });

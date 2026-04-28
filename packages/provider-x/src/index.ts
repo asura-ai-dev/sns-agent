@@ -35,8 +35,8 @@ import {
   exchangeCode,
   refreshToken as refreshOAuthToken,
   type XOAuthConfig,
-  type TokenResult,
 } from "./auth.js";
+import { extractXRefreshToken, serializeXOAuth2Credentials } from "./credentials.js";
 import { validatePost, publishPost, deletePost } from "./post.js";
 import { listThreads, getMessages, sendReply as sendReplyImpl } from "./inbox.js";
 
@@ -153,7 +153,7 @@ export class XProvider implements SocialProvider {
     // /2/users/me でアカウント情報を取得
     const me = await this.fetchMe(token.accessToken);
 
-    const credentials = serializeCredentials(token, me.id);
+    const credentials = serializeXOAuth2Credentials(token, me.id);
 
     return {
       account: {
@@ -204,22 +204,8 @@ export class XProvider implements SocialProvider {
    * 2. それ以外は accountId として受け、エラーを返す（外部ストアから取り出せないため）
    */
   async refreshToken(accountIdOrCredentials: string): Promise<RefreshResult> {
-    let refreshTokenValue: string | null = null;
-    let xUserId: string | null = null;
-    try {
-      const parsed = JSON.parse(accountIdOrCredentials) as Record<string, unknown>;
-      if (typeof parsed.refreshToken === "string") {
-        refreshTokenValue = parsed.refreshToken;
-      }
-      if (typeof parsed.xUserId === "string") {
-        xUserId = parsed.xUserId;
-      }
-    } catch {
-      // plain string の場合 refresh_token 自体を直接受け取ったとみなす
-      if (accountIdOrCredentials.length > 0 && !accountIdOrCredentials.includes(" ")) {
-        refreshTokenValue = accountIdOrCredentials;
-      }
-    }
+    const { refreshToken: refreshTokenValue, xUserId } =
+      extractXRefreshToken(accountIdOrCredentials);
 
     if (!refreshTokenValue) {
       return {
@@ -234,7 +220,7 @@ export class XProvider implements SocialProvider {
       const token = await refreshOAuthToken(this.oauth, refreshTokenValue, this.httpClient);
       return {
         success: true,
-        credentialsEncrypted: serializeCredentials(token, xUserId),
+        credentialsEncrypted: serializeXOAuth2Credentials(token, xUserId),
         tokenExpiresAt: token.expiresAt,
       };
     } catch (err) {
@@ -272,24 +258,31 @@ export class XProvider implements SocialProvider {
   }
 }
 
-/** credentials JSON をシリアライズ (usecase 側で暗号化する) */
-function serializeCredentials(token: TokenResult, xUserId: string | null): string {
-  return JSON.stringify({
-    accessToken: token.accessToken,
-    refreshToken: token.refreshToken,
-    expiresAt: token.expiresAt ? token.expiresAt.toISOString() : null,
-    scope: token.scope,
-    tokenType: token.tokenType,
-    xUserId,
-  });
-}
-
 // ───────────────────────────────────────────
 // 再エクスポート
 // ───────────────────────────────────────────
 
 export { X_CAPABILITIES } from "./capabilities.js";
 export { XApiClient } from "./http-client.js";
+export { XApi } from "./x-api.js";
+export type {
+  XCreateDmConversationInput,
+  XCreateTweetInput,
+  XDataResponse,
+  XDmEvent,
+  XDmEventOptions,
+  XDmMessageInput,
+  XIncludes,
+  XListResponse,
+  XPaginationMeta,
+  XPaginationQueryOptions,
+  XProblem,
+  XSearchRecentTweetsOptions,
+  XTimelineOptions,
+  XTweet,
+  XTweetQueryOptions,
+  XUser,
+} from "./x-api.js";
 export {
   generatePkcePair,
   getAuthUrl,
@@ -300,4 +293,21 @@ export {
 export type { XOAuthConfig, TokenResult, PkcePair } from "./auth.js";
 export { validatePost, publishPost, deletePost } from "./post.js";
 export { listThreads, getMessages, sendReply } from "./inbox.js";
+export {
+  X_CREDENTIAL_VERSION,
+  X_OAUTH_1A_OPERATIONS,
+  extractXRefreshToken,
+  parseXCredentials,
+  requireXAccessTokenCredentials,
+  requireXOAuth1aCredentials,
+  serializeXOAuth2Credentials,
+} from "./credentials.js";
+export type {
+  XAccessTokenCredentials,
+  XCredentialType,
+  XCredentials,
+  XOAuth1aCredentials,
+  XOAuth1aOperation,
+  XOAuth2Credentials,
+} from "./credentials.js";
 export { InMemoryVerifierStore };

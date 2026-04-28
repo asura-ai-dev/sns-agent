@@ -12,12 +12,9 @@ import type {
 import { ProviderError } from "@sns-agent/core";
 import { XApiClient } from "./http-client.js";
 import { uploadMediaAttachments } from "./media.js";
+import { requireXAccessTokenCredentials } from "./credentials.js";
 
-interface XInboxCredentials {
-  accessToken: string;
-  xUserId: string | null;
-  mediaIds?: string[];
-}
+type XInboxCredentials = ReturnType<typeof requireXAccessTokenCredentials>;
 
 interface XCursorState {
   mentionsPaginationToken: string | null;
@@ -84,29 +81,6 @@ interface XDmEventListResponse {
     media?: XMedia[];
   };
   meta?: { next_token?: string };
-}
-
-function parseCredentials(raw: string): XInboxCredentials {
-  try {
-    const obj = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof obj.accessToken !== "string" || obj.accessToken.length === 0) {
-      throw new Error("accessToken missing");
-    }
-    const xUserId = typeof obj.xUserId === "string" ? obj.xUserId : null;
-    const mediaIds =
-      Array.isArray(obj.mediaIds) && obj.mediaIds.every((id) => typeof id === "string")
-        ? (obj.mediaIds as string[])
-        : undefined;
-    return {
-      accessToken: obj.accessToken,
-      xUserId,
-      mediaIds,
-    };
-  } catch (err) {
-    throw new ProviderError(`Invalid X inbox credentials: ${(err as Error).message}`, {
-      cause: String(err),
-    });
-  }
 }
 
 async function resolveXUserId(creds: XInboxCredentials, httpClient: XApiClient): Promise<string> {
@@ -476,7 +450,7 @@ export async function listThreads(
   input: ListThreadsInput,
   httpClient: XApiClient,
 ): Promise<ThreadListResult> {
-  const creds = parseCredentials(input.accountCredentials);
+  const creds = requireXAccessTokenCredentials(input.accountCredentials, "inbox.listThreads");
   const userId = await resolveXUserId(creds, httpClient);
   const cursor = parseCursor(input.cursor);
   const limit = Math.min(input.limit ?? 25, 100);
@@ -508,7 +482,7 @@ export async function getMessages(
   input: GetMessagesInput,
   httpClient: XApiClient,
 ): Promise<MessageListResult> {
-  const creds = parseCredentials(input.accountCredentials);
+  const creds = requireXAccessTokenCredentials(input.accountCredentials, "inbox.getMessages");
   const userId = await resolveXUserId(creds, httpClient);
   const cursor = parseCursor(input.cursor);
 
@@ -627,7 +601,7 @@ export async function sendReply(
   input: SendReplyInput,
   httpClient: XApiClient,
 ): Promise<SendReplyResult> {
-  const creds = parseCredentials(input.accountCredentials);
+  const creds = requireXAccessTokenCredentials(input.accountCredentials, "inbox.sendReply");
   const trimmedText = input.contentText.trim();
   const isDirectMessage = input.externalThreadId.startsWith("dm:");
 

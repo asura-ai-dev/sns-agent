@@ -26,6 +26,14 @@ export interface RateLimitInfo {
   resetAt: number | null;
 }
 
+/** Retry-After ヘッダから読める再試行目安 */
+export interface RetryInfo {
+  /** 秒数形式、または HTTP date との差分を秒に丸めた値 */
+  retryAfterSeconds: number | null;
+  /** HTTP date 形式で指定されていた場合の unix epoch ms */
+  retryAt: number | null;
+}
+
 /** HTTP レスポンスとレート制限メタデータ */
 export interface XApiResponse<T> {
   data: T;
@@ -101,6 +109,7 @@ export class XApiClient {
     }
 
     const rateLimit = parseRateLimit(response.headers);
+    const retryInfo = parseRetryInfo(response.headers);
 
     // 204 No Content は deletePost 等で発生
     if (response.status === 204) {
@@ -125,6 +134,8 @@ export class XApiClient {
         path: opts.path,
         body: parsed,
         rateLimit,
+        retryAfterSeconds: retryInfo.retryAfterSeconds,
+        retryAt: retryInfo.retryAt,
       };
 
       if (response.status === 429) {
@@ -149,6 +160,28 @@ function parseRateLimit(headers: Headers): RateLimitInfo {
     remaining: remaining != null ? Number(remaining) : null,
     limit: limit != null ? Number(limit) : null,
     resetAt: reset != null ? Number(reset) : null,
+  };
+}
+
+function parseRetryInfo(headers: Headers): RetryInfo {
+  const raw = headers.get("retry-after");
+  if (!raw) {
+    return { retryAfterSeconds: null, retryAt: null };
+  }
+
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds)) {
+    return { retryAfterSeconds: seconds, retryAt: null };
+  }
+
+  const retryAt = Date.parse(raw);
+  if (Number.isNaN(retryAt)) {
+    return { retryAfterSeconds: null, retryAt: null };
+  }
+
+  return {
+    retryAfterSeconds: Math.max(0, Math.ceil((retryAt - Date.now()) / 1000)),
+    retryAt,
   };
 }
 

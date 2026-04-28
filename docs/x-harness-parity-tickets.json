@@ -87,7 +87,7 @@
     {
       "id": "XHP-001",
       "title": "Align X account model and credentials",
-      "status": "ready",
+      "status": "verified",
       "priority": "P0",
       "phase": "phase-0",
       "owner_role": "implementer",
@@ -120,7 +120,7 @@
     {
       "id": "XHP-002",
       "title": "Build typed X API v2 client surface",
-      "status": "ready",
+      "status": "verified",
       "priority": "P0",
       "phase": "phase-0",
       "owner_role": "implementer",
