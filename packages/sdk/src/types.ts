@@ -78,6 +78,8 @@ export interface CreatePostInput {
   providerMetadata?: PostProviderMetadata | null;
   /** true で即時投稿、false/省略で下書き */
   publish?: boolean;
+  /** API wire name for immediate publishing. `publish` is kept as the SDK shorthand. */
+  publishNow?: boolean;
 }
 
 export interface UpdatePostInput {

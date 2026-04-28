@@ -293,7 +293,13 @@ export class SnsAgentClient {
           params as Record<string, string | number | boolean | undefined>,
         ),
       get: (id) => this.get<ApiResponse<Post>>(`/api/posts/${id}`),
-      create: (input) => this.post<ApiResponse<Post>>("/api/posts", input),
+      create: (input) => {
+        const { publish, publishNow, ...body } = input;
+        return this.post<ApiResponse<Post>>("/api/posts", {
+          ...body,
+          publishNow: publishNow ?? publish ?? false,
+        });
+      },
       update: (id, input) => this.patch<ApiResponse<Post>>(`/api/posts/${id}`, input),
       delete: (id) => this.delete<ApiResponse<{ success: boolean }>>(`/api/posts/${id}`),
       publish: (id) => this.post<ApiResponse<Post>>(`/api/posts/${id}/publish`),

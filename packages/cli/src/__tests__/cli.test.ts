@@ -603,6 +603,35 @@ describe("CLI integration", () => {
     ]);
   });
 
+  it("b-4. `sns post create --publish` forwards publishNow through the SDK", async () => {
+    const res = await runCli([
+      "--api-url",
+      `http://127.0.0.1:${mockPort}`,
+      "--api-key",
+      "test",
+      "--json",
+      "post",
+      "create",
+      "--platform",
+      "x",
+      "--account",
+      "0123456789abcdef0123456789abcdef",
+      "--text",
+      "publish now",
+      "--quote-post-id",
+      "tweet-42",
+      "--publish",
+    ]);
+
+    expect(res.exitCode).toBe(0);
+    const postRequest = routeHits.find(
+      (h) => h.method === "POST" && h.url.startsWith("/api/posts"),
+    );
+    expect(postRequest).toBeDefined();
+    const parsed = JSON.parse(postRequest?.body ?? "{}") as { publishNow?: boolean };
+    expect(parsed.publishNow).toBe(true);
+  });
+
   it("c. `sns schedule create` creates a schedule", async () => {
     const futureAt = new Date(Date.now() + 86400000).toISOString();
     const res = await runCli([

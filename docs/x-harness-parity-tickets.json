@@ -147,7 +147,7 @@
     {
       "id": "XHP-003",
       "title": "Implement X post media thread and quote publishing parity",
-      "status": "planned",
+      "status": "verified",
       "priority": "P0",
       "phase": "phase-1",
       "owner_role": "implementer",
