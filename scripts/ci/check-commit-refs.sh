@@ -25,7 +25,7 @@ fi
 
 bad=""
 while IFS= read -r line; do
-  if echo "$line" | grep -qE 'XHP-[0-9]{3}|Merge |Revert |^[0-9a-f]+ (chore|fix|docs|ci|build|style)\b'; then
+  if echo "$line" | grep -qiE 'XHP-[0-9]{3}|Merge |Revert |^[0-9a-f]+ (chore|fix|docs|ci|build|style)\b'; then
     continue
   fi
   bad="$bad$line"$'\n'
