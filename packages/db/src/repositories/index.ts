@@ -20,6 +20,7 @@ export {
   DrizzleMessageRepository,
 } from "./conversation-repository.js";
 export { DrizzleFollowerRepository } from "./follower-repository.js";
+export { DrizzleFollowerSnapshotRepository } from "./follower-snapshot-repository.js";
 export { DrizzleTagRepository } from "./tag-repository.js";
 export {
   DrizzleEngagementGateDeliveryRepository,

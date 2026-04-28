@@ -29,6 +29,7 @@ export {
   DrizzleConversationRepository,
   DrizzleMessageRepository,
   DrizzleFollowerRepository,
+  DrizzleFollowerSnapshotRepository,
   DrizzleTagRepository,
   DrizzleEngagementGateDeliveryRepository,
   DrizzleEngagementGateRepository,

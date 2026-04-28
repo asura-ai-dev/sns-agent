@@ -12,6 +12,7 @@ export { scheduledJobs } from "./scheduled-jobs.js";
 export { conversationThreads } from "./conversation-threads.js";
 export { messages } from "./messages.js";
 export { followers } from "./followers.js";
+export { followerSnapshots } from "./follower-snapshots.js";
 export { tags, followerTags } from "./tags.js";
 export { engagementGates, engagementGateDeliveries } from "./engagement-gates.js";
 export { engagementActions } from "./engagement-actions.js";

@@ -11,8 +11,17 @@
  *
  * 起動は apps/api/src/index.ts で ENABLE_SCHEDULER=true の時のみ行う。
  */
-import { dispatchDueJobs, POLL_BATCH_SIZE, processEngagementGateReplies } from "@sns-agent/core";
-import type { EngagementGateUsecaseDeps, ScheduleUsecaseDeps } from "@sns-agent/core";
+import {
+  captureFollowerSnapshotsForWorkspace,
+  dispatchDueJobs,
+  POLL_BATCH_SIZE,
+  processEngagementGateReplies,
+} from "@sns-agent/core";
+import type {
+  EngagementGateUsecaseDeps,
+  FollowerAnalyticsUsecaseDeps,
+  ScheduleUsecaseDeps,
+} from "@sns-agent/core";
 import {
   DrizzleAuditLogRepository,
   DrizzleEngagementGateDeliveryRepository,
@@ -20,6 +29,8 @@ import {
   DrizzleScheduledJobRepository,
   DrizzlePostRepository,
   DrizzleAccountRepository,
+  DrizzleFollowerRepository,
+  DrizzleFollowerSnapshotRepository,
   getDb,
 } from "@sns-agent/db";
 import type { DbClient } from "@sns-agent/db";
@@ -91,6 +102,14 @@ function buildEngagementGateDeps(db: DbClient): EngagementGateUsecaseDeps {
   };
 }
 
+function buildFollowerAnalyticsDeps(db: DbClient): FollowerAnalyticsUsecaseDeps {
+  return {
+    accountRepo: new DrizzleAccountRepository(db),
+    followerRepo: new DrizzleFollowerRepository(db),
+    snapshotRepo: new DrizzleFollowerSnapshotRepository(db),
+  };
+}
+
 /**
  * Polling スケジューラワーカーを作成する。
  *
@@ -119,10 +138,20 @@ export function createSchedulerWorker(options: SchedulerWorkerOptions = {}): Sch
   const db = options.db ?? getDb();
   const deps = buildScheduleDeps(db);
   const engagementGateDeps = buildEngagementGateDeps(db);
+  const followerAnalyticsDeps = buildFollowerAnalyticsDeps(db);
 
   async function runBatch(): Promise<void> {
     const result = await dispatchDueJobs(deps, { limit: batchSize });
     const gateResult = await processEngagementGateReplies(engagementGateDeps, { limit: batchSize });
+    const snapshotWorkspaceId = process.env.FOLLOWER_SNAPSHOT_WORKSPACE_ID;
+    if (snapshotWorkspaceId) {
+      const snapshotResult = await captureFollowerSnapshotsForWorkspace(followerAnalyticsDeps, {
+        workspaceId: snapshotWorkspaceId,
+      });
+      if (snapshotResult.captured > 0) {
+        logger.info(`captured follower snapshots`, snapshotResult);
+      }
+    }
     if (gateResult.gatesScanned > 0) {
       logger.info(`processed engagement gate replies`, gateResult);
     }
@@ -231,9 +260,16 @@ export async function runSchedulerBatch(
   const db = options.db ?? getDb();
   const deps = buildScheduleDeps(db);
   const engagementGateDeps = buildEngagementGateDeps(db);
+  const followerAnalyticsDeps = buildFollowerAnalyticsDeps(db);
   const batchSize = options.batchSize ?? POLL_BATCH_SIZE;
   const result = await dispatchDueJobs(deps, { limit: batchSize });
   const gateResult = await processEngagementGateReplies(engagementGateDeps, { limit: batchSize });
+  const snapshotWorkspaceId = process.env.FOLLOWER_SNAPSHOT_WORKSPACE_ID;
+  const snapshotResult = snapshotWorkspaceId
+    ? await captureFollowerSnapshotsForWorkspace(followerAnalyticsDeps, {
+        workspaceId: snapshotWorkspaceId,
+      })
+    : null;
 
   logger.info(`single run complete`, {
     scanned: result.scanned,
@@ -243,6 +279,7 @@ export async function runSchedulerBatch(
     failed: result.failed,
     skipped: result.skipped,
     engagementGates: gateResult,
+    followerSnapshots: snapshotResult,
   });
 
   return result;

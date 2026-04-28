@@ -21,6 +21,7 @@ import type {
   ThreadStatus,
   SkillPackage,
   Follower,
+  FollowerSnapshot,
   Tag,
   EngagementGate,
   EngagementGateActionType,
@@ -81,6 +82,25 @@ export interface FollowerRepository {
   upsert(follower: FollowerUpsertInput): Promise<Follower>;
   markMissingFollowersUnfollowed(input: MarkMissingFollowersInput): Promise<number>;
   markMissingFollowingInactive(input: MarkMissingFollowingInput): Promise<number>;
+}
+
+export type FollowerSnapshotCreateInput = Omit<FollowerSnapshot, "id" | "createdAt" | "updatedAt">;
+
+export interface FollowerSnapshotUpsertResult {
+  snapshot: FollowerSnapshot;
+  created: boolean;
+}
+
+export interface FollowerSnapshotRepository {
+  upsertDailySnapshot(input: FollowerSnapshotCreateInput): Promise<FollowerSnapshotUpsertResult>;
+  findByAccount(
+    workspaceId: string,
+    socialAccountId: string,
+    options?: {
+      fromDate?: string;
+      toDate?: string;
+    },
+  ): Promise<FollowerSnapshot[]>;
 }
 
 // ───────────────────────────────────────────

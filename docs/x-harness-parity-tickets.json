@@ -476,7 +476,7 @@
     {
       "id": "XHP-013",
       "title": "Add follower snapshot analytics",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-0",
       "owner_role": "implementer",

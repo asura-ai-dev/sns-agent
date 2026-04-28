@@ -12,6 +12,7 @@ export type {
   AgentIdentity,
   SocialAccount,
   Follower,
+  FollowerSnapshot,
   Tag,
   EngagementGate,
   EngagementGateActionType,
@@ -69,6 +70,9 @@ export type {
   FollowerUpsertInput,
   MarkMissingFollowersInput,
   MarkMissingFollowingInput,
+  FollowerSnapshotRepository,
+  FollowerSnapshotCreateInput,
+  FollowerSnapshotUpsertResult,
   TagRepository,
   TagListFilters,
   TagCreateInput,
@@ -183,6 +187,22 @@ export type {
   SyncFollowersFromProviderInput,
   SyncFollowersFromProviderResult,
 } from "./usecases/followers.js";
+
+export {
+  captureFollowerSnapshot,
+  captureFollowerSnapshotsForWorkspace,
+  getFollowerAnalytics,
+} from "./usecases/follower-analytics.js";
+export type {
+  CaptureFollowerSnapshotsForWorkspaceInput,
+  CaptureFollowerSnapshotsForWorkspaceResult,
+  CaptureFollowerSnapshotInput,
+  CaptureFollowerSnapshotResult,
+  FollowerAnalyticsPoint,
+  FollowerAnalyticsResult,
+  FollowerAnalyticsUsecaseDeps,
+  GetFollowerAnalyticsInput,
+} from "./usecases/follower-analytics.js";
 
 export {
   attachFollowerTag,

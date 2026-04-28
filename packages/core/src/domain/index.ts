@@ -7,6 +7,7 @@ export type {
   AgentIdentity,
   SocialAccount,
   Follower,
+  FollowerSnapshot,
   Tag,
   EngagementGate,
   EngagementGateActionType,

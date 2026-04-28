@@ -174,6 +174,45 @@ export function fetchUsageSummarySafe(): Promise<FetchResult<UsageSummary>> {
 }
 
 // ───────────────────────────────────────────
+// Follower analytics
+// ───────────────────────────────────────────
+
+export interface FollowerAnalyticsPointDto {
+  date: string;
+  followerCount: number;
+  followingCount: number;
+}
+
+export interface FollowerAnalyticsDto {
+  currentCount: number;
+  delta7Days: number | null;
+  delta30Days: number | null;
+  series: FollowerAnalyticsPointDto[];
+}
+
+export function fetchFollowerAnalyticsSafe(
+  socialAccountId: string | null,
+): Promise<FetchResult<FollowerAnalyticsDto>> {
+  const fallback: FollowerAnalyticsDto = {
+    currentCount: 0,
+    delta7Days: null,
+    delta30Days: null,
+    series: [],
+  };
+  if (!socialAccountId) {
+    return Promise.resolve({ ok: true, data: fallback, isFallback: false });
+  }
+
+  return guard(async () => {
+    const res = await getApiClient().get<ApiResponse<FollowerAnalyticsDto>>(
+      "/api/analytics/followers",
+      { socialAccountId },
+    );
+    return res.data ?? fallback;
+  }, fallback);
+}
+
+// ───────────────────────────────────────────
 // Usage detail / Budget fetchers (Task 4005)
 // ───────────────────────────────────────────
 

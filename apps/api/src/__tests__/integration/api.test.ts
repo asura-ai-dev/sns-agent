@@ -316,6 +316,70 @@ describe("a2. followers sync flow", () => {
 });
 
 // ───────────────────────────────────────────
+// a3. フォロワー分析
+// ───────────────────────────────────────────
+describe("a3. follower analytics flow", () => {
+  it("GET /api/analytics/followers returns follower snapshot deltas and series", async () => {
+    const capturedAt = Math.floor(new Date("2026-04-29T00:00:00Z").getTime() / 1000);
+    const insert = ctx.sqlite.prepare(
+      "INSERT INTO follower_snapshots (id, workspace_id, social_account_id, platform, snapshot_date, follower_count, following_count, captured_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    );
+    insert.run(
+      "snap-30",
+      seed.workspaceId,
+      seed.socialAccountId,
+      "x",
+      "2026-03-30",
+      80,
+      20,
+      capturedAt,
+      capturedAt,
+      capturedAt,
+    );
+    insert.run(
+      "snap-7",
+      seed.workspaceId,
+      seed.socialAccountId,
+      "x",
+      "2026-04-22",
+      100,
+      25,
+      capturedAt,
+      capturedAt,
+      capturedAt,
+    );
+    insert.run(
+      "snap-current",
+      seed.workspaceId,
+      seed.socialAccountId,
+      "x",
+      "2026-04-29",
+      120,
+      30,
+      capturedAt,
+      capturedAt,
+      capturedAt,
+    );
+
+    const res = await req(
+      "GET",
+      `/api/analytics/followers?socialAccountId=${seed.socialAccountId}&asOfDate=2026-04-29`,
+      seed.viewerApiKey,
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      currentCount: 120,
+      delta7Days: 20,
+      delta30Days: 40,
+    });
+    expect(
+      (res.body.data as { series: Array<{ date: string }> }).series.map((p) => p.date),
+    ).toEqual(["2026-03-30", "2026-04-22", "2026-04-29"]);
+  });
+});
+
+// ───────────────────────────────────────────
 // a2b. Quote tweets
 // ───────────────────────────────────────────
 describe("a2b. quote tweets flow", () => {

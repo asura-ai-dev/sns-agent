@@ -93,6 +93,19 @@ export interface Follower {
   updatedAt: Date;
 }
 
+export interface FollowerSnapshot {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  platform: Platform;
+  snapshotDate: string;
+  followerCount: number;
+  followingCount: number;
+  capturedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface Tag {
   id: string;
   workspaceId: string;

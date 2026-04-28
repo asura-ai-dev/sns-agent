@@ -14,6 +14,7 @@ export { approvals } from "./approvals.js";
 export { webhooks } from "./webhooks.js";
 export { inbox } from "./inbox.js";
 export { followers } from "./followers.js";
+export { analytics } from "./analytics.js";
 export { tags } from "./tags.js";
 export { engagementGates } from "./engagement-gates.js";
 export { quoteTweets } from "./quote-tweets.js";

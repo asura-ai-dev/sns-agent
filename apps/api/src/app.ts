@@ -30,6 +30,7 @@ import {
   webhooks,
   inbox,
   followers,
+  analytics,
   tags,
   engagementGates,
   quoteTweets,
@@ -73,6 +74,7 @@ app.use("/api/audit/*", authMiddleware);
 app.use("/api/approvals/*", authMiddleware);
 app.use("/api/inbox/*", authMiddleware);
 app.use("/api/followers/*", authMiddleware);
+app.use("/api/analytics/*", authMiddleware);
 app.use("/api/tags/*", authMiddleware);
 app.use("/api/engagement-gates/*", authMiddleware);
 app.use("/api/quote-tweets/*", authMiddleware);
@@ -83,6 +85,7 @@ app.use("/api/schedules/*", usageRecorderMiddleware);
 app.use("/api/usage/*", usageRecorderMiddleware);
 app.use("/api/inbox/*", usageRecorderMiddleware);
 app.use("/api/followers/*", usageRecorderMiddleware);
+app.use("/api/analytics/*", usageRecorderMiddleware);
 app.use("/api/tags/*", usageRecorderMiddleware);
 app.use("/api/engagement-gates/*", usageRecorderMiddleware);
 app.use("/api/quote-tweets/*", usageRecorderMiddleware);
@@ -99,6 +102,7 @@ app.use("/api/agent/*", auditMiddleware);
 app.use("/api/approvals/*", auditMiddleware);
 app.use("/api/inbox/*", auditMiddleware);
 app.use("/api/followers/*", auditMiddleware);
+app.use("/api/analytics/*", auditMiddleware);
 app.use("/api/tags/*", auditMiddleware);
 app.use("/api/engagement-gates/*", auditMiddleware);
 app.use("/api/quote-tweets/*", auditMiddleware);
@@ -127,6 +131,7 @@ app.route("/api/approvals", approvals);
 app.route("/api/webhooks", webhooks);
 app.route("/api/inbox", inbox);
 app.route("/api/followers", followers);
+app.route("/api/analytics", analytics);
 app.route("/api/tags", tags);
 app.route("/api/engagement-gates", engagementGates);
 app.route("/api/quote-tweets", quoteTweets);
