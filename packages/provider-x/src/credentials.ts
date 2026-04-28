@@ -42,7 +42,7 @@ export interface XOAuth1aCredentials {
 export type XCredentials = XOAuth2Credentials | XOAuth1aCredentials;
 
 export interface XAccessTokenCredentials {
-  credentialType: XCredentialType;
+  credentialType: "x-oauth2";
   accessToken: string;
   xUserId: string | null;
   mediaIds?: string[];
@@ -98,11 +98,19 @@ export function requireXAccessTokenCredentials(
   operation: string,
 ): XAccessTokenCredentials {
   const credentials = parseXCredentials(raw);
+  if (credentials.credentialType !== "x-oauth2") {
+    throw new ProviderError(`${operation} requires X OAuth2/Bearer credentials`, {
+      operation,
+      credentialType: credentials.credentialType,
+      requiredCredentialType: "x-oauth2",
+      requiredAuthScheme: "Bearer",
+    });
+  }
   return {
     credentialType: credentials.credentialType,
     accessToken: credentials.accessToken,
     xUserId: credentials.xUserId,
-    mediaIds: credentials.credentialType === "x-oauth2" ? credentials.mediaIds : undefined,
+    mediaIds: credentials.mediaIds,
   };
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ProviderError } from "@sns-agent/core";
 import {
   X_OAUTH_1A_OPERATIONS,
   parseXCredentials,
@@ -91,6 +92,31 @@ describe("X credentials", () => {
       mediaIds: ["media-1"],
       credentialType: "x-oauth2",
     });
+  });
+
+  it("rejects OAuth 1.0a credentials for bearer token operations", () => {
+    expect(() =>
+      requireXAccessTokenCredentials(
+        JSON.stringify({
+          version: 1,
+          credentialType: "x-oauth1a",
+          accessToken: "oauth1-access",
+          accessTokenSecret: "oauth1-secret",
+        }),
+        "post.create",
+      ),
+    ).toThrow(ProviderError);
+    expect(() =>
+      requireXAccessTokenCredentials(
+        JSON.stringify({
+          version: 1,
+          credentialType: "x-oauth1a",
+          accessToken: "oauth1-access",
+          accessTokenSecret: "oauth1-secret",
+        }),
+        "post.create",
+      ),
+    ).toThrow(/post\.create requires X OAuth2\/Bearer credentials/);
   });
 
   it("rejects OAuth 2.0 credentials when an OAuth 1.0a-only operation is requested", () => {
