@@ -132,11 +132,35 @@ export function extractXRefreshToken(raw: string): {
     }
     return { refreshToken: null, xUserId: credentials.xUserId };
   } catch {
+    const legacy = parseLegacyRefreshTokenJson(raw);
+    if (legacy) return legacy;
+
     if (raw.length > 0 && !raw.includes(" ")) {
       return { refreshToken: raw, xUserId: null };
     }
     return { refreshToken: null, xUserId: null };
   }
+}
+
+function parseLegacyRefreshTokenJson(raw: string): {
+  refreshToken: string | null;
+  xUserId: string | null;
+} | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  if (!parsed || typeof parsed !== "object") return null;
+  const obj = parsed as Record<string, unknown>;
+  const refreshToken = readNullableString(obj, "refreshToken");
+  if (!refreshToken) return null;
+  return {
+    refreshToken,
+    xUserId: readNullableString(obj, "xUserId"),
+  };
 }
 
 function parseOAuth2Credentials(obj: Record<string, unknown>): XOAuth2Credentials {
