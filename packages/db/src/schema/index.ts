@@ -14,6 +14,7 @@ export { messages } from "./messages.js";
 export { followers } from "./followers.js";
 export { tags, followerTags } from "./tags.js";
 export { engagementGates, engagementGateDeliveries } from "./engagement-gates.js";
+export { engagementActions } from "./engagement-actions.js";
 export { usageRecords } from "./usage-records.js";
 export { budgetPolicies } from "./budget-policies.js";
 export { llmRoutes } from "./llm-routes.js";

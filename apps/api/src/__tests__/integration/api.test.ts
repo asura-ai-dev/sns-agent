@@ -1160,3 +1160,77 @@ describe("m. x reply send", () => {
     expect(approvalRow.payload).toContain("AI 返信案です。");
   });
 });
+
+// ───────────────────────────────────────────
+// n. X reply engagement actions (XHP-008)
+// ───────────────────────────────────────────
+describe("n. x reply engagement actions", () => {
+  it("likes a reply target idempotently and exposes actions in thread detail", async () => {
+    const sync = await req("POST", "/api/inbox/sync", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 10,
+    });
+    expect(sync.status).toBe(200);
+
+    const inbox = await req("GET", "/api/inbox?platform=x", seed.editorApiKey);
+    const thread = (inbox.body.data as Array<Record<string, unknown>>).find(
+      (row) => row.externalThreadId === "conv-sync-1",
+    );
+    expect(thread).toBeDefined();
+
+    const first = await req("POST", `/api/inbox/${thread?.id}/actions`, seed.editorApiKey, {
+      actionType: "like",
+    });
+    expect(first.status).toBe(201);
+    expect(first.body.data).toMatchObject({
+      created: true,
+      action: {
+        actionType: "like",
+        targetPostId: "tweet-sync-2",
+        status: "applied",
+      },
+    });
+
+    const duplicate = await req("POST", `/api/inbox/${thread?.id}/actions`, seed.editorApiKey, {
+      actionType: "like",
+    });
+    expect(duplicate.status).toBe(200);
+    expect(duplicate.body.data).toMatchObject({
+      created: false,
+      action: {
+        actionType: "like",
+        targetPostId: "tweet-sync-2",
+      },
+    });
+
+    const rows = ctx.sqlite
+      .prepare(
+        "SELECT action_type, target_post_id, status FROM engagement_actions WHERE thread_id = ?",
+      )
+      .all(thread?.id) as Array<{
+      action_type: string;
+      target_post_id: string;
+      status: string;
+    }>;
+    expect(rows).toEqual([
+      {
+        action_type: "like",
+        target_post_id: "tweet-sync-2",
+        status: "applied",
+      },
+    ]);
+
+    const detail = await req("GET", `/api/inbox/${thread?.id}`, seed.editorApiKey);
+    expect(detail.status).toBe(200);
+    const detailData = detail.body.data as {
+      engagementActions: Array<Record<string, unknown>>;
+    };
+    expect(detailData.engagementActions).toEqual([
+      expect.objectContaining({
+        actionType: "like",
+        targetPostId: "tweet-sync-2",
+        status: "applied",
+      }),
+    ]);
+  });
+});

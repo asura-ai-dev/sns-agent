@@ -40,6 +40,8 @@ import type {
   MessageListResult,
   SendReplyInput,
   SendReplyResult,
+  PerformEngagementActionInput,
+  EngagementActionResult,
   ListFollowersInput,
   FollowerListResult,
 } from "@sns-agent/core";
@@ -233,6 +235,14 @@ export function createMockXProvider(): SocialProvider {
       return {
         success: true,
         externalMessageId: `mock-reply-${randomUUID()}`,
+      };
+    },
+    async performEngagementAction(
+      input: PerformEngagementActionInput,
+    ): Promise<EngagementActionResult> {
+      return {
+        success: true,
+        externalActionId: `mock-${input.actionType}-${input.targetPostId}`,
       };
     },
     async listFollowers(_input: ListFollowersInput): Promise<FollowerListResult> {
