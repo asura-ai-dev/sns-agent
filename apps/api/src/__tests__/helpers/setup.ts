@@ -267,6 +267,29 @@ export function createMockXProvider(): SocialProvider {
         nextCursor: null,
       };
     },
+    async listEngagementReplies() {
+      return {
+        replies: [
+          {
+            externalReplyId: "tweet-gate-10",
+            externalUserId: "user-gate-1",
+            username: "gate_user",
+            text: "@mock count me in",
+            createdAt: new Date("2026-04-28T00:10:00Z"),
+            conversationId: "tweet-root-1",
+            inReplyToPostId: "tweet-root-1",
+          },
+        ],
+        nextSinceId: "tweet-gate-10",
+      };
+    },
+    async checkEngagementConditions() {
+      return {
+        liked: true,
+        reposted: true,
+        followed: true,
+      };
+    },
   };
 }
 

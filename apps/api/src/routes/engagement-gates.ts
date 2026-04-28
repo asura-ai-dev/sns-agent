@@ -1,0 +1,203 @@
+import { Hono } from "hono";
+import {
+  createEngagementGate,
+  deleteEngagementGate,
+  getEngagementGate,
+  listEngagementGates,
+  processEngagementGateReplies,
+  updateEngagementGate,
+  type EngagementGate,
+  type EngagementGateActionType,
+  type EngagementGateConditions,
+  type EngagementGateUsecaseDeps,
+  type EngagementGateStatus,
+} from "@sns-agent/core";
+import {
+  DrizzleAccountRepository,
+  DrizzleEngagementGateDeliveryRepository,
+  DrizzleEngagementGateRepository,
+} from "@sns-agent/db";
+import { requirePermission } from "../middleware/rbac.js";
+import { getProviderRegistry } from "../providers.js";
+import type { AppVariables } from "../types.js";
+
+const engagementGates = new Hono<{ Variables: AppVariables }>();
+
+function buildDeps(db: AppVariables["db"]): EngagementGateUsecaseDeps {
+  const encryptionKey =
+    process.env.ENCRYPTION_KEY ||
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+  return {
+    accountRepo: new DrizzleAccountRepository(db),
+    gateRepo: new DrizzleEngagementGateRepository(db),
+    deliveryRepo: new DrizzleEngagementGateDeliveryRepository(db),
+    providers: getProviderRegistry().getAll(),
+    encryptionKey,
+  };
+}
+
+function parseIntOrUndefined(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const n = Number.parseInt(value, 10);
+  return Number.isNaN(n) ? undefined : n;
+}
+
+function parseStatus(value: unknown): EngagementGateStatus | undefined {
+  if (value === "active" || value === "paused") return value;
+  return undefined;
+}
+
+function parseActionType(value: unknown): EngagementGateActionType | null {
+  if (value === "mention_post" || value === "dm" || value === "verify_only") return value;
+  return null;
+}
+
+function parseConditions(value: unknown): EngagementGateConditions | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  return {
+    requireLike: raw.requireLike === true,
+    requireRepost: raw.requireRepost === true,
+    requireFollow: raw.requireFollow === true,
+  };
+}
+
+function serializeGate(gate: EngagementGate): Record<string, unknown> {
+  return {
+    id: gate.id,
+    workspaceId: gate.workspaceId,
+    socialAccountId: gate.socialAccountId,
+    platform: gate.platform,
+    name: gate.name,
+    status: gate.status,
+    triggerType: gate.triggerType,
+    triggerPostId: gate.triggerPostId,
+    conditions: gate.conditions,
+    actionType: gate.actionType,
+    actionText: gate.actionText,
+    lastReplySinceId: gate.lastReplySinceId,
+    createdBy: gate.createdBy,
+    createdAt: gate.createdAt,
+    updatedAt: gate.updatedAt,
+  };
+}
+
+engagementGates.get("/", requirePermission("inbox:read"), async (c) => {
+  const actor = c.get("actor");
+  const deps = buildDeps(c.get("db"));
+  const status = parseStatus(c.req.query("status"));
+
+  const rows = await listEngagementGates(deps, actor.workspaceId, {
+    socialAccountId: c.req.query("socialAccountId"),
+    status,
+    limit: parseIntOrUndefined(c.req.query("limit")),
+  });
+
+  return c.json({ data: rows.map(serializeGate) });
+});
+
+engagementGates.post("/", requirePermission("inbox:reply"), async (c) => {
+  const actor = c.get("actor");
+  const deps = buildDeps(c.get("db"));
+  const body = await c.req.json<Record<string, unknown>>();
+  const actionType = parseActionType(body.actionType);
+  const conditions = parseConditions(body.conditions);
+
+  if (!body.socialAccountId || typeof body.socialAccountId !== "string") {
+    return c.json(
+      { error: { code: "VALIDATION_ERROR", message: "socialAccountId is required" } },
+      400,
+    );
+  }
+  if (!body.name || typeof body.name !== "string") {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "name is required" } }, 400);
+  }
+  if (!actionType) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "actionType is invalid" } }, 400);
+  }
+  if (conditions === null && body.conditions !== null && body.conditions !== undefined) {
+    return c.json(
+      { error: { code: "VALIDATION_ERROR", message: "conditions must be an object" } },
+      400,
+    );
+  }
+
+  const created = await createEngagementGate(deps, {
+    workspaceId: actor.workspaceId,
+    socialAccountId: body.socialAccountId,
+    name: body.name,
+    triggerPostId: typeof body.triggerPostId === "string" ? body.triggerPostId : null,
+    conditions: conditions ?? null,
+    actionType,
+    actionText: typeof body.actionText === "string" ? body.actionText : null,
+    createdBy: actor.id,
+  });
+
+  return c.json({ data: serializeGate(created) }, 201);
+});
+
+engagementGates.post("/process", requirePermission("inbox:reply"), async (c) => {
+  const deps = buildDeps(c.get("db"));
+  const body = await c.req.json<{ limit?: number }>().catch(() => ({}));
+  const result = await processEngagementGateReplies(deps, { limit: body.limit });
+  return c.json({ data: result });
+});
+
+engagementGates.get("/:id", requirePermission("inbox:read"), async (c) => {
+  const actor = c.get("actor");
+  const deps = buildDeps(c.get("db"));
+  const gate = await getEngagementGate(deps, actor.workspaceId, c.req.param("id"));
+  return c.json({ data: serializeGate(gate) });
+});
+
+engagementGates.patch("/:id", requirePermission("inbox:reply"), async (c) => {
+  const actor = c.get("actor");
+  const deps = buildDeps(c.get("db"));
+  const body = await c.req.json<Record<string, unknown>>();
+  const conditions = parseConditions(body.conditions);
+  const actionType = body.actionType === undefined ? undefined : parseActionType(body.actionType);
+  const status = body.status === undefined ? undefined : parseStatus(body.status);
+
+  if (body.actionType !== undefined && !actionType) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "actionType is invalid" } }, 400);
+  }
+  if (body.status !== undefined && !status) {
+    return c.json({ error: { code: "VALIDATION_ERROR", message: "status is invalid" } }, 400);
+  }
+  if (conditions === null && body.conditions !== null && body.conditions !== undefined) {
+    return c.json(
+      { error: { code: "VALIDATION_ERROR", message: "conditions must be an object" } },
+      400,
+    );
+  }
+
+  const updated = await updateEngagementGate(deps, {
+    workspaceId: actor.workspaceId,
+    id: c.req.param("id"),
+    name: typeof body.name === "string" ? body.name : undefined,
+    status,
+    triggerPostId: typeof body.triggerPostId === "string" ? body.triggerPostId : undefined,
+    conditions,
+    actionType: actionType ?? undefined,
+    actionText:
+      typeof body.actionText === "string"
+        ? body.actionText
+        : body.actionText === null
+          ? null
+          : undefined,
+  });
+
+  return c.json({ data: serializeGate(updated) });
+});
+
+engagementGates.delete("/:id", requirePermission("inbox:reply"), async (c) => {
+  const actor = c.get("actor");
+  const deps = buildDeps(c.get("db"));
+  await deleteEngagementGate(deps, actor.workspaceId, c.req.param("id"));
+  return c.json({ data: { success: true } });
+});
+
+export { engagementGates };

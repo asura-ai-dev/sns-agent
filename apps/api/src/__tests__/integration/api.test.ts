@@ -316,6 +316,128 @@ describe("a2. followers sync flow", () => {
 });
 
 // ───────────────────────────────────────────
+// a3. Engagement gates
+// ───────────────────────────────────────────
+describe("a3. engagement gates flow", () => {
+  it("supports protected CRUD under /api/engagement-gates", async () => {
+    const created = await req("POST", "/api/engagement-gates", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "  Launch reply gate  ",
+      triggerPostId: "tweet-root-1",
+      conditions: {
+        requireLike: true,
+        requireRepost: false,
+        requireFollow: true,
+      },
+      actionType: "verify_only",
+      actionText: null,
+    });
+
+    expect(created.status).toBe(201);
+    expect(created.body.data).toMatchObject({
+      socialAccountId: seed.socialAccountId,
+      platform: "x",
+      name: "Launch reply gate",
+      triggerType: "reply",
+      triggerPostId: "tweet-root-1",
+      conditions: {
+        requireLike: true,
+        requireRepost: false,
+        requireFollow: true,
+      },
+      actionType: "verify_only",
+      lastReplySinceId: null,
+    });
+    const gateId = (created.body.data as { id: string }).id;
+
+    const listed = await req(
+      "GET",
+      `/api/engagement-gates?socialAccountId=${seed.socialAccountId}`,
+      seed.viewerApiKey,
+    );
+    expect(listed.status).toBe(200);
+    expect(listed.body.data).toEqual([expect.objectContaining({ id: gateId })]);
+
+    const updated = await req("PATCH", `/api/engagement-gates/${gateId}`, seed.editorApiKey, {
+      status: "paused",
+      actionType: "dm",
+      actionText: "secret",
+    });
+    expect(updated.status).toBe(200);
+    expect(updated.body.data).toMatchObject({
+      id: gateId,
+      status: "paused",
+      actionType: "dm",
+      actionText: "secret",
+    });
+
+    const viewerCreate = await req("POST", "/api/engagement-gates", seed.viewerApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "viewer blocked",
+      actionType: "verify_only",
+    });
+    expect(viewerCreate.status).toBe(403);
+
+    const deleted = await req("DELETE", `/api/engagement-gates/${gateId}`, seed.editorApiKey);
+    expect(deleted.status).toBe(200);
+  });
+
+  it("processes reply-trigger gates and persists delivery dedupe state", async () => {
+    const created = await req("POST", "/api/engagement-gates", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "Process gate",
+      triggerPostId: "tweet-root-1",
+      conditions: {
+        requireLike: true,
+        requireRepost: true,
+        requireFollow: true,
+      },
+      actionType: "verify_only",
+    });
+    expect(created.status).toBe(201);
+    const gateId = (created.body.data as { id: string }).id;
+
+    const processed = await req("POST", "/api/engagement-gates/process", seed.editorApiKey, {
+      limit: 10,
+    });
+    expect(processed.status).toBe(200);
+    expect(processed.body.data).toMatchObject({
+      gatesScanned: expect.any(Number),
+      deliveriesCreated: 1,
+      skippedDuplicate: 0,
+      lastReplySinceIdsUpdated: expect.any(Number),
+    });
+
+    const gateRow = ctx.sqlite
+      .prepare("SELECT last_reply_since_id FROM engagement_gates WHERE id = ?")
+      .get(gateId) as { last_reply_since_id: string | null } | undefined;
+    expect(gateRow?.last_reply_since_id).toBe("tweet-gate-10");
+
+    const deliveries = ctx.sqlite
+      .prepare(
+        "SELECT external_user_id, external_reply_id, status FROM engagement_gate_deliveries WHERE engagement_gate_id = ?",
+      )
+      .all(gateId);
+    expect(deliveries).toEqual([
+      expect.objectContaining({
+        external_user_id: "user-gate-1",
+        external_reply_id: "tweet-gate-10",
+        status: "verified",
+      }),
+    ]);
+
+    const processedAgain = await req("POST", "/api/engagement-gates/process", seed.editorApiKey, {
+      limit: 10,
+    });
+    expect(processedAgain.status).toBe(200);
+    expect(processedAgain.body.data).toMatchObject({
+      deliveriesCreated: 0,
+      skippedDuplicate: expect.any(Number),
+    });
+  });
+});
+
+// ───────────────────────────────────────────
 // b. 投稿作成→公開フロー
 // ───────────────────────────────────────────
 describe("b. post draft→publish flow", () => {

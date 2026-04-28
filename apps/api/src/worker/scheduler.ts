@@ -11,10 +11,12 @@
  *
  * 起動は apps/api/src/index.ts で ENABLE_SCHEDULER=true の時のみ行う。
  */
-import { dispatchDueJobs, POLL_BATCH_SIZE } from "@sns-agent/core";
-import type { ScheduleUsecaseDeps } from "@sns-agent/core";
+import { dispatchDueJobs, POLL_BATCH_SIZE, processEngagementGateReplies } from "@sns-agent/core";
+import type { EngagementGateUsecaseDeps, ScheduleUsecaseDeps } from "@sns-agent/core";
 import {
   DrizzleAuditLogRepository,
+  DrizzleEngagementGateDeliveryRepository,
+  DrizzleEngagementGateRepository,
   DrizzleScheduledJobRepository,
   DrizzlePostRepository,
   DrizzleAccountRepository,
@@ -75,6 +77,20 @@ function buildScheduleDeps(db: DbClient): ScheduleUsecaseDeps {
   };
 }
 
+function buildEngagementGateDeps(db: DbClient): EngagementGateUsecaseDeps {
+  const encryptionKey =
+    process.env.ENCRYPTION_KEY ||
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+  return {
+    accountRepo: new DrizzleAccountRepository(db),
+    gateRepo: new DrizzleEngagementGateRepository(db),
+    deliveryRepo: new DrizzleEngagementGateDeliveryRepository(db),
+    providers: getProviderRegistry().getAll(),
+    encryptionKey,
+  };
+}
+
 /**
  * Polling スケジューラワーカーを作成する。
  *
@@ -100,10 +116,16 @@ export function createSchedulerWorker(options: SchedulerWorkerOptions = {}): Sch
   let running = false;
   let tickInFlight: Promise<void> | null = null;
 
-  const deps = buildScheduleDeps(options.db ?? getDb());
+  const db = options.db ?? getDb();
+  const deps = buildScheduleDeps(db);
+  const engagementGateDeps = buildEngagementGateDeps(db);
 
   async function runBatch(): Promise<void> {
     const result = await dispatchDueJobs(deps, { limit: batchSize });
+    const gateResult = await processEngagementGateReplies(engagementGateDeps, { limit: batchSize });
+    if (gateResult.gatesScanned > 0) {
+      logger.info(`processed engagement gate replies`, gateResult);
+    }
     if (result.scanned === 0) return;
 
     logger.info(`processed ${result.processed}/${result.scanned} due job(s)`, {
@@ -206,9 +228,12 @@ export async function runSchedulerBatch(
     error: (msg, meta) => console.error(`[scheduler] ${msg}`, meta ?? ""),
   };
 
-  const deps = buildScheduleDeps(options.db ?? getDb());
+  const db = options.db ?? getDb();
+  const deps = buildScheduleDeps(db);
+  const engagementGateDeps = buildEngagementGateDeps(db);
   const batchSize = options.batchSize ?? POLL_BATCH_SIZE;
   const result = await dispatchDueJobs(deps, { limit: batchSize });
+  const gateResult = await processEngagementGateReplies(engagementGateDeps, { limit: batchSize });
 
   logger.info(`single run complete`, {
     scanned: result.scanned,
@@ -217,7 +242,29 @@ export async function runSchedulerBatch(
     retrying: result.retrying,
     failed: result.failed,
     skipped: result.skipped,
+    engagementGates: gateResult,
   });
 
+  return result;
+}
+
+export async function runEngagementGateBatch(
+  options: SchedulerWorkerOptions = {},
+): Promise<Awaited<ReturnType<typeof processEngagementGateReplies>>> {
+  const logger = options.logger ?? {
+    // eslint-disable-next-line no-console
+    info: (msg, meta) => console.log(`[scheduler] ${msg}`, meta ?? ""),
+    // eslint-disable-next-line no-console
+    warn: (msg, meta) => console.warn(`[scheduler] ${msg}`, meta ?? ""),
+    // eslint-disable-next-line no-console
+    error: (msg, meta) => console.error(`[scheduler] ${msg}`, meta ?? ""),
+  };
+  const db = options.db ?? getDb();
+  const batchSize = options.batchSize ?? POLL_BATCH_SIZE;
+  const result = await processEngagementGateReplies(buildEngagementGateDeps(db), {
+    limit: batchSize,
+  });
+
+  logger.info(`single engagement gate run complete`, result);
   return result;
 }
