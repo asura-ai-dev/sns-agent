@@ -7,6 +7,8 @@
 - `requirements.md`: プロダクト要件定義書
 - `architecture.md`: システムアーキテクチャ定義
 - `development.md`: ローカル開発手順
+- `x-harness-parity.md`: X Harness OSS 同等化の人間向け実装計画
+- `x-harness-parity-tickets.json`: Codex / サブエージェント向けの機械可読チケット台帳
 
 ## Purpose
 

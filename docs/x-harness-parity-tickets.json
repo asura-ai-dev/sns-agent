@@ -1,0 +1,761 @@
+{
+  "schema_version": "1.0",
+  "workstream": {
+    "id": "x-harness-parity",
+    "title": "X Harness OSS parity for sns-agent",
+    "status": "planned",
+    "created_at": "2026-04-28",
+    "branch": "dev",
+    "human_doc": "docs/x-harness-parity.md",
+    "reference_sources": [
+      {
+        "kind": "repository",
+        "url": "https://github.com/Shudesu/x-harness-oss"
+      },
+      {
+        "kind": "readme",
+        "url": "https://github.com/Shudesu/x-harness-oss#readme"
+      },
+      {
+        "kind": "spec",
+        "url": "https://raw.githubusercontent.com/Shudesu/x-harness-oss/main/docs/SPEC.md"
+      },
+      {
+        "kind": "schema",
+        "url": "https://raw.githubusercontent.com/Shudesu/x-harness-oss/main/packages/db/schema.sql"
+      }
+    ],
+    "canonical_boundaries": {
+      "semantic_source": "docs/x-harness-parity.md",
+      "machine_ticket_source": "docs/x-harness-parity-tickets.json",
+      "lifecycle_status_source": "docs/x-harness-parity-tickets.json",
+      "old_task_files_policy": "Do not recreate tasks/, agent-output/, or feature/* task-management docs."
+    }
+  },
+  "roles": {
+    "planner": {
+      "owns": ["scope", "ticket order", "dependencies", "phase boundaries"]
+    },
+    "implementer": {
+      "owns": ["bounded code changes for one active ticket"]
+    },
+    "verifier": {
+      "owns": ["ticket-level verification only"]
+    },
+    "evaluator": {
+      "owns": ["phase-level integration evaluation only"]
+    },
+    "reviewer": {
+      "owns": ["UI review findings only when ui_review is required"]
+    }
+  },
+  "status_values": ["planned", "ready", "blocked", "in_progress", "implemented", "verified", "evaluated"],
+  "priority_values": ["P0", "P1", "P2"],
+  "phases": [
+    {
+      "id": "phase-0",
+      "title": "Contract And Data Foundation",
+      "tickets": ["XHP-001", "XHP-002", "XHP-011", "XHP-012", "XHP-013", "XHP-015"]
+    },
+    {
+      "id": "phase-1",
+      "title": "Post And Scheduler Parity",
+      "tickets": ["XHP-003", "XHP-004"]
+    },
+    {
+      "id": "phase-2",
+      "title": "Engagement Gate MVP",
+      "tickets": ["XHP-005", "XHP-006", "XHP-020"]
+    },
+    {
+      "id": "phase-3",
+      "title": "CRM And Inbox",
+      "tickets": ["XHP-008", "XHP-009", "XHP-010", "XHP-014"]
+    },
+    {
+      "id": "phase-4",
+      "title": "Campaigns UI SDK MCP",
+      "tickets": ["XHP-007", "XHP-017", "XHP-018", "XHP-019"]
+    },
+    {
+      "id": "phase-5",
+      "title": "Deployment And Hardening",
+      "tickets": ["XHP-016", "XHP-021"]
+    }
+  ],
+  "tickets": [
+    {
+      "id": "XHP-001",
+      "title": "Align X account model and credentials",
+      "status": "ready",
+      "priority": "P0",
+      "phase": "phase-0",
+      "owner_role": "implementer",
+      "dependencies": [],
+      "ui_review": "not_required",
+      "summary": "Map X Harness x_accounts semantics onto sns-agent social_accounts without breaking multi-platform accounts.",
+      "scope": [
+        "Represent X OAuth 2.0 and OAuth 1.0a credential fields in encrypted credentials.",
+        "Document credential shapes for posting, media upload, DM, follow, like, repost, and search operations.",
+        "Keep social_accounts as the shared account table unless implementation proves a separate X extension table is required."
+      ],
+      "candidate_paths": [
+        "packages/provider-x/src/auth.ts",
+        "packages/provider-x/src/index.ts",
+        "packages/provider-x/src/credentials.ts",
+        "packages/core/src/interfaces/social-provider.ts",
+        "packages/db/src/schema/social-accounts.ts",
+        "docs/x-harness-parity.md"
+      ],
+      "acceptance": [
+        "X credential type is explicit and covered by unit tests.",
+        "Existing account connect flow still works.",
+        "Downstream tickets can request OAuth 1.0a-only operations without guessing credential fields."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/provider-x test",
+        "pnpm --filter @sns-agent/core test"
+      ]
+    },
+    {
+      "id": "XHP-002",
+      "title": "Build typed X API v2 client surface",
+      "status": "ready",
+      "priority": "P0",
+      "phase": "phase-0",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-001"],
+      "ui_review": "not_required",
+      "summary": "Expand the minimal X HTTP client into typed methods needed by X Harness parity.",
+      "scope": [
+        "Add typed methods for users/me, tweets create/delete/get/search, mentions, liking users, retweeted by, followers, following, DM conversations/events, like, repost, reply, and quote lookup.",
+        "Normalize X API errors and rate-limit metadata.",
+        "Keep fetch injectable for deterministic tests."
+      ],
+      "candidate_paths": [
+        "packages/provider-x/src/http-client.ts",
+        "packages/provider-x/src/x-api.ts",
+        "packages/provider-x/src/__tests__/http-client.test.ts"
+      ],
+      "acceptance": [
+        "Each client method has request/response tests with mocked fetch.",
+        "Rate limit and 429 responses expose structured retry metadata.",
+        "No route/usecase calls raw X endpoints directly."
+      ],
+      "verification": ["pnpm --filter @sns-agent/provider-x test"]
+    },
+    {
+      "id": "XHP-003",
+      "title": "Implement X post media thread and quote publishing parity",
+      "status": "planned",
+      "priority": "P0",
+      "phase": "phase-1",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-001", "XHP-002"],
+      "ui_review": "not_required",
+      "summary": "Bring X publishing beyond single text tweets.",
+      "scope": [
+        "Support media upload or documented pre-upload handoff for images/videos.",
+        "Support thread creation as ordered tweet chain.",
+        "Support quote tweet creation.",
+        "Preserve generic post model and add X-specific extra params where needed."
+      ],
+      "candidate_paths": [
+        "packages/provider-x/src/post.ts",
+        "packages/provider-x/src/media.ts",
+        "packages/core/src/usecases/post.ts",
+        "apps/api/src/routes/posts.ts",
+        "packages/sdk/src/types.ts"
+      ],
+      "acceptance": [
+        "X provider declares threadPost true when implemented.",
+        "Unit tests cover text, media, thread, quote, and validation failures.",
+        "Generic LINE/Instagram provider behavior is unchanged."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/provider-x test",
+        "pnpm --filter @sns-agent/core test",
+        "pnpm --filter @sns-agent/api test"
+      ]
+    },
+    {
+      "id": "XHP-004",
+      "title": "Harden scheduled post parity",
+      "status": "planned",
+      "priority": "P1",
+      "phase": "phase-1",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-003"],
+      "ui_review": "not_required",
+      "summary": "Ensure scheduled X posts match X Harness behavior while using sns-agent's generic scheduler.",
+      "scope": [
+        "Verify scheduled X posts can publish all XHP-003 post variants.",
+        "Expose cancellation/listing parity through API, SDK, CLI, and UI.",
+        "Record failure/retry state clearly."
+      ],
+      "candidate_paths": [
+        "packages/core/src/usecases/schedule.ts",
+        "apps/api/src/routes/schedules.ts",
+        "apps/api/src/worker/scheduler.ts",
+        "packages/cli/src/commands/schedule.ts"
+      ],
+      "acceptance": [
+        "Scheduler test covers X post variants.",
+        "Failed X API calls preserve retryable vs terminal error state.",
+        "Schedule cancellation remains idempotent."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/core test",
+        "pnpm --filter @sns-agent/api test",
+        "pnpm --filter @sns-agent/cli test"
+      ]
+    },
+    {
+      "id": "XHP-005",
+      "title": "Implement engagement gate domain API and processor",
+      "status": "planned",
+      "priority": "P0",
+      "phase": "phase-2",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-002", "XHP-003", "XHP-011"],
+      "ui_review": "not_required",
+      "summary": "Add X Harness secret-reply engagement gates with reply-trigger first.",
+      "scope": [
+        "Add engagement_gates and engagement_gate_deliveries schema/repositories/domain types.",
+        "Add CRUD API under /api/engagement-gates.",
+        "Add processor that checks replies via since_id, evaluates like/repost/follow requirements, and records delivery dedupe.",
+        "Support action types mention_post, dm, and verify_only."
+      ],
+      "candidate_paths": [
+        "packages/db/src/schema/engagement-gates.ts",
+        "packages/db/src/repositories/engagement-gate-repository.ts",
+        "packages/core/src/usecases/engagement-gates.ts",
+        "apps/api/src/routes/engagement-gates.ts",
+        "apps/api/src/worker/scheduler.ts"
+      ],
+      "acceptance": [
+        "Gate CRUD endpoints exist and are protected by RBAC.",
+        "Processor is idempotent per gate/user.",
+        "Reply-trigger path uses last_reply_since_id.",
+        "Legacy like/repost trigger can be represented even if lower priority."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/db test",
+        "pnpm --filter @sns-agent/core test",
+        "pnpm --filter @sns-agent/api test"
+      ]
+    },
+    {
+      "id": "XHP-006",
+      "title": "Add gate verify API and LINE Harness handoff",
+      "status": "planned",
+      "priority": "P0",
+      "phase": "phase-2",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-005"],
+      "ui_review": "not_required",
+      "summary": "Expose X Harness verify semantics for cross-platform campaigns.",
+      "scope": [
+        "Add GET /api/engagement-gates/:id/verify?username=... response with eligible and condition booleans.",
+        "Support delivery tokens and consumed_at for external reward redemption.",
+        "Store optional LINE Harness URL, API key reference, tag, and scenario fields.",
+        "Do not leak secret API keys in responses."
+      ],
+      "candidate_paths": [
+        "apps/api/src/routes/engagement-gates.ts",
+        "packages/core/src/usecases/engagement-gates.ts",
+        "packages/db/src/schema/engagement-gates.ts",
+        "packages/sdk/src/client.ts"
+      ],
+      "acceptance": [
+        "Verify API is callable by configured auth path.",
+        "Response shape matches X Harness eligible/conditions contract.",
+        "Token consumption is idempotent and auditable."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/core test",
+        "pnpm --filter @sns-agent/api test",
+        "pnpm --filter @sns-agent/sdk test"
+      ]
+    },
+    {
+      "id": "XHP-007",
+      "title": "Build campaign wizard API and dashboard flow",
+      "status": "planned",
+      "priority": "P1",
+      "phase": "phase-4",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-005", "XHP-006", "XHP-019"],
+      "ui_review": "required",
+      "summary": "Create the post -> conditions -> LINE -> preview wizard from X Harness.",
+      "scope": [
+        "Add campaign create API that composes post, gate, verify, and optional LINE handoff.",
+        "Add dashboard wizard with preview and validation states.",
+        "Persist enough campaign metadata for editing and analytics."
+      ],
+      "candidate_paths": [
+        "apps/api/src/routes/campaigns.ts",
+        "packages/core/src/usecases/campaigns.ts",
+        "apps/web/src/app/(dashboard)/campaigns/page.tsx",
+        "apps/web/src/components/campaigns"
+      ],
+      "acceptance": [
+        "Wizard can create a draft campaign without publishing.",
+        "Wizard can publish/schedule when permissions allow.",
+        "UI review artifacts include desktop and mobile screenshots."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/api test",
+        "pnpm --filter @sns-agent/web test"
+      ]
+    },
+    {
+      "id": "XHP-008",
+      "title": "Implement X reply management",
+      "status": "planned",
+      "priority": "P1",
+      "phase": "phase-3",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-002"],
+      "ui_review": "required",
+      "summary": "Support mentions/replies, one-click like/repost, reply, and own reply visibility.",
+      "scope": [
+        "Implement X provider listThreads/getMessages/sendReply for mentions and reply threads.",
+        "Add like/repost engagement actions from dashboard/API.",
+        "Persist engagement_actions for dedupe and display."
+      ],
+      "candidate_paths": [
+        "packages/provider-x/src/inbox.ts",
+        "packages/core/src/usecases/inbox.ts",
+        "packages/db/src/schema/engagement-actions.ts",
+        "apps/api/src/routes/inbox.ts",
+        "apps/web/src/app/(dashboard)/inbox/page.tsx"
+      ],
+      "acceptance": [
+        "Inbox can list X mentions/replies.",
+        "Reply send records outbound message.",
+        "Like/repost actions are idempotent."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/provider-x test",
+        "pnpm --filter @sns-agent/core test",
+        "pnpm --filter @sns-agent/api test",
+        "pnpm --filter @sns-agent/web test"
+      ]
+    },
+    {
+      "id": "XHP-009",
+      "title": "Implement X DM management",
+      "status": "planned",
+      "priority": "P1",
+      "phase": "phase-3",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-001", "XHP-002"],
+      "ui_review": "required",
+      "summary": "Add X DM conversations, history, and send support.",
+      "scope": [
+        "Map X DM conversations/events into generic conversation_threads and messages.",
+        "Implement send DM through X provider.",
+        "Handle missing DM permissions clearly."
+      ],
+      "candidate_paths": [
+        "packages/provider-x/src/dm.ts",
+        "packages/provider-x/src/index.ts",
+        "packages/core/src/usecases/inbox.ts",
+        "apps/api/src/routes/inbox.ts",
+        "apps/web/src/app/(dashboard)/inbox/page.tsx"
+      ],
+      "acceptance": [
+        "DM list/detail/send are covered by mocked provider tests.",
+        "Permission failures produce actionable API errors.",
+        "UI distinguishes reply threads from DM conversations."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/provider-x test",
+        "pnpm --filter @sns-agent/api test",
+        "pnpm --filter @sns-agent/web test"
+      ]
+    },
+    {
+      "id": "XHP-010",
+      "title": "Persist and act on quote tweets",
+      "status": "planned",
+      "priority": "P1",
+      "phase": "phase-3",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-002", "XHP-003"],
+      "ui_review": "required",
+      "summary": "Detect quote tweets, store them beyond API search windows, and allow reply actions.",
+      "scope": [
+        "Add quote_tweets schema/repository/usecase.",
+        "Add processor to discover quotes for tracked source tweets.",
+        "Expose list/detail/action endpoints and dashboard view."
+      ],
+      "candidate_paths": [
+        "packages/db/src/schema/quote-tweets.ts",
+        "packages/core/src/usecases/quote-tweets.ts",
+        "apps/api/src/routes/quote-tweets.ts",
+        "apps/web/src/app/(dashboard)/quotes/page.tsx"
+      ],
+      "acceptance": [
+        "Quote tweets are deduped by source tweet and quote id.",
+        "Stored quote data includes author profile fields needed by UI.",
+        "Dashboard can trigger reply/like/repost where permissions allow."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/db test",
+        "pnpm --filter @sns-agent/core test",
+        "pnpm --filter @sns-agent/api test",
+        "pnpm --filter @sns-agent/web test"
+      ]
+    },
+    {
+      "id": "XHP-011",
+      "title": "Add X follower repository sync and segments",
+      "status": "planned",
+      "priority": "P0",
+      "phase": "phase-0",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-001", "XHP-002"],
+      "ui_review": "not_required",
+      "summary": "Store X followers with profile and relationship state.",
+      "scope": [
+        "Add followers schema/repository/domain types.",
+        "Add sync usecase for followers/following.",
+        "Represent is_following, is_followed, unfollowed_at, and metadata."
+      ],
+      "candidate_paths": [
+        "packages/db/src/schema/followers.ts",
+        "packages/db/src/repositories/follower-repository.ts",
+        "packages/core/src/usecases/followers.ts",
+        "apps/api/src/routes/followers.ts"
+      ],
+      "acceptance": [
+        "Follower sync upserts current followers and marks unfollowed rows.",
+        "Follower list supports account and tag filters after XHP-012.",
+        "Repository tests cover unique account/user constraints."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/db test",
+        "pnpm --filter @sns-agent/core test",
+        "pnpm --filter @sns-agent/api test"
+      ]
+    },
+    {
+      "id": "XHP-012",
+      "title": "Add follower tags",
+      "status": "planned",
+      "priority": "P0",
+      "phase": "phase-0",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-011"],
+      "ui_review": "not_required",
+      "summary": "Implement X Harness tag model for followers and segments.",
+      "scope": [
+        "Add tags and follower_tags schema/repositories/usecases.",
+        "Add CRUD API for tags.",
+        "Add attach/detach endpoints for followers."
+      ],
+      "candidate_paths": [
+        "packages/db/src/schema/tags.ts",
+        "packages/db/src/repositories/tag-repository.ts",
+        "packages/core/src/usecases/tags.ts",
+        "apps/api/src/routes/tags.ts"
+      ],
+      "acceptance": [
+        "Tags are unique per X account.",
+        "Follower tag attach/detach is idempotent.",
+        "Follower list can filter by tag."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/db test",
+        "pnpm --filter @sns-agent/core test",
+        "pnpm --filter @sns-agent/api test"
+      ]
+    },
+    {
+      "id": "XHP-013",
+      "title": "Add follower snapshot analytics",
+      "status": "planned",
+      "priority": "P1",
+      "phase": "phase-0",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-011"],
+      "ui_review": "required",
+      "summary": "Track daily follower counts and expose 7/30 day deltas.",
+      "scope": [
+        "Add follower_snapshots schema/repository/usecase.",
+        "Add scheduled snapshot job.",
+        "Add analytics API and dashboard chart."
+      ],
+      "candidate_paths": [
+        "packages/db/src/schema/follower-snapshots.ts",
+        "packages/core/src/usecases/follower-analytics.ts",
+        "apps/api/src/routes/analytics.ts",
+        "apps/web/src/components/analytics"
+      ],
+      "acceptance": [
+        "Analytics response includes current count, 7 day delta, 30 day delta, and time series.",
+        "Snapshot job is idempotent per account/day.",
+        "Chart renders with empty, loading, and populated states."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/core test",
+        "pnpm --filter @sns-agent/api test",
+        "pnpm --filter @sns-agent/web test"
+      ]
+    },
+    {
+      "id": "XHP-014",
+      "title": "Implement step sequences",
+      "status": "planned",
+      "priority": "P2",
+      "phase": "phase-3",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-005", "XHP-009", "XHP-012"],
+      "ui_review": "required",
+      "summary": "Add delayed mention/DM step delivery for enrolled X users.",
+      "scope": [
+        "Add step_sequences, step_messages, and step_enrollments schema/repositories/usecases.",
+        "Add sequence CRUD and enrollment APIs.",
+        "Add scheduler processor for due steps."
+      ],
+      "candidate_paths": [
+        "packages/db/src/schema/step-sequences.ts",
+        "packages/core/src/usecases/step-sequences.ts",
+        "apps/api/src/routes/step-sequences.ts",
+        "apps/web/src/app/(dashboard)/sequences/page.tsx"
+      ],
+      "acceptance": [
+        "Enrolled users advance through due steps.",
+        "Cancelled/completed enrollments do not send.",
+        "Delivery uses stealth controls from XHP-020 when configured."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/core test",
+        "pnpm --filter @sns-agent/api test",
+        "pnpm --filter @sns-agent/web test"
+      ]
+    },
+    {
+      "id": "XHP-015",
+      "title": "Add X usage analytics dimensions",
+      "status": "planned",
+      "priority": "P1",
+      "phase": "phase-0",
+      "owner_role": "implementer",
+      "dependencies": [],
+      "ui_review": "required",
+      "summary": "Extend generic usage to support endpoint and gate-level X cost views.",
+      "scope": [
+        "Tag usage records with gate id or feature metadata where available.",
+        "Add gate-level usage aggregation.",
+        "Expose endpoint-level and gate-level dashboard tables."
+      ],
+      "candidate_paths": [
+        "packages/db/src/schema/usage-records.ts",
+        "packages/core/src/usecases/usage.ts",
+        "apps/api/src/routes/usage.ts",
+        "apps/web/src/components/usage"
+      ],
+      "acceptance": [
+        "Usage API can return platform, endpoint, and gate-level aggregates.",
+        "Existing usage dashboard remains compatible.",
+        "Budget checks can still evaluate endpoint scope."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/core test",
+        "pnpm --filter @sns-agent/api test",
+        "pnpm --filter @sns-agent/web test"
+      ]
+    },
+    {
+      "id": "XHP-016",
+      "title": "Review staff and API key parity",
+      "status": "planned",
+      "priority": "P2",
+      "phase": "phase-5",
+      "owner_role": "implementer",
+      "dependencies": [],
+      "ui_review": "not_required",
+      "summary": "Confirm sns-agent users and agent identities cover X Harness staff expectations.",
+      "scope": [
+        "Map owner/admin/editor/viewer to existing roles.",
+        "Map API key scoped permissions to agent identities and RBAC.",
+        "Only add schema or API changes if a parity gap remains."
+      ],
+      "candidate_paths": [
+        "packages/config/src/constants.ts",
+        "packages/core/src/policies/rbac.ts",
+        "apps/api/src/routes/users.ts",
+        "apps/web/src/app/(dashboard)/settings/users/page.tsx"
+      ],
+      "acceptance": [
+        "Documented role mapping exists.",
+        "Any missing scope has a failing test before implementation.",
+        "Existing admin/user settings behavior is preserved."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/core test",
+        "pnpm --filter @sns-agent/api test",
+        "pnpm --filter @sns-agent/web test"
+      ]
+    },
+    {
+      "id": "XHP-017",
+      "title": "Add X Harness MCP server package",
+      "status": "planned",
+      "priority": "P1",
+      "phase": "phase-4",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-005", "XHP-008", "XHP-009", "XHP-018"],
+      "ui_review": "not_required",
+      "summary": "Expose X operations through MCP tools equivalent to the reference.",
+      "scope": [
+        "Create package for MCP server or adapter using @sns-agent/sdk.",
+        "Expose tools for posts, DM, users, followers, gates, campaigns, staff, step sequences, and usage.",
+        "Document environment variables and local setup."
+      ],
+      "candidate_paths": [
+        "packages/mcp/package.json",
+        "packages/mcp/src/index.ts",
+        "packages/sdk/src/client.ts",
+        "docs/development.md"
+      ],
+      "acceptance": [
+        "MCP server starts locally with API URL and API key env vars.",
+        "Tool names cover the X Harness 30-tool surface or documented equivalent names.",
+        "Tool tests validate argument schemas."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/mcp test",
+        "pnpm --filter @sns-agent/mcp build"
+      ]
+    },
+    {
+      "id": "XHP-018",
+      "title": "Extend SDK with X parity resources",
+      "status": "planned",
+      "priority": "P1",
+      "phase": "phase-4",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-005", "XHP-008", "XHP-011", "XHP-012", "XHP-015"],
+      "ui_review": "not_required",
+      "summary": "Add SDK resources for X-specific parity APIs.",
+      "scope": [
+        "Add typed resources for engagement gates, followers, tags, analytics, campaigns, quote tweets, and step sequences as they land.",
+        "Keep generic resources stable.",
+        "Add examples for agent usage."
+      ],
+      "candidate_paths": [
+        "packages/sdk/src/client.ts",
+        "packages/sdk/src/types.ts",
+        "packages/sdk/src/__tests__"
+      ],
+      "acceptance": [
+        "SDK methods match API response DTOs.",
+        "MCP ticket can consume SDK without raw fetch.",
+        "Backward compatibility tests for existing SDK methods pass."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/sdk test",
+        "pnpm --filter @sns-agent/sdk build"
+      ]
+    },
+    {
+      "id": "XHP-019",
+      "title": "Build X-specific dashboard parity shell",
+      "status": "planned",
+      "priority": "P1",
+      "phase": "phase-4",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-005", "XHP-008", "XHP-011", "XHP-012", "XHP-013", "XHP-015"],
+      "ui_review": "required",
+      "summary": "Add dashboard navigation and pages for X Harness parity features.",
+      "scope": [
+        "Add pages/nav for gates, campaigns, followers, tags, analytics, quotes, and sequences.",
+        "Keep existing generic posts/inbox/usage pages intact.",
+        "Use existing design system and responsive layout patterns."
+      ],
+      "candidate_paths": [
+        "apps/web/src/components/layout/Sidebar.tsx",
+        "apps/web/src/app/(dashboard)/gates/page.tsx",
+        "apps/web/src/app/(dashboard)/followers/page.tsx",
+        "apps/web/src/app/(dashboard)/analytics/page.tsx",
+        "apps/web/src/app/(dashboard)/campaigns/page.tsx"
+      ],
+      "acceptance": [
+        "Each page handles loading, empty, error, and populated states.",
+        "Mobile and desktop screenshots pass UI review.",
+        "No text overlap or nested-card layout regressions."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/web test",
+        "pnpm --filter @sns-agent/web build"
+      ]
+    },
+    {
+      "id": "XHP-020",
+      "title": "Add stealth delivery controls",
+      "status": "planned",
+      "priority": "P0",
+      "phase": "phase-2",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-005"],
+      "ui_review": "not_required",
+      "summary": "Implement jitter, rate limits, backoff, and template variation for automation safety.",
+      "scope": [
+        "Add configurable per-account/per-gate hourly and daily limits.",
+        "Add jittered delivery scheduling instead of immediate burst sending.",
+        "Add template variation helper.",
+        "Stop or back off on 429 responses."
+      ],
+      "candidate_paths": [
+        "packages/core/src/usecases/stealth.ts",
+        "packages/core/src/usecases/engagement-gates.ts",
+        "packages/db/src/schema/engagement-gates.ts",
+        "apps/api/src/worker/scheduler.ts"
+      ],
+      "acceptance": [
+        "Gate processor never sends more than configured rate limits.",
+        "429 response prevents additional sends for the affected gate/account until retry window.",
+        "Template variation is deterministic in tests when seeded."
+      ],
+      "verification": [
+        "pnpm --filter @sns-agent/core test",
+        "pnpm --filter @sns-agent/api test"
+      ]
+    },
+    {
+      "id": "XHP-021",
+      "title": "Add optional Cloudflare Worker D1 deployment path",
+      "status": "planned",
+      "priority": "P2",
+      "phase": "phase-5",
+      "owner_role": "implementer",
+      "dependencies": ["XHP-005", "XHP-018"],
+      "ui_review": "not_required",
+      "summary": "Provide a self-host path comparable to X Harness OSS without replacing local Node development.",
+      "scope": [
+        "Assess whether apps/api can run on Workers or whether a worker adapter app is cleaner.",
+        "Add D1-compatible migration/deploy docs and config.",
+        "Keep existing local SQLite workflow working."
+      ],
+      "candidate_paths": [
+        "apps/worker",
+        "packages/db",
+        "docs/development.md",
+        ".dev.vars.example"
+      ],
+      "acceptance": [
+        "Documented deploy path exists for Cloudflare.",
+        "Local dev remains unchanged.",
+        "D1 schema is generated or documented from Drizzle migrations."
+      ],
+      "verification": [
+        "pnpm build",
+        "pnpm test"
+      ]
+    }
+  ]
+}

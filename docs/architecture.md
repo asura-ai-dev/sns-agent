@@ -1,5 +1,9 @@
 # SNS Agent Architecture
 
+> Status: background reference.
+> Current X-focused implementation planning lives in `docs/x-harness-parity.md`, and the machine-readable ticket source is `docs/x-harness-parity-tickets.json`.
+> When this document conflicts with the X Harness parity plan, follow the parity plan for current work.
+
 ## 1. 目的
 
 本ドキュメントは [requirements.md](/Users/kzt/Desktop/project-d/product/sns-agent/docs/requirements.md) を実装可能な構成に落とすためのアーキテクチャ定義である。
