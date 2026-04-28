@@ -312,7 +312,7 @@
     {
       "id": "XHP-008",
       "title": "Implement X reply management",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-3",
       "owner_role": "implementer",
