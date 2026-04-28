@@ -146,6 +146,21 @@ export type {
 } from "./usecases/followers.js";
 
 export {
+  attachFollowerTag,
+  createTag,
+  deleteTag,
+  detachFollowerTag,
+  listTags,
+  updateTag,
+} from "./usecases/tags.js";
+export type {
+  CreateTagInput,
+  FollowerTagUsecaseInput,
+  TagUsecaseDeps,
+  UpdateTagInput,
+} from "./usecases/tags.js";
+
+export {
   createPost,
   updatePost,
   publishPost,
