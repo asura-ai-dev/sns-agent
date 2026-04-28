@@ -13,6 +13,7 @@ export { conversationThreads } from "./conversation-threads.js";
 export { messages } from "./messages.js";
 export { followers } from "./followers.js";
 export { tags, followerTags } from "./tags.js";
+export { engagementGates, engagementGateDeliveries } from "./engagement-gates.js";
 export { usageRecords } from "./usage-records.js";
 export { budgetPolicies } from "./budget-policies.js";
 export { llmRoutes } from "./llm-routes.js";

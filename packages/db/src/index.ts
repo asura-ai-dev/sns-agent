@@ -30,5 +30,7 @@ export {
   DrizzleMessageRepository,
   DrizzleFollowerRepository,
   DrizzleTagRepository,
+  DrizzleEngagementGateDeliveryRepository,
+  DrizzleEngagementGateRepository,
 } from "./repositories/index.js";
 export type { UserRepository, AgentIdentityRepository } from "./repositories/index.js";

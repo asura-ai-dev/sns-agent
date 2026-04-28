@@ -103,6 +103,54 @@ export interface Tag {
   updatedAt: Date;
 }
 
+// ───────────────────────────────────────────
+// Engagement Gate
+// ───────────────────────────────────────────
+
+export type EngagementGateStatus = "active" | "paused";
+export type EngagementGateTriggerType = "reply";
+export type EngagementGateActionType = "mention_post" | "dm" | "verify_only";
+export type EngagementGateDeliveryStatus = "delivered" | "verified";
+
+export interface EngagementGateConditions {
+  requireLike?: boolean;
+  requireRepost?: boolean;
+  requireFollow?: boolean;
+}
+
+export interface EngagementGate {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  platform: Platform;
+  name: string;
+  status: EngagementGateStatus;
+  triggerType: EngagementGateTriggerType;
+  triggerPostId: string | null;
+  conditions: EngagementGateConditions | null;
+  actionType: EngagementGateActionType;
+  actionText: string | null;
+  lastReplySinceId: string | null;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface EngagementGateDelivery {
+  id: string;
+  workspaceId: string;
+  engagementGateId: string;
+  socialAccountId: string;
+  externalUserId: string;
+  externalReplyId: string | null;
+  actionType: EngagementGateActionType;
+  status: EngagementGateDeliveryStatus;
+  responseExternalId: string | null;
+  metadata: Record<string, unknown> | null;
+  deliveredAt: Date;
+  createdAt: Date;
+}
+
 /** Provider が公開する能力セット */
 export interface ProviderCapabilities {
   textPost: boolean;

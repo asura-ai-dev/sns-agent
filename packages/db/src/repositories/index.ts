@@ -21,3 +21,7 @@ export {
 } from "./conversation-repository.js";
 export { DrizzleFollowerRepository } from "./follower-repository.js";
 export { DrizzleTagRepository } from "./tag-repository.js";
+export {
+  DrizzleEngagementGateDeliveryRepository,
+  DrizzleEngagementGateRepository,
+} from "./engagement-gate-repository.js";

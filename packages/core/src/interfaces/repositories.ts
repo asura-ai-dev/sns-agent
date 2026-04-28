@@ -22,6 +22,11 @@ import type {
   SkillPackage,
   Follower,
   Tag,
+  EngagementGate,
+  EngagementGateActionType,
+  EngagementGateDelivery,
+  EngagementGateDeliveryStatus,
+  EngagementGateStatus,
 } from "../domain/entities.js";
 import type { Platform } from "@sns-agent/config";
 
@@ -102,6 +107,55 @@ export interface TagRepository {
   delete(id: string): Promise<void>;
   attachToFollower(input: FollowerTagInput): Promise<void>;
   detachFromFollower(input: FollowerTagInput): Promise<void>;
+}
+
+// ───────────────────────────────────────────
+// EngagementGateRepository
+// ───────────────────────────────────────────
+
+export interface EngagementGateListFilters {
+  socialAccountId?: string;
+  status?: EngagementGateStatus;
+  limit?: number;
+}
+
+export type EngagementGateCreateInput = Omit<EngagementGate, "id" | "createdAt" | "updatedAt">;
+export type EngagementGateUpdateInput = Partial<
+  Pick<
+    EngagementGate,
+    | "name"
+    | "status"
+    | "triggerPostId"
+    | "conditions"
+    | "actionType"
+    | "actionText"
+    | "lastReplySinceId"
+  >
+>;
+
+export interface EngagementGateRepository {
+  findById(id: string): Promise<EngagementGate | null>;
+  findByWorkspace(
+    workspaceId: string,
+    filters?: EngagementGateListFilters,
+  ): Promise<EngagementGate[]>;
+  findActiveReplyTriggers(limit: number): Promise<EngagementGate[]>;
+  create(input: EngagementGateCreateInput): Promise<EngagementGate>;
+  update(id: string, data: EngagementGateUpdateInput): Promise<EngagementGate>;
+  delete(id: string): Promise<void>;
+}
+
+export type EngagementGateDeliveryCreateInput = Omit<EngagementGateDelivery, "id" | "createdAt">;
+
+export interface EngagementGateDeliveryCreateResult {
+  delivery: EngagementGateDelivery;
+  created: boolean;
+}
+
+export interface EngagementGateDeliveryRepository {
+  findByGate(gateId: string): Promise<EngagementGateDelivery[]>;
+  findByGateAndUser(gateId: string, externalUserId: string): Promise<EngagementGateDelivery | null>;
+  createOnce(input: EngagementGateDeliveryCreateInput): Promise<EngagementGateDeliveryCreateResult>;
 }
 
 // ───────────────────────────────────────────
