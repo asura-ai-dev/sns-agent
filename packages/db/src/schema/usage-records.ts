@@ -10,6 +10,9 @@ export const usageRecords = sqliteTable(
       .references(() => workspaces.id),
     platform: text("platform").notNull(),
     endpoint: text("endpoint").notNull(),
+    gateId: text("gate_id"),
+    feature: text("feature"),
+    metadata: text("metadata", { mode: "json" }),
     actorId: text("actor_id"),
     actorType: text("actor_type", {
       enum: ["user", "agent"],
@@ -24,6 +27,16 @@ export const usageRecords = sqliteTable(
     index("idx_usage_records_workspace_platform_recorded").on(
       table.workspaceId,
       table.platform,
+      table.recordedAt,
+    ),
+    index("idx_usage_records_workspace_endpoint_recorded").on(
+      table.workspaceId,
+      table.endpoint,
+      table.recordedAt,
+    ),
+    index("idx_usage_records_workspace_gate_recorded").on(
+      table.workspaceId,
+      table.gateId,
       table.recordedAt,
     ),
   ],

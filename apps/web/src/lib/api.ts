@@ -225,6 +225,9 @@ export interface UsageReportSafeResult {
 export function fetchUsageReportSafe(params: {
   period?: UsagePeriod;
   platform?: string;
+  endpoint?: string;
+  gateId?: string;
+  dimension?: "platform" | "endpoint" | "gate";
   from?: string;
   to?: string;
 }): Promise<FetchResult<UsageReportSafeResult>> {

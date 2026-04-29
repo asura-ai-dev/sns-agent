@@ -386,6 +386,9 @@ export interface UsageRecord {
   workspaceId: string;
   platform: string;
   endpoint: string;
+  gateId?: string | null;
+  feature?: string | null;
+  metadata?: Record<string, unknown> | null;
   actorId: string | null;
   actorType: ActorType;
   requestCount: number;

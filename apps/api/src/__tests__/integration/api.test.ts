@@ -1047,6 +1047,59 @@ describe("j. usage records", () => {
     expect(typeof data.totalCost).toBe("number");
     expect(typeof data.totalRequests).toBe("number");
   });
+
+  it("GET /api/usage can aggregate by endpoint and gate dimensions", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO usage_records (id, workspace_id, platform, endpoint, gate_id, feature, metadata, actor_id, actor_type, request_count, success, estimated_cost_usd, recorded_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "usage-xhp015-gate-1",
+        seed.workspaceId,
+        "x",
+        "engagement.gate.deliver",
+        "gate-xhp015",
+        "engagement_gate",
+        JSON.stringify({ source: "integration-test" }),
+        seed.editorUserId,
+        "user",
+        2,
+        1,
+        0.004,
+        now,
+        now,
+      );
+
+    const endpointRes = await req(
+      "GET",
+      "/api/usage?platform=x&dimension=endpoint",
+      seed.adminApiKey,
+    );
+    expect(endpointRes.status).toBe(200);
+    expect(endpointRes.body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          platform: "x",
+          endpoint: "engagement.gate.deliver",
+          requestCount: expect.any(Number),
+        }),
+      ]),
+    );
+
+    const gateRes = await req("GET", "/api/usage?platform=x&dimension=gate", seed.adminApiKey);
+    expect(gateRes.status).toBe(200);
+    expect(gateRes.body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          platform: "x",
+          gateId: "gate-xhp015",
+          feature: "engagement_gate",
+          requestCount: 2,
+        }),
+      ]),
+    );
+  });
 });
 
 // ───────────────────────────────────────────

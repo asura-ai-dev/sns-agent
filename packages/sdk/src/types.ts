@@ -140,6 +140,9 @@ export type UsagePeriod = "daily" | "weekly" | "monthly";
 
 export interface UsageReportParams {
   platform?: string;
+  endpoint?: string;
+  gateId?: string;
+  dimension?: "platform" | "endpoint" | "gate";
   period?: UsagePeriod;
   from?: string; // ISO 8601 date
   to?: string; // ISO 8601 date
@@ -150,6 +153,9 @@ export interface UsageReportEntry {
   /** Bucket key — `YYYY-MM-DD` (daily), `YYYY-Www` (weekly), or `YYYY-MM` (monthly). */
   period: string;
   platform: string;
+  endpoint?: string | null;
+  gateId?: string | null;
+  feature?: string | null;
   requestCount: number;
   successCount: number;
   failureCount: number;

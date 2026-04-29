@@ -49,6 +49,8 @@ export interface UsageViewModel {
   period: UsagePeriod;
   platformFilter: PlatformFilter;
   entries: UsageReportEntry[];
+  endpointEntries: UsageReportEntry[];
+  gateEntries: UsageReportEntry[];
   /** Total over the report range, all entries. */
   totals: {
     requestCount: number;

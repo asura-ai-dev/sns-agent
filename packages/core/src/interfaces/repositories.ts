@@ -346,11 +346,16 @@ export interface ScheduledJobRepository {
 // ───────────────────────────────────────────
 export interface UsageAggregation {
   platform: string;
+  endpoint?: string | null;
+  gateId?: string | null;
+  feature?: string | null;
   totalRequests: number;
   successCount: number;
   failureCount: number;
   totalCostUsd: number;
 }
+
+export type UsageAggregationDimension = "platform" | "endpoint" | "gate";
 
 export interface UsageRepository {
   record(usage: Omit<UsageRecord, "id" | "createdAt">): Promise<UsageRecord>;
@@ -360,6 +365,8 @@ export interface UsageRepository {
       platform?: string;
       /** 指定時はこのエンドポイントに限定して集計する（Task 4004 予算 scope=endpoint 用） */
       endpoint?: string;
+      gateId?: string;
+      dimension?: UsageAggregationDimension;
       startDate: Date;
       endDate: Date;
     },
