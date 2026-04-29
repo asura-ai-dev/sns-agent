@@ -413,7 +413,6 @@ function Avatar({ quote, large = false }: { quote: QuoteTweet; large?: boolean }
   const size = large ? "h-12 w-12" : "h-10 w-10";
   if (quote.authorProfileImageUrl) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={quote.authorProfileImageUrl}
         alt=""
