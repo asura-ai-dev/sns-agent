@@ -60,6 +60,13 @@ export interface SnsAgentClientOptions {
   fetch?: typeof globalThis.fetch;
 }
 
+export type SnsAgentHttpMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+
+export interface SnsAgentRequestOptions {
+  params?: Record<string, string | number | boolean | undefined>;
+  body?: unknown;
+}
+
 // ───────────────────────────────────────────
 // ユーティリティ
 // ───────────────────────────────────────────
@@ -257,6 +264,24 @@ export class SnsAgentClient {
     return this._handleResponse<T>(res);
   }
 
+  async request<T>(
+    method: SnsAgentHttpMethod,
+    path: string,
+    options: SnsAgentRequestOptions = {},
+  ): Promise<T> {
+    const normalizedMethod = method.toUpperCase() as SnsAgentHttpMethod;
+    const url = `${this.baseUrl}${path}${toSearchParams(options.params)}`;
+    const hasBody = options.body !== undefined;
+    const res = await this._fetch(url, {
+      method: normalizedMethod,
+      headers: this._headers({
+        idempotency: normalizedMethod !== "GET",
+      }),
+      body: hasBody ? JSON.stringify(options.body) : undefined,
+    });
+    return this._handleResponse<T>(res);
+  }
+
   // ───────────────────────────────────────
   // 内部ヘルパー
   // ───────────────────────────────────────
@@ -377,7 +402,7 @@ export class SnsAgentClient {
       verify: (id, params) =>
         this.get<ApiResponse<VerifyEngagementGateResultDto>>(
           `/api/engagement-gates/${id}/verify`,
-          params,
+          { username: params.username },
         ),
       consumeDeliveryToken: (id, input) =>
         this.post<ApiResponse<ConsumeEngagementGateDeliveryTokenResultDto>>(

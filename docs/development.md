@@ -217,7 +217,24 @@ pnpm --filter @sns-agent/cli exec sns skills list --api-key <YOUR_API_KEY>
 pnpm --filter @sns-agent/cli exec sns skills pack --platform x --provider codex --api-key <YOUR_API_KEY>
 ```
 
-## 6. OAuth プロバイダの設定（任意）
+## 6. MCP server
+
+X Harness parity 用の MCP server は `packages/mcp` にあります。sns-agent API を直接叩かず、`@sns-agent/sdk` の HTTP client contract 経由で tools を実行します。
+
+必要な環境変数:
+
+- `SNS_AGENT_API_URL`: API のベース URL。例: `http://localhost:3001`
+- `SNS_AGENT_API_KEY`: agent identity または user 用 API key
+
+ローカル起動:
+
+```bash
+SNS_AGENT_API_URL=http://localhost:3001 SNS_AGENT_API_KEY=<YOUR_API_KEY> pnpm --filter @sns-agent/mcp exec sns-agent-mcp
+```
+
+MCP tools は posts、DM/inbox、user account identities、followers、tags、engagement gates、campaigns、quote tweets、staff approval/audit workflows、step sequences、usage を公開します。未実装の step sequence API は XHP-014 の予定パス `/api/step-sequences` に向けた documented equivalent 名として `sequences_*` tools を予約しています。
+
+## 7. OAuth プロバイダの設定（任意）
 
 OAuth を使う場合は `.env` に必要な値を設定してから再起動してください。未設定でも Web と API の基本起動は可能です。
 
@@ -247,7 +264,7 @@ OAuth を使う場合は `.env` に必要な値を設定してから再起動し
 - OAuth コールバック関連では `WEB_URL` を `http://localhost:3000` に合わせておくと扱いやすいです
 - プロバイダ設定を変更したら `pnpm dev` を再起動してください
 
-## 7. トラブルシュート
+## 8. トラブルシュート
 
 ### DB をリセットしたい
 

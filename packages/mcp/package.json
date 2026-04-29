@@ -1,18 +1,23 @@
 {
-  "name": "@sns-agent/sdk",
+  "name": "@sns-agent/mcp",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "sns-agent-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/index.js",
     "lint": "echo \"Lint via root\"",
     "test": "vitest run src"
   },
   "dependencies": {
-    "@sns-agent/config": "workspace:*",
-    "@sns-agent/core": "workspace:*"
+    "@sns-agent/sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

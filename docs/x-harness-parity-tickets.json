@@ -604,7 +604,7 @@
     {
       "id": "XHP-017",
       "title": "Add X Harness MCP server package",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-4",
       "owner_role": "implementer",

@@ -9,6 +9,32 @@ function jsonResponse(body: unknown): Response {
 }
 
 describe("SnsAgentClient engagement gates resource", () => {
+  it("sends arbitrary SDK-backed requests for adapters such as MCP", async () => {
+    const fetch = vi.fn(async () => jsonResponse({ data: { success: true } }));
+    const client = new SnsAgentClient({
+      baseUrl: "http://api.test",
+      apiKey: "sdk-key",
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    });
+
+    const result = await client.request("DELETE", "/api/followers/follower-1/tags/tag-1", {
+      body: { socialAccountId: "acct-1" },
+    });
+
+    expect(result).toEqual({ data: { success: true } });
+    expect(fetch).toHaveBeenCalledWith(
+      "http://api.test/api/followers/follower-1/tags/tag-1",
+      expect.objectContaining({
+        method: "DELETE",
+        body: JSON.stringify({ socialAccountId: "acct-1" }),
+        headers: expect.objectContaining({
+          Authorization: "Bearer sdk-key",
+          "X-Idempotency-Key": expect.any(String),
+        }),
+      }),
+    );
+  });
+
   it("verifies gate eligibility with username query parameters", async () => {
     const fetch = vi.fn(async () =>
       jsonResponse({

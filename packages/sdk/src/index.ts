@@ -9,6 +9,8 @@
 export { SnsAgentClient } from "./client.js";
 export type {
   SnsAgentClientOptions,
+  SnsAgentHttpMethod,
+  SnsAgentRequestOptions,
   AccountsResource,
   PostsResource,
   SchedulesResource,
