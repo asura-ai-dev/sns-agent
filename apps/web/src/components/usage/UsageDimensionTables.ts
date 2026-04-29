@@ -4,6 +4,9 @@ import type { UsageReportEntry } from "@sns-agent/sdk";
 interface UsageDimensionTablesProps {
   endpointEntries: UsageReportEntry[];
   gateEntries: UsageReportEntry[];
+  isLoading?: boolean;
+  endpointErrorMessage?: string | null;
+  gateErrorMessage?: string | null;
 }
 
 type RowKind = "endpoint" | "gate";
@@ -26,16 +29,43 @@ function rowsFor(entries: UsageReportEntry[], kind: RowKind): UsageReportEntry[]
     .sort((a, b) => (b.estimatedCost ?? 0) - (a.estimatedCost ?? 0));
 }
 
+function invalidCountFor(entries: UsageReportEntry[], kind: RowKind): number {
+  return entries.filter((entry) => {
+    if (entry.platform !== "x") return false;
+    if (kind === "endpoint") return !entry.endpoint;
+    return !entry.gateId;
+  }).length;
+}
+
+function Notice({ tone, children }: { tone: "warning" | "error"; children?: string }) {
+  const toneClass =
+    tone === "error"
+      ? "border-error/40 bg-error/5 text-error/85"
+      : "border-warning/40 bg-warning/5 text-[#7a4b00]";
+  return createElement(
+    "div",
+    {
+      className: `mb-2 rounded-sm border border-dashed px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] ${toneClass}`,
+    },
+    children,
+  );
+}
+
 function DimensionTable({
   title,
   kind,
   entries,
+  isLoading,
+  errorMessage,
 }: {
   title: string;
   kind: RowKind;
   entries: UsageReportEntry[];
+  isLoading: boolean;
+  errorMessage?: string | null;
 }) {
   const rows = rowsFor(entries, kind);
+  const invalidCount = invalidCountFor(entries, kind);
 
   return createElement(
     "div",
@@ -45,6 +75,14 @@ function DimensionTable({
       { className: "mb-2 font-display text-base font-semibold text-base-content" },
       title,
     ),
+    errorMessage ? createElement(Notice, { tone: "error" }, errorMessage) : null,
+    invalidCount > 0
+      ? createElement(
+          Notice,
+          { tone: "warning" },
+          `dimension data incomplete · ${invalidCount} row${invalidCount === 1 ? "" : "s"}`,
+        )
+      : null,
     createElement(
       "div",
       { className: "overflow-x-auto" },
@@ -95,7 +133,7 @@ function DimensionTable({
         createElement(
           "tbody",
           null,
-          rows.length === 0
+          isLoading
             ? createElement(
                 "tr",
                 null,
@@ -106,57 +144,73 @@ function DimensionTable({
                     className:
                       "py-6 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-base-content/45",
                   },
-                  "no x usage rows for this dimension",
+                  "loading x usage dimensions",
                 ),
               )
-            : rows.map((entry) =>
-                createElement(
+            : rows.length === 0
+              ? createElement(
                   "tr",
-                  {
-                    key: `${entry.period}:${valueFor(entry, kind)}`,
-                    className: "border-b border-dashed border-base-content/15",
-                  },
-                  createElement(
-                    "td",
-                    { className: "py-2.5 pr-3 font-mono text-xs text-base-content" },
-                    labelFor(entry, kind),
-                  ),
+                  null,
                   createElement(
                     "td",
                     {
+                      colSpan: 6,
                       className:
-                        "py-2.5 pr-3 text-right font-mono tabular-nums text-base-content/85",
+                        "py-6 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-base-content/45",
                     },
-                    entry.requestCount.toLocaleString(),
+                    "no x usage rows for this dimension",
                   ),
+                )
+              : rows.map((entry) =>
                   createElement(
-                    "td",
-                    { className: "py-2.5 pr-3 text-right font-mono tabular-nums text-success/80" },
-                    entry.successCount.toLocaleString(),
-                  ),
-                  createElement(
-                    "td",
-                    { className: "py-2.5 pr-3 text-right font-mono tabular-nums text-error/80" },
-                    entry.failureCount.toLocaleString(),
-                  ),
-                  createElement(
-                    "td",
+                    "tr",
                     {
-                      className:
-                        "py-2.5 pr-3 text-right font-mono tabular-nums text-base-content/75",
+                      key: `${entry.period}:${valueFor(entry, kind)}`,
+                      className: "border-b border-dashed border-base-content/15",
                     },
-                    `${(entry.successRate * 100).toFixed(1)}%`,
-                  ),
-                  createElement(
-                    "td",
-                    {
-                      className:
-                        "py-2.5 pr-3 text-right font-display text-base font-semibold tabular-nums text-base-content",
-                    },
-                    `$${(entry.estimatedCost ?? 0).toFixed(4)}`,
+                    createElement(
+                      "td",
+                      { className: "py-2.5 pr-3 font-mono text-xs text-base-content" },
+                      labelFor(entry, kind),
+                    ),
+                    createElement(
+                      "td",
+                      {
+                        className:
+                          "py-2.5 pr-3 text-right font-mono tabular-nums text-base-content/85",
+                      },
+                      entry.requestCount.toLocaleString(),
+                    ),
+                    createElement(
+                      "td",
+                      {
+                        className: "py-2.5 pr-3 text-right font-mono tabular-nums text-success/80",
+                      },
+                      entry.successCount.toLocaleString(),
+                    ),
+                    createElement(
+                      "td",
+                      { className: "py-2.5 pr-3 text-right font-mono tabular-nums text-error/80" },
+                      entry.failureCount.toLocaleString(),
+                    ),
+                    createElement(
+                      "td",
+                      {
+                        className:
+                          "py-2.5 pr-3 text-right font-mono tabular-nums text-base-content/75",
+                      },
+                      `${(entry.successRate * 100).toFixed(1)}%`,
+                    ),
+                    createElement(
+                      "td",
+                      {
+                        className:
+                          "py-2.5 pr-3 text-right font-display text-base font-semibold tabular-nums text-base-content",
+                      },
+                      `$${(entry.estimatedCost ?? 0).toFixed(4)}`,
+                    ),
                   ),
                 ),
-              ),
         ),
       ),
     ),
@@ -166,6 +220,9 @@ function DimensionTable({
 export function UsageDimensionTables({
   endpointEntries,
   gateEntries,
+  isLoading = false,
+  endpointErrorMessage = null,
+  gateErrorMessage = null,
 }: UsageDimensionTablesProps) {
   return createElement(
     "div",
@@ -174,11 +231,15 @@ export function UsageDimensionTables({
       title: "Endpoint Detail",
       kind: "endpoint",
       entries: endpointEntries,
+      isLoading,
+      errorMessage: endpointErrorMessage,
     }),
     createElement(DimensionTable, {
       title: "Gate Detail",
       kind: "gate",
       entries: gateEntries,
+      isLoading,
+      errorMessage: gateErrorMessage,
     }),
   );
 }

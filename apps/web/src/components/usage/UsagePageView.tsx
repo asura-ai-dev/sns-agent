@@ -252,6 +252,9 @@ export function UsagePageView({ viewModel, budgetStatuses, budgetIsFallback }: U
         <UsageDimensionTables
           endpointEntries={viewModel.endpointEntries}
           gateEntries={viewModel.gateEntries}
+          isLoading={pending}
+          endpointErrorMessage={viewModel.endpointErrorMessage}
+          gateErrorMessage={viewModel.gateErrorMessage}
         />
       </div>
 

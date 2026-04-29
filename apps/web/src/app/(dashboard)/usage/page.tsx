@@ -115,7 +115,12 @@ export default async function UsagePage({ searchParams }: UsagePageProps) {
     isFallback:
       reportRes.isFallback || prevRes.isFallback || endpointRes.isFallback || gateRes.isFallback,
     errorMessage:
-      reportRes.errorMessage ?? prevRes.errorMessage ?? endpointRes.errorMessage ?? gateRes.errorMessage,
+      reportRes.errorMessage ??
+      prevRes.errorMessage ??
+      endpointRes.errorMessage ??
+      gateRes.errorMessage,
+    endpointErrorMessage: endpointRes.errorMessage,
+    gateErrorMessage: gateRes.errorMessage,
   };
 
   const degraded = viewModel.isFallback || budgetRes.isFallback;

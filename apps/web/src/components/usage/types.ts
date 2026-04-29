@@ -68,6 +68,8 @@ export interface UsageViewModel {
   range: { from: string; to: string };
   isFallback: boolean;
   errorMessage?: string;
+  endpointErrorMessage?: string;
+  gateErrorMessage?: string;
 }
 
 export interface BudgetViewModel {

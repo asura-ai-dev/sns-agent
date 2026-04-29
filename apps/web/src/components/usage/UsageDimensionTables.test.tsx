@@ -44,4 +44,29 @@ describe("UsageDimensionTables", () => {
     expect(html).toContain("66.7%");
     expect(html).toContain("$0.0060");
   });
+
+  it("renders loading, error, and validation states for X dimension tables", () => {
+    const html = renderToStaticMarkup(
+      createElement(UsageDimensionTables, {
+        endpointEntries: [
+          {
+            period: "2026-04-29",
+            platform: "x",
+            requestCount: 1,
+            successCount: 1,
+            failureCount: 0,
+            successRate: 1,
+            estimatedCost: 0.001,
+          },
+        ],
+        gateEntries: [],
+        isLoading: true,
+        endpointErrorMessage: "endpoint feed unavailable",
+      }),
+    );
+
+    expect(html).toContain("loading x usage dimensions");
+    expect(html).toContain("endpoint feed unavailable");
+    expect(html).toContain("dimension data incomplete");
+  });
 });
