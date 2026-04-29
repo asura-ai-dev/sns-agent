@@ -540,7 +540,7 @@
     {
       "id": "XHP-015",
       "title": "Add X usage analytics dimensions",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-0",
       "owner_role": "implementer",
