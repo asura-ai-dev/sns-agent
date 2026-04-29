@@ -665,7 +665,7 @@
     {
       "id": "XHP-019",
       "title": "Build X-specific dashboard parity shell",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-4",
       "owner_role": "implementer",
