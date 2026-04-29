@@ -572,7 +572,7 @@
     {
       "id": "XHP-016",
       "title": "Review staff and API key parity",
-      "status": "planned",
+      "status": "verified",
       "priority": "P2",
       "phase": "phase-5",
       "owner_role": "implementer",
