@@ -249,6 +249,27 @@ export interface XTagDto {
   updatedAt: string;
 }
 
+export interface XCampaignDto {
+  id: string;
+  name: string;
+  mode: "draft" | "publish" | "schedule";
+  postStatus: string;
+  gateStatus: "active" | "paused";
+  postText: string | null;
+  conditions: {
+    requireLike?: boolean;
+    requireRepost?: boolean;
+    requireFollow?: boolean;
+  } | null;
+  lineHarness: {
+    url: string | null;
+    tag: string | null;
+    scenario: string | null;
+  };
+  verifyUrl: string;
+  updatedAt: string;
+}
+
 async function fetchApiListSafe<T>(path: string): Promise<FetchResult<T[]>> {
   return guard<T[]>(async () => {
     const baseUrl = resolveBaseUrl();
@@ -277,6 +298,10 @@ export function fetchFollowersSafe(): Promise<FetchResult<XFollowerDto[]>> {
 
 export function fetchTagsSafe(): Promise<FetchResult<XTagDto[]>> {
   return fetchApiListSafe<XTagDto>("/api/tags");
+}
+
+export function fetchCampaignsSafe(): Promise<FetchResult<XCampaignDto[]>> {
+  return fetchApiListSafe<XCampaignDto>("/api/campaigns");
 }
 
 // ───────────────────────────────────────────

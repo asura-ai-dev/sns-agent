@@ -18,3 +18,4 @@ export { analytics } from "./analytics.js";
 export { tags } from "./tags.js";
 export { engagementGates } from "./engagement-gates.js";
 export { quoteTweets } from "./quote-tweets.js";
+export { campaigns } from "./campaigns.js";

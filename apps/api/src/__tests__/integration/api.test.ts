@@ -711,6 +711,156 @@ describe("a3. engagement gates flow", () => {
 });
 
 // ───────────────────────────────────────────
+// a4. X campaign wizard composition
+// ───────────────────────────────────────────
+describe("a4. X campaign wizard flow", () => {
+  it("POST /api/campaigns creates a draft campaign without publishing", async () => {
+    const res = await req("POST", "/api/campaigns", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "Launch reward campaign",
+      mode: "draft",
+      post: {
+        contentText: "Reply to this launch post for the LINE reward.",
+      },
+      conditions: {
+        requireLike: true,
+        requireRepost: false,
+        requireFollow: true,
+      },
+      actionType: "verify_only",
+      lineHarnessUrl: "https://line-harness.example/campaigns/launch",
+      lineHarnessApiKeyRef: "line-harness-prod",
+      lineHarnessApiKey: "do-not-return-this-secret",
+      lineHarnessTag: "launch",
+      lineHarnessScenario: "reward-a",
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({
+      mode: "draft",
+      post: {
+        status: "draft",
+        contentText: "Reply to this launch post for the LINE reward.",
+      },
+      gate: {
+        name: "Launch reward campaign",
+        status: "paused",
+        conditions: {
+          requireLike: true,
+          requireRepost: false,
+          requireFollow: true,
+        },
+        actionType: "verify_only",
+        lineHarnessUrl: "https://line-harness.example/campaigns/launch",
+        lineHarnessApiKeyRef: "line-harness-prod",
+        lineHarnessTag: "launch",
+        lineHarnessScenario: "reward-a",
+      },
+      schedule: null,
+      verifyUrl: expect.stringContaining("/api/engagement-gates/"),
+    });
+    expect(JSON.stringify(res.body)).not.toContain("do-not-return-this-secret");
+
+    const data = res.body.data as {
+      post: { id: string };
+      gate: { id: string; triggerPostId: string | null };
+    };
+    expect(data.gate.triggerPostId).toBe(data.post.id);
+
+    const postRow = ctx.sqlite
+      .prepare("SELECT status FROM posts WHERE id = ?")
+      .get(data.post.id) as { status: string } | undefined;
+    const gateRow = ctx.sqlite
+      .prepare(
+        "SELECT status, trigger_post_id, line_harness_tag FROM engagement_gates WHERE id = ?",
+      )
+      .get(data.gate.id) as
+      | { status: string; trigger_post_id: string | null; line_harness_tag: string | null }
+      | undefined;
+    expect(postRow?.status).toBe("draft");
+    expect(gateRow).toMatchObject({
+      status: "paused",
+      trigger_post_id: data.post.id,
+      line_harness_tag: "launch",
+    });
+  });
+
+  it("POST /api/campaigns publishes or schedules when permissions allow", async () => {
+    const published = await req("POST", "/api/campaigns", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "Publish now campaign",
+      mode: "publish",
+      post: {
+        contentText: "Live campaign post.",
+      },
+      conditions: {
+        requireLike: true,
+        requireRepost: true,
+        requireFollow: false,
+      },
+      actionType: "mention_post",
+      actionText: "Thanks for joining. Verify in LINE.",
+    });
+
+    expect(published.status).toBe(201);
+    expect(published.body.data).toMatchObject({
+      mode: "publish",
+      post: {
+        status: "published",
+        platformPostId: expect.stringMatching(/^mock-post-/),
+      },
+      gate: {
+        status: "active",
+        triggerPostId: expect.stringMatching(/^mock-post-/),
+      },
+    });
+
+    const scheduledAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const scheduled = await req("POST", "/api/campaigns", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "Scheduled campaign",
+      mode: "schedule",
+      scheduledAt,
+      post: {
+        contentText: "Scheduled campaign post.",
+      },
+      conditions: {
+        requireLike: false,
+        requireRepost: false,
+        requireFollow: true,
+      },
+      actionType: "verify_only",
+    });
+
+    expect(scheduled.status).toBe(201);
+    expect(scheduled.body.data).toMatchObject({
+      mode: "schedule",
+      post: {
+        status: "scheduled",
+      },
+      gate: {
+        status: "paused",
+      },
+      schedule: {
+        status: "pending",
+        scheduledAt: expect.any(String),
+      },
+    });
+
+    const denied = await req("POST", "/api/campaigns", seed.agentApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "Denied publish campaign",
+      mode: "publish",
+      post: {
+        contentText: "Agent cannot publish this directly.",
+      },
+      actionType: "verify_only",
+    });
+    expect(denied.status).toBe(403);
+  });
+});
+
+// ───────────────────────────────────────────
 // b. 投稿作成→公開フロー
 // ───────────────────────────────────────────
 describe("b. post draft→publish flow", () => {

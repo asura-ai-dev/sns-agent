@@ -241,6 +241,15 @@ export type {
   VerifyEngagementGateResult,
 } from "./usecases/engagement-gates.js";
 
+export { createCampaign, listCampaigns } from "./usecases/campaigns.js";
+export type {
+  CampaignListItem,
+  CampaignMode,
+  CampaignRecord,
+  CampaignUsecaseDeps,
+  CreateCampaignInput,
+} from "./usecases/campaigns.js";
+
 export {
   discoverQuoteTweetsForTrackedSources,
   getQuoteTweet,

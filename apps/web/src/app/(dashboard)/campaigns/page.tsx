@@ -1,17 +1,25 @@
-import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
-import { XParityPageShell } from "@/components/x-parity/XParityPageShell";
+import { fetchCampaignsSafe } from "@/lib/api";
+import { CampaignWizard } from "@/components/campaigns/CampaignWizard";
+import type {
+  CampaignWizardSnapshot,
+  CampaignWizardState,
+} from "@/components/campaigns/CampaignWizard";
 
-export default function CampaignsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function CampaignsPage() {
+  const result = await fetchCampaignsSafe();
+  const state: CampaignWizardState = result.isFallback
+    ? "error"
+    : result.data.length === 0
+      ? "empty"
+      : "ready";
+
   return (
-    <XParityPageShell
-      state="empty"
-      kicker={SECTION_KICKERS.campaigns}
-      title={MASTHEAD_TITLES.campaigns}
-      description="X campaign shell for the upcoming post, gate, LINE handoff, and preview wizard."
-      emptyTitle="Campaign wizard not started"
-      emptyDescription="XHP-019 exposes the dashboard destination; XHP-007 owns the campaign creation wizard and publish flow."
-      primaryAction={{ href: "/posts/new", label: "draft post" }}
-      footerNote="x harness parity / campaign desk"
+    <CampaignWizard
+      initialState={state}
+      initialCampaigns={result.data as CampaignWizardSnapshot[]}
+      errorMessage={result.errorMessage}
     />
   );
 }
