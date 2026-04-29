@@ -281,7 +281,7 @@
     {
       "id": "XHP-007",
       "title": "Build campaign wizard API and dashboard flow",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-4",
       "owner_role": "implementer",
