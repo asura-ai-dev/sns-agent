@@ -729,7 +729,7 @@
     {
       "id": "XHP-021",
       "title": "Add optional Cloudflare Worker D1 deployment path",
-      "status": "planned",
+      "status": "verified",
       "priority": "P2",
       "phase": "phase-5",
       "owner_role": "implementer",
