@@ -6,7 +6,7 @@
  */
 
 import type { Platform } from "@sns-agent/config";
-import type { PostProviderMetadata } from "@sns-agent/core";
+import type { Post, PostProviderMetadata, ScheduledJob } from "@sns-agent/core";
 
 // ───────────────────────────────────────────
 // core エンティティの re-export
@@ -198,6 +198,150 @@ export interface UsageSummaryReport {
 }
 
 // ───────────────────────────────────────────
+// X parity shared DTOs
+// ───────────────────────────────────────────
+
+export interface OffsetPaginationMeta {
+  limit: number;
+  offset: number;
+  total: number;
+}
+
+export interface OffsetApiResponse<T> {
+  data: T;
+  meta: OffsetPaginationMeta;
+}
+
+export interface XDateStampedDto {
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ───────────────────────────────────────────
+// Followers
+// ───────────────────────────────────────────
+
+export interface FollowerDto extends XDateStampedDto {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  platform: Platform;
+  externalUserId: string;
+  displayName: string | null;
+  username: string | null;
+  isFollowing: boolean;
+  isFollowed: boolean;
+  unfollowedAt: string | null;
+  metadata: Record<string, unknown> | null;
+  lastSeenAt: string;
+}
+
+export interface ListFollowersParams {
+  socialAccountId?: string;
+  tagId?: string;
+  isFollowed?: boolean;
+  isFollowing?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export interface SyncFollowersInput {
+  socialAccountId: string;
+  limit?: number;
+  followersCursor?: string | null;
+  followingCursor?: string | null;
+}
+
+export interface SyncFollowersResultDto {
+  followerCount: number;
+  followingCount: number;
+  nextFollowersCursor: string | null;
+  nextFollowingCursor: string | null;
+  markedUnfollowedCount: number;
+  markedUnfollowingCount: number;
+}
+
+export interface FollowerTagInput {
+  socialAccountId: string;
+}
+
+// ───────────────────────────────────────────
+// Tags
+// ───────────────────────────────────────────
+
+export interface TagDto extends XDateStampedDto {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  name: string;
+  color: string | null;
+}
+
+export interface ListTagsParams {
+  socialAccountId?: string;
+}
+
+export interface CreateTagDto {
+  socialAccountId: string;
+  name: string;
+  color?: string | null;
+}
+
+export interface UpdateTagDto {
+  name?: string;
+  color?: string | null;
+}
+
+// ───────────────────────────────────────────
+// Follower analytics
+// ───────────────────────────────────────────
+
+export interface FollowerAnalyticsParams {
+  socialAccountId: string;
+  asOfDate?: string;
+}
+
+export interface FollowerAnalyticsPointDto {
+  date: string;
+  followerCount: number;
+  followingCount: number;
+}
+
+export interface FollowerAnalyticsResultDto {
+  currentCount: number;
+  delta7Days: number | null;
+  delta30Days: number | null;
+  series: FollowerAnalyticsPointDto[];
+}
+
+export interface CaptureFollowerSnapshotDto {
+  socialAccountId?: string;
+  capturedAt?: string;
+}
+
+export interface FollowerSnapshotDto extends XDateStampedDto {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  platform: Platform;
+  snapshotDate: string;
+  followerCount: number;
+  followingCount: number;
+  capturedAt: string;
+}
+
+export interface CaptureFollowerSnapshotResultDto {
+  snapshot: FollowerSnapshotDto;
+  created: boolean;
+}
+
+export interface CaptureFollowerSnapshotsForWorkspaceResultDto {
+  captured: number;
+  created: number;
+  snapshots: FollowerSnapshotDto[];
+}
+
+// ───────────────────────────────────────────
 // Budget
 // ───────────────────────────────────────────
 
@@ -254,7 +398,19 @@ export interface EngagementGateConditionsDto {
   requireFollow?: boolean;
 }
 
+export type EngagementGateStatusDto = "active" | "paused";
 export type EngagementGateActionTypeDto = "mention_post" | "dm" | "verify_only";
+
+export interface EngagementGateStealthConfigDto {
+  gateHourlyLimit?: number | null;
+  gateDailyLimit?: number | null;
+  accountHourlyLimit?: number | null;
+  accountDailyLimit?: number | null;
+  jitterMinSeconds?: number | null;
+  jitterMaxSeconds?: number | null;
+  backoffSeconds?: number | null;
+  templateVariants?: string[] | null;
+}
 
 export interface EngagementGateDto {
   id: string;
@@ -262,7 +418,7 @@ export interface EngagementGateDto {
   socialAccountId: string;
   platform: Platform;
   name: string;
-  status: "active" | "paused";
+  status: EngagementGateStatusDto;
   triggerType: "reply";
   triggerPostId: string | null;
   conditions: EngagementGateConditionsDto | null;
@@ -272,10 +428,18 @@ export interface EngagementGateDto {
   lineHarnessApiKeyRef: string | null;
   lineHarnessTag: string | null;
   lineHarnessScenario: string | null;
+  stealthConfig: EngagementGateStealthConfigDto | null;
+  deliveryBackoffUntil: string | null;
   lastReplySinceId: string | null;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ListEngagementGatesParams {
+  socialAccountId?: string;
+  status?: EngagementGateStatusDto;
+  limit?: number;
 }
 
 export interface CreateEngagementGateDto {
@@ -289,6 +453,21 @@ export interface CreateEngagementGateDto {
   lineHarnessApiKeyRef?: string | null;
   lineHarnessTag?: string | null;
   lineHarnessScenario?: string | null;
+  stealthConfig?: EngagementGateStealthConfigDto | null;
+}
+
+export interface UpdateEngagementGateDto {
+  name?: string;
+  status?: EngagementGateStatusDto;
+  triggerPostId?: string | null;
+  conditions?: EngagementGateConditionsDto | null;
+  actionType?: EngagementGateActionTypeDto;
+  actionText?: string | null;
+  lineHarnessUrl?: string | null;
+  lineHarnessApiKeyRef?: string | null;
+  lineHarnessTag?: string | null;
+  lineHarnessScenario?: string | null;
+  stealthConfig?: EngagementGateStealthConfigDto | null;
 }
 
 export interface VerifyEngagementGateParams {
@@ -328,6 +507,183 @@ export interface ConsumeEngagementGateDeliveryTokenResultDto {
     deliveryToken: string;
     consumedAt: string | null;
   };
+}
+
+export interface ProcessEngagementGateRepliesDto {
+  limit?: number;
+}
+
+export interface ProcessEngagementGateRepliesResultDto {
+  gatesScanned: number;
+  repliesScanned: number;
+  deliveriesCreated: number;
+  skippedDuplicate: number;
+  skippedIneligible: number;
+  actionsSent: number;
+  skippedRateLimited: number;
+  skippedJitter: number;
+  skippedBackoff: number;
+  actionsBackedOff: number;
+  lastReplySinceIdsUpdated: number;
+}
+
+// ───────────────────────────────────────────
+// Campaigns
+// ───────────────────────────────────────────
+
+export type CampaignModeDto = "draft" | "publish" | "schedule";
+
+export interface CampaignPostInputDto {
+  contentText?: string | null;
+  contentMedia?: { type: "image" | "video"; url: string; mimeType: string }[] | null;
+  providerMetadata?: PostProviderMetadata | null;
+}
+
+export interface CreateCampaignDto {
+  socialAccountId: string;
+  name: string;
+  mode?: CampaignModeDto;
+  post: CampaignPostInputDto;
+  scheduledAt?: string | null;
+  conditions?: EngagementGateConditionsDto | null;
+  actionType?: EngagementGateActionTypeDto;
+  actionText?: string | null;
+  lineHarnessUrl?: string | null;
+  lineHarnessApiKeyRef?: string | null;
+  lineHarnessTag?: string | null;
+  lineHarnessScenario?: string | null;
+  stealthConfig?: EngagementGateStealthConfigDto | null;
+}
+
+export interface CampaignRecordDto {
+  id: string;
+  mode: CampaignModeDto;
+  post: Post;
+  gate: EngagementGateDto;
+  schedule: ScheduledJob | null;
+  verifyUrl: string;
+}
+
+export interface CampaignListItemDto {
+  id: string;
+  name: string;
+  mode: CampaignModeDto;
+  postStatus: string;
+  gateStatus: EngagementGateStatusDto;
+  postText: string | null;
+  conditions: EngagementGateConditionsDto | null;
+  lineHarness: {
+    url: string | null;
+    tag: string | null;
+    scenario: string | null;
+  };
+  verifyUrl: string;
+  updatedAt: string;
+}
+
+// ───────────────────────────────────────────
+// Quote tweets
+// ───────────────────────────────────────────
+
+export type QuoteTweetActionTypeDto = "reply" | "like" | "repost";
+
+export interface QuoteTweetDto extends XDateStampedDto {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  sourceTweetId: string;
+  quoteTweetId: string;
+  authorExternalId: string;
+  authorUsername: string | null;
+  authorDisplayName: string | null;
+  authorProfileImageUrl: string | null;
+  authorVerified: boolean;
+  contentText: string | null;
+  contentMedia: { type: "image" | "video"; url: string; mimeType: string }[] | null;
+  quotedAt: string | null;
+  metrics: Record<string, unknown> | null;
+  providerMetadata: Record<string, unknown> | null;
+  lastActionType: QuoteTweetActionTypeDto | null;
+  lastActionExternalId: string | null;
+  lastActionAt: string | null;
+  discoveredAt: string;
+  lastSeenAt: string;
+}
+
+export interface ListQuoteTweetsParams {
+  socialAccountId?: string;
+  sourceTweetId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface SyncQuoteTweetsDto {
+  socialAccountId: string;
+  sourceTweetIds?: string[];
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface SyncQuoteTweetsResultDto {
+  sourceTweetsScanned: number;
+  quotesScanned: number;
+  quotesStored: number;
+  nextCursor: string | null;
+}
+
+export interface QuoteTweetActionDto {
+  actionType: QuoteTweetActionTypeDto;
+  contentText?: string | null;
+}
+
+export interface QuoteTweetActionResultDto {
+  quote: QuoteTweetDto;
+  externalActionId: string | null;
+}
+
+// ───────────────────────────────────────────
+// Step sequences
+// ───────────────────────────────────────────
+
+export interface ListStepSequencesParams {
+  socialAccountId?: string;
+  status?: string;
+  limit?: number;
+}
+
+export interface StepSequenceStepDto {
+  delaySeconds?: number;
+  actionType?: string;
+  text?: string | null;
+  [key: string]: unknown;
+}
+
+export interface CreateStepSequenceDto {
+  socialAccountId: string;
+  name: string;
+  steps: StepSequenceStepDto[];
+}
+
+export interface StepSequenceDto {
+  id: string;
+  socialAccountId?: string;
+  name?: string;
+  status?: string;
+  steps?: StepSequenceStepDto[];
+  [key: string]: unknown;
+}
+
+export interface EnrollStepSequenceDto {
+  externalUserId?: string;
+  username?: string;
+}
+
+export interface StepSequenceEnrollmentDto {
+  id: string;
+  sequenceId: string;
+  externalUserId?: string;
+  username?: string;
+  [key: string]: unknown;
 }
 
 // ───────────────────────────────────────────

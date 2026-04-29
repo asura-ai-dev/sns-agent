@@ -635,7 +635,7 @@
     {
       "id": "XHP-018",
       "title": "Extend SDK with X parity resources",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-4",
       "owner_role": "implementer",
