@@ -861,6 +861,140 @@ describe("a4. X campaign wizard flow", () => {
 });
 
 // ───────────────────────────────────────────
+// a5. X step sequence flow
+// ───────────────────────────────────────────
+describe("a5. X step sequence flow", () => {
+  it("creates a sequence enrolls a user and processes due steps", async () => {
+    const created = await req("POST", "/api/step-sequences", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "Welcome sequence",
+      stealthConfig: {
+        templateVariants: ["welcome A"],
+        jitterMinSeconds: 0,
+        jitterMaxSeconds: 0,
+      },
+      messages: [
+        {
+          delaySeconds: 60,
+          actionType: "dm",
+          contentText: "Welcome to the launch.",
+        },
+        {
+          delaySeconds: 120,
+          actionType: "mention_post",
+          contentText: "Second touch.",
+        },
+      ],
+    });
+
+    expect(created.status).toBe(201);
+    expect(created.body.data).toMatchObject({
+      name: "Welcome sequence",
+      status: "active",
+      messages: [
+        { stepIndex: 0, actionType: "dm", delaySeconds: 60 },
+        { stepIndex: 1, actionType: "mention_post", delaySeconds: 120 },
+      ],
+    });
+    const sequenceId = (created.body.data as { id: string }).id;
+
+    const enrolled = await req(
+      "POST",
+      `/api/step-sequences/${sequenceId}/enrollments`,
+      seed.editorApiKey,
+      {
+        externalUserId: "user-seq-1",
+        username: "seq_user",
+        externalThreadId: "dm:user-seq-1",
+        now: "2026-04-28T00:00:00Z",
+      },
+    );
+
+    expect(enrolled.status).toBe(201);
+    expect(enrolled.body.data).toMatchObject({
+      sequenceId,
+      status: "active",
+      currentStepIndex: 0,
+      nextStepAt: "2026-04-28T00:01:00.000Z",
+    });
+
+    const processed = await req("POST", "/api/step-sequences/process", seed.editorApiKey, {
+      limit: 10,
+      now: "2026-04-28T00:01:00Z",
+      templateSeed: "api-seed",
+    });
+
+    expect(processed.status).toBe(200);
+    expect(processed.body.data).toMatchObject({
+      enrollmentsScanned: 1,
+      stepsDelivered: 1,
+      enrollmentsCompleted: 0,
+    });
+
+    const row = ctx.sqlite
+      .prepare(
+        "SELECT status, current_step_index, next_step_at, last_delivered_at FROM step_enrollments WHERE sequence_id = ?",
+      )
+      .get(sequenceId) as
+      | {
+          status: string;
+          current_step_index: number;
+          next_step_at: number | null;
+          last_delivered_at: number | null;
+        }
+      | undefined;
+
+    expect(row).toMatchObject({
+      status: "active",
+      current_step_index: 1,
+    });
+    expect(row?.last_delivered_at).toBeTruthy();
+  });
+
+  it("does not send cancelled enrollments during sequence processing", async () => {
+    const created = await req("POST", "/api/step-sequences", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "Cancelled sequence",
+      messages: [{ delaySeconds: 0, actionType: "dm", contentText: "Should not send" }],
+    });
+    expect(created.status).toBe(201);
+    const sequenceId = (created.body.data as { id: string }).id;
+
+    const enrolled = await req(
+      "POST",
+      `/api/step-sequences/${sequenceId}/enrollments`,
+      seed.editorApiKey,
+      {
+        externalUserId: "user-cancelled",
+        externalThreadId: "dm:user-cancelled",
+        now: "2026-04-28T00:00:00Z",
+      },
+    );
+    expect(enrolled.status).toBe(201);
+    const enrollmentId = (enrolled.body.data as { id: string }).id;
+
+    const cancelled = await req(
+      "PATCH",
+      `/api/step-sequences/${sequenceId}/enrollments/${enrollmentId}`,
+      seed.editorApiKey,
+      { status: "cancelled" },
+    );
+    expect(cancelled.status).toBe(200);
+
+    const processed = await req("POST", "/api/step-sequences/process", seed.editorApiKey, {
+      limit: 10,
+      now: "2026-04-28T00:00:01Z",
+    });
+
+    expect(processed.status).toBe(200);
+    expect(processed.body.data).toMatchObject({
+      enrollmentsScanned: 0,
+      stepsDelivered: 0,
+    });
+  });
+});
+
+// ───────────────────────────────────────────
 // b. 投稿作成→公開フロー
 // ───────────────────────────────────────────
 describe("b. post draft→publish flow", () => {

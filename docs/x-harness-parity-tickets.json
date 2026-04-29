@@ -508,7 +508,7 @@
     {
       "id": "XHP-014",
       "title": "Implement step sequences",
-      "status": "planned",
+      "status": "verified",
       "priority": "P2",
       "phase": "phase-3",
       "owner_role": "implementer",

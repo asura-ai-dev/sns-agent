@@ -14,6 +14,7 @@ export { messages } from "./messages.js";
 export { followers } from "./followers.js";
 export { followerSnapshots } from "./follower-snapshots.js";
 export { tags, followerTags } from "./tags.js";
+export { stepSequences, stepMessages, stepEnrollments } from "./step-sequences.js";
 export { engagementGates, engagementGateDeliveries } from "./engagement-gates.js";
 export { engagementActions } from "./engagement-actions.js";
 export { quoteTweets } from "./quote-tweets.js";

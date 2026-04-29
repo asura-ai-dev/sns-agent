@@ -117,6 +117,60 @@ export interface Tag {
 }
 
 // ───────────────────────────────────────────
+// Step Sequence
+// ───────────────────────────────────────────
+
+export type StepSequenceStatus = "active" | "paused";
+export type StepMessageActionType = "mention_post" | "dm";
+export type StepEnrollmentStatus = "active" | "cancelled" | "completed";
+
+export interface StepSequence {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  platform: Platform;
+  name: string;
+  status: StepSequenceStatus;
+  stealthConfig: EngagementGateStealthConfig | null;
+  deliveryBackoffUntil: Date | null;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface StepMessage {
+  id: string;
+  workspaceId: string;
+  sequenceId: string;
+  stepIndex: number;
+  delaySeconds: number;
+  actionType: StepMessageActionType;
+  contentText: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface StepEnrollment {
+  id: string;
+  workspaceId: string;
+  sequenceId: string;
+  socialAccountId: string;
+  externalUserId: string;
+  username: string | null;
+  externalThreadId: string | null;
+  replyToMessageId: string | null;
+  status: StepEnrollmentStatus;
+  currentStepIndex: number;
+  nextStepAt: Date | null;
+  lastDeliveredAt: Date | null;
+  completedAt: Date | null;
+  cancelledAt: Date | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ───────────────────────────────────────────
 // Engagement Gate
 // ───────────────────────────────────────────
 

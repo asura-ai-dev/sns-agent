@@ -270,6 +270,30 @@ export interface XCampaignDto {
   updatedAt: string;
 }
 
+export interface XStepSequenceDto {
+  id: string;
+  name: string;
+  socialAccountId: string;
+  status: "active" | "paused";
+  deliveryBackoffUntil: string | null;
+  messages: Array<{
+    id: string;
+    stepIndex: number;
+    delaySeconds: number;
+    actionType: "dm" | "mention_post";
+    contentText: string;
+  }>;
+  enrollments: Array<{
+    id: string;
+    status: "active" | "cancelled" | "completed";
+    currentStepIndex: number;
+    externalUserId: string;
+    username: string | null;
+    nextStepAt: string | null;
+  }>;
+  updatedAt: string;
+}
+
 async function fetchApiListSafe<T>(path: string): Promise<FetchResult<T[]>> {
   return guard<T[]>(async () => {
     const baseUrl = resolveBaseUrl();
@@ -302,6 +326,10 @@ export function fetchTagsSafe(): Promise<FetchResult<XTagDto[]>> {
 
 export function fetchCampaignsSafe(): Promise<FetchResult<XCampaignDto[]>> {
   return fetchApiListSafe<XCampaignDto>("/api/campaigns");
+}
+
+export function fetchStepSequencesSafe(): Promise<FetchResult<XStepSequenceDto[]>> {
+  return fetchApiListSafe<XStepSequenceDto>("/api/step-sequences");
 }
 
 // ───────────────────────────────────────────

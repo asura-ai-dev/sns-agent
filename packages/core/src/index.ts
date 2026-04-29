@@ -14,6 +14,12 @@ export type {
   Follower,
   FollowerSnapshot,
   Tag,
+  StepSequence,
+  StepSequenceStatus,
+  StepMessage,
+  StepMessageActionType,
+  StepEnrollment,
+  StepEnrollmentStatus,
   EngagementGate,
   EngagementGateActionType,
   EngagementGateConditions,
@@ -78,6 +84,16 @@ export type {
   TagCreateInput,
   TagUpdateInput,
   FollowerTagInput,
+  StepSequenceRepository,
+  StepSequenceListFilters,
+  StepSequenceCreateInput,
+  StepSequenceUpdateInput,
+  StepMessageRepository,
+  StepMessageCreateInput,
+  StepEnrollmentRepository,
+  StepEnrollmentCreateInput,
+  StepEnrollmentUpdateInput,
+  FindDueStepEnrollmentsInput,
   EngagementGateRepository,
   EngagementGateListFilters,
   EngagementGateCreateInput,
@@ -218,6 +234,28 @@ export type {
   TagUsecaseDeps,
   UpdateTagInput,
 } from "./usecases/tags.js";
+
+export {
+  createStepSequence,
+  deleteStepSequence,
+  enrollStepSequenceUser,
+  getStepSequence,
+  listStepSequences,
+  processDueStepSequenceEnrollments,
+  updateStepEnrollment,
+  updateStepSequence,
+} from "./usecases/step-sequences.js";
+export type {
+  CreateStepSequenceInput,
+  EnrollStepSequenceUserInput,
+  ProcessDueStepSequenceEnrollmentsInput,
+  ProcessDueStepSequenceEnrollmentsResult,
+  StepMessageInput,
+  StepSequenceRecord,
+  StepSequenceUsecaseDeps,
+  UpdateStepEnrollmentInput,
+  UpdateStepSequenceInput,
+} from "./usecases/step-sequences.js";
 
 export {
   consumeEngagementGateDeliveryToken,

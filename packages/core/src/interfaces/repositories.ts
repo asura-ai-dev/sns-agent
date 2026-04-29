@@ -23,6 +23,11 @@ import type {
   Follower,
   FollowerSnapshot,
   Tag,
+  StepEnrollment,
+  StepEnrollmentStatus,
+  StepMessage,
+  StepSequence,
+  StepSequenceStatus,
   EngagementGate,
   EngagementGateActionType,
   EngagementGateDelivery,
@@ -129,6 +134,67 @@ export interface TagRepository {
   delete(id: string): Promise<void>;
   attachToFollower(input: FollowerTagInput): Promise<void>;
   detachFromFollower(input: FollowerTagInput): Promise<void>;
+}
+
+// ───────────────────────────────────────────
+// StepSequenceRepository
+// ───────────────────────────────────────────
+
+export interface StepSequenceListFilters {
+  socialAccountId?: string;
+  status?: StepSequenceStatus;
+}
+
+export type StepSequenceCreateInput = Omit<StepSequence, "id" | "createdAt" | "updatedAt">;
+export type StepSequenceUpdateInput = Partial<
+  Pick<StepSequence, "name" | "status" | "stealthConfig" | "deliveryBackoffUntil">
+>;
+
+export type StepMessageCreateInput = Omit<StepMessage, "id" | "createdAt" | "updatedAt">;
+
+export type StepEnrollmentCreateInput = Omit<StepEnrollment, "id" | "createdAt" | "updatedAt">;
+export type StepEnrollmentUpdateInput = Partial<
+  Pick<
+    StepEnrollment,
+    | "status"
+    | "currentStepIndex"
+    | "nextStepAt"
+    | "lastDeliveredAt"
+    | "completedAt"
+    | "cancelledAt"
+    | "metadata"
+  >
+>;
+
+export interface FindDueStepEnrollmentsInput {
+  now: Date;
+  limit: number;
+}
+
+export interface StepSequenceRepository {
+  findById(id: string): Promise<StepSequence | null>;
+  findByWorkspace(workspaceId: string, filters?: StepSequenceListFilters): Promise<StepSequence[]>;
+  create(input: StepSequenceCreateInput): Promise<StepSequence>;
+  update(id: string, data: StepSequenceUpdateInput): Promise<StepSequence>;
+  delete(id: string): Promise<void>;
+}
+
+export interface StepMessageRepository {
+  findBySequence(sequenceId: string): Promise<StepMessage[]>;
+  replaceForSequence(
+    sequenceId: string,
+    messages: StepMessageCreateInput[],
+  ): Promise<StepMessage[]>;
+}
+
+export interface StepEnrollmentRepository {
+  findById(id: string): Promise<StepEnrollment | null>;
+  findBySequence(sequenceId: string): Promise<StepEnrollment[]>;
+  findActiveDue(input: FindDueStepEnrollmentsInput): Promise<StepEnrollment[]>;
+  countDeliveredBySequenceSince(sequenceId: string, since: Date): Promise<number>;
+  countDeliveredByAccountSince(socialAccountId: string, since: Date): Promise<number>;
+  create(input: StepEnrollmentCreateInput): Promise<StepEnrollment>;
+  update(id: string, data: StepEnrollmentUpdateInput): Promise<StepEnrollment>;
 }
 
 // ───────────────────────────────────────────
