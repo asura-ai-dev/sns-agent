@@ -174,6 +174,165 @@ export function fetchUsageSummarySafe(): Promise<FetchResult<UsageSummary>> {
 }
 
 // ───────────────────────────────────────────
+// Follower analytics
+// ───────────────────────────────────────────
+
+export interface FollowerAnalyticsPointDto {
+  date: string;
+  followerCount: number;
+  followingCount: number;
+}
+
+export interface FollowerAnalyticsDto {
+  currentCount: number;
+  delta7Days: number | null;
+  delta30Days: number | null;
+  series: FollowerAnalyticsPointDto[];
+}
+
+export function fetchFollowerAnalyticsSafe(
+  socialAccountId: string | null,
+): Promise<FetchResult<FollowerAnalyticsDto>> {
+  const fallback: FollowerAnalyticsDto = {
+    currentCount: 0,
+    delta7Days: null,
+    delta30Days: null,
+    series: [],
+  };
+  if (!socialAccountId) {
+    return Promise.resolve({ ok: true, data: fallback, isFallback: false });
+  }
+
+  return guard(async () => {
+    const res = await getApiClient().get<ApiResponse<FollowerAnalyticsDto>>(
+      "/api/analytics/followers",
+      { socialAccountId },
+    );
+    return res.data ?? fallback;
+  }, fallback);
+}
+
+// ───────────────────────────────────────────
+// X Harness parity shell fetchers
+// ───────────────────────────────────────────
+
+export interface XEngagementGateDto {
+  id: string;
+  name: string;
+  socialAccountId: string;
+  status: "active" | "paused" | "archived";
+  actionType: "mention_post" | "dm" | "verify_only";
+  triggerPostId: string | null;
+  lineHarnessTag: string | null;
+  lineHarnessScenario: string | null;
+  deliveryBackoffUntil: string | null;
+  updatedAt: string;
+}
+
+export interface XFollowerDto {
+  id: string;
+  socialAccountId: string;
+  displayName: string | null;
+  username: string | null;
+  externalUserId: string;
+  isFollowing: boolean;
+  isFollowed: boolean;
+  unfollowedAt: string | null;
+  lastSeenAt: string;
+}
+
+export interface XTagDto {
+  id: string;
+  socialAccountId: string;
+  name: string;
+  color: string | null;
+  updatedAt: string;
+}
+
+export interface XCampaignDto {
+  id: string;
+  name: string;
+  mode: "draft" | "publish" | "schedule";
+  postStatus: string;
+  gateStatus: "active" | "paused";
+  postText: string | null;
+  conditions: {
+    requireLike?: boolean;
+    requireRepost?: boolean;
+    requireFollow?: boolean;
+  } | null;
+  lineHarness: {
+    url: string | null;
+    tag: string | null;
+    scenario: string | null;
+  };
+  verifyUrl: string;
+  updatedAt: string;
+}
+
+export interface XStepSequenceDto {
+  id: string;
+  name: string;
+  socialAccountId: string;
+  status: "active" | "paused";
+  deliveryBackoffUntil: string | null;
+  messages: Array<{
+    id: string;
+    stepIndex: number;
+    delaySeconds: number;
+    actionType: "dm" | "mention_post";
+    contentText: string;
+  }>;
+  enrollments: Array<{
+    id: string;
+    status: "active" | "cancelled" | "completed";
+    currentStepIndex: number;
+    externalUserId: string;
+    username: string | null;
+    nextStepAt: string | null;
+  }>;
+  updatedAt: string;
+}
+
+async function fetchApiListSafe<T>(path: string): Promise<FetchResult<T[]>> {
+  return guard<T[]>(async () => {
+    const baseUrl = resolveBaseUrl();
+    const res = await fetch(`${baseUrl}${path}`, {
+      method: "GET",
+      headers: {
+        ...resolveOperatorHeaders(),
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new Error(`${path} fetch failed: HTTP ${res.status}`);
+    }
+    const body = (await res.json()) as { data?: T[] };
+    return body.data ?? [];
+  }, []);
+}
+
+export function fetchEngagementGatesSafe(): Promise<FetchResult<XEngagementGateDto[]>> {
+  return fetchApiListSafe<XEngagementGateDto>("/api/engagement-gates?limit=50");
+}
+
+export function fetchFollowersSafe(): Promise<FetchResult<XFollowerDto[]>> {
+  return fetchApiListSafe<XFollowerDto>("/api/followers?limit=50");
+}
+
+export function fetchTagsSafe(): Promise<FetchResult<XTagDto[]>> {
+  return fetchApiListSafe<XTagDto>("/api/tags");
+}
+
+export function fetchCampaignsSafe(): Promise<FetchResult<XCampaignDto[]>> {
+  return fetchApiListSafe<XCampaignDto>("/api/campaigns");
+}
+
+export function fetchStepSequencesSafe(): Promise<FetchResult<XStepSequenceDto[]>> {
+  return fetchApiListSafe<XStepSequenceDto>("/api/step-sequences");
+}
+
+// ───────────────────────────────────────────
 // Usage detail / Budget fetchers (Task 4005)
 // ───────────────────────────────────────────
 
@@ -186,6 +345,9 @@ export interface UsageReportSafeResult {
 export function fetchUsageReportSafe(params: {
   period?: UsagePeriod;
   platform?: string;
+  endpoint?: string;
+  gateId?: string;
+  dimension?: "platform" | "endpoint" | "gate";
   from?: string;
   to?: string;
 }): Promise<FetchResult<UsageReportSafeResult>> {

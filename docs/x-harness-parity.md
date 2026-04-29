@@ -93,7 +93,7 @@ helpers instead of reading raw credential JSON directly.
 | TypeScript SDK | full feature SDK | generic SDK, X-specific resources missing | XHP-018 |
 | Dashboard | X-specific admin pages | generic dashboard only | XHP-019 |
 | Stealth controls | jitter/rate/template variation | missing | XHP-020 |
-| Cloudflare deploy | Worker/D1/Wrangler | Node API/SQLite local-first | XHP-021 |
+| Cloudflare deploy | Worker/D1/Wrangler | optional Worker/D1 adapter documented; Node API/SQLite local-first preserved | XHP-021 |
 
 ## Implementation Phases
 
@@ -159,6 +159,10 @@ Tickets:
 
 - XHP-016: staff/API key parity review
 - XHP-021: Cloudflare Worker/D1 deployment option
+
+XHP-021 keeps `apps/api` on Node because it depends on `better-sqlite3`. The Cloudflare path is a
+separate `apps/worker` adapter with a D1 `DB` binding, `wrangler.toml`, and a D1 migration bundle
+derived from `packages/db/src/migrations/*.sql`.
 
 ## Role Contract
 

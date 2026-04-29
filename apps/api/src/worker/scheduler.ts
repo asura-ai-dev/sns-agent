@@ -11,13 +11,31 @@
  *
  * 起動は apps/api/src/index.ts で ENABLE_SCHEDULER=true の時のみ行う。
  */
-import { dispatchDueJobs, POLL_BATCH_SIZE } from "@sns-agent/core";
-import type { ScheduleUsecaseDeps } from "@sns-agent/core";
+import {
+  captureFollowerSnapshotsForWorkspace,
+  dispatchDueJobs,
+  POLL_BATCH_SIZE,
+  processEngagementGateReplies,
+  processDueStepSequenceEnrollments,
+} from "@sns-agent/core";
+import type {
+  EngagementGateUsecaseDeps,
+  FollowerAnalyticsUsecaseDeps,
+  ScheduleUsecaseDeps,
+  StepSequenceUsecaseDeps,
+} from "@sns-agent/core";
 import {
   DrizzleAuditLogRepository,
+  DrizzleEngagementGateDeliveryRepository,
+  DrizzleEngagementGateRepository,
   DrizzleScheduledJobRepository,
   DrizzlePostRepository,
   DrizzleAccountRepository,
+  DrizzleFollowerRepository,
+  DrizzleFollowerSnapshotRepository,
+  DrizzleStepEnrollmentRepository,
+  DrizzleStepMessageRepository,
+  DrizzleStepSequenceRepository,
   getDb,
 } from "@sns-agent/db";
 import type { DbClient } from "@sns-agent/db";
@@ -75,6 +93,43 @@ function buildScheduleDeps(db: DbClient): ScheduleUsecaseDeps {
   };
 }
 
+function buildEngagementGateDeps(db: DbClient): EngagementGateUsecaseDeps {
+  const encryptionKey =
+    process.env.ENCRYPTION_KEY ||
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+  return {
+    accountRepo: new DrizzleAccountRepository(db),
+    gateRepo: new DrizzleEngagementGateRepository(db),
+    deliveryRepo: new DrizzleEngagementGateDeliveryRepository(db),
+    providers: getProviderRegistry().getAll(),
+    encryptionKey,
+  };
+}
+
+function buildFollowerAnalyticsDeps(db: DbClient): FollowerAnalyticsUsecaseDeps {
+  return {
+    accountRepo: new DrizzleAccountRepository(db),
+    followerRepo: new DrizzleFollowerRepository(db),
+    snapshotRepo: new DrizzleFollowerSnapshotRepository(db),
+  };
+}
+
+function buildStepSequenceDeps(db: DbClient): StepSequenceUsecaseDeps {
+  const encryptionKey =
+    process.env.ENCRYPTION_KEY ||
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+  return {
+    accountRepo: new DrizzleAccountRepository(db),
+    sequenceRepo: new DrizzleStepSequenceRepository(db),
+    messageRepo: new DrizzleStepMessageRepository(db),
+    enrollmentRepo: new DrizzleStepEnrollmentRepository(db),
+    providers: getProviderRegistry().getAll(),
+    encryptionKey,
+  };
+}
+
 /**
  * Polling スケジューラワーカーを作成する。
  *
@@ -100,10 +155,33 @@ export function createSchedulerWorker(options: SchedulerWorkerOptions = {}): Sch
   let running = false;
   let tickInFlight: Promise<void> | null = null;
 
-  const deps = buildScheduleDeps(options.db ?? getDb());
+  const db = options.db ?? getDb();
+  const deps = buildScheduleDeps(db);
+  const engagementGateDeps = buildEngagementGateDeps(db);
+  const followerAnalyticsDeps = buildFollowerAnalyticsDeps(db);
+  const stepSequenceDeps = buildStepSequenceDeps(db);
 
   async function runBatch(): Promise<void> {
     const result = await dispatchDueJobs(deps, { limit: batchSize });
+    const gateResult = await processEngagementGateReplies(engagementGateDeps, { limit: batchSize });
+    const stepResult = await processDueStepSequenceEnrollments(stepSequenceDeps, {
+      limit: batchSize,
+    });
+    const snapshotWorkspaceId = process.env.FOLLOWER_SNAPSHOT_WORKSPACE_ID;
+    if (snapshotWorkspaceId) {
+      const snapshotResult = await captureFollowerSnapshotsForWorkspace(followerAnalyticsDeps, {
+        workspaceId: snapshotWorkspaceId,
+      });
+      if (snapshotResult.captured > 0) {
+        logger.info(`captured follower snapshots`, snapshotResult);
+      }
+    }
+    if (gateResult.gatesScanned > 0) {
+      logger.info(`processed engagement gate replies`, gateResult);
+    }
+    if (stepResult.enrollmentsScanned > 0) {
+      logger.info(`processed step sequence enrollments`, stepResult);
+    }
     if (result.scanned === 0) return;
 
     logger.info(`processed ${result.processed}/${result.scanned} due job(s)`, {
@@ -206,9 +284,23 @@ export async function runSchedulerBatch(
     error: (msg, meta) => console.error(`[scheduler] ${msg}`, meta ?? ""),
   };
 
-  const deps = buildScheduleDeps(options.db ?? getDb());
+  const db = options.db ?? getDb();
+  const deps = buildScheduleDeps(db);
+  const engagementGateDeps = buildEngagementGateDeps(db);
+  const followerAnalyticsDeps = buildFollowerAnalyticsDeps(db);
+  const stepSequenceDeps = buildStepSequenceDeps(db);
   const batchSize = options.batchSize ?? POLL_BATCH_SIZE;
   const result = await dispatchDueJobs(deps, { limit: batchSize });
+  const gateResult = await processEngagementGateReplies(engagementGateDeps, { limit: batchSize });
+  const stepResult = await processDueStepSequenceEnrollments(stepSequenceDeps, {
+    limit: batchSize,
+  });
+  const snapshotWorkspaceId = process.env.FOLLOWER_SNAPSHOT_WORKSPACE_ID;
+  const snapshotResult = snapshotWorkspaceId
+    ? await captureFollowerSnapshotsForWorkspace(followerAnalyticsDeps, {
+        workspaceId: snapshotWorkspaceId,
+      })
+    : null;
 
   logger.info(`single run complete`, {
     scanned: result.scanned,
@@ -217,7 +309,31 @@ export async function runSchedulerBatch(
     retrying: result.retrying,
     failed: result.failed,
     skipped: result.skipped,
+    engagementGates: gateResult,
+    stepSequences: stepResult,
+    followerSnapshots: snapshotResult,
   });
 
+  return result;
+}
+
+export async function runEngagementGateBatch(
+  options: SchedulerWorkerOptions = {},
+): Promise<Awaited<ReturnType<typeof processEngagementGateReplies>>> {
+  const logger = options.logger ?? {
+    // eslint-disable-next-line no-console
+    info: (msg, meta) => console.log(`[scheduler] ${msg}`, meta ?? ""),
+    // eslint-disable-next-line no-console
+    warn: (msg, meta) => console.warn(`[scheduler] ${msg}`, meta ?? ""),
+    // eslint-disable-next-line no-console
+    error: (msg, meta) => console.error(`[scheduler] ${msg}`, meta ?? ""),
+  };
+  const db = options.db ?? getDb();
+  const batchSize = options.batchSize ?? POLL_BATCH_SIZE;
+  const result = await processEngagementGateReplies(buildEngagementGateDeps(db), {
+    limit: batchSize,
+  });
+
+  logger.info(`single engagement gate run complete`, result);
   return result;
 }

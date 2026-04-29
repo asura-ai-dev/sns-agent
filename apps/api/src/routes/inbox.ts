@@ -20,12 +20,15 @@ import {
   getThread,
   sendInboxReply,
   syncInboxFromProvider,
+  performInboxEngagementAction,
   createApprovalRequest,
   requiresApproval,
   ValidationError,
   type ApprovalUsecaseDeps,
   type InboxUsecaseDeps,
   type ConversationThread,
+  type EngagementAction,
+  type InboxEngagementActionType,
   type MediaAttachment,
   type Message,
   type ThreadStatus,
@@ -35,6 +38,7 @@ import {
   DrizzleApprovalRepository,
   DrizzleAuditLogRepository,
   DrizzleConversationRepository,
+  DrizzleEngagementActionRepository,
   DrizzleMessageRepository,
   posts,
 } from "@sns-agent/db";
@@ -58,6 +62,7 @@ function buildDeps(db: AppVariables["db"]): InboxUsecaseDeps {
   return {
     conversationRepo: new DrizzleConversationRepository(db),
     messageRepo: new DrizzleMessageRepository(db),
+    engagementActionRepo: new DrizzleEngagementActionRepository(db),
     accountRepo: new DrizzleAccountRepository(db),
     usageRepo: undefined,
     providers: getProviderRegistry().getAll(),
@@ -100,6 +105,24 @@ function serializeMessage(message: Message): Record<string, unknown> {
     sentAt: message.sentAt,
     providerMetadata: message.providerMetadata,
     createdAt: message.createdAt,
+  };
+}
+
+function serializeEngagementAction(action: EngagementAction): Record<string, unknown> {
+  return {
+    id: action.id,
+    workspaceId: action.workspaceId,
+    socialAccountId: action.socialAccountId,
+    threadId: action.threadId,
+    messageId: action.messageId,
+    actionType: action.actionType,
+    targetPostId: action.targetPostId,
+    actorId: action.actorId,
+    externalActionId: action.externalActionId,
+    status: action.status,
+    metadata: action.metadata,
+    performedAt: action.performedAt,
+    createdAt: action.createdAt,
   };
 }
 
@@ -281,6 +304,7 @@ inbox.get("/:threadId", requirePermission("inbox:read"), async (c) => {
     data: {
       thread: serializeThread(result.thread),
       messages: result.messages.map(serializeMessage),
+      engagementActions: result.engagementActions.map(serializeEngagementAction),
       context: {
         entryType: context.entryType,
         conversationId: context.conversationId,
@@ -291,6 +315,44 @@ inbox.get("/:threadId", requirePermission("inbox:read"), async (c) => {
       },
     },
   });
+});
+
+// ───────────────────────────────────────────
+// POST /api/inbox/:threadId/actions  -- X reply 操作 (like/repost)
+// ───────────────────────────────────────────
+inbox.post("/:threadId/actions", requirePermission("inbox:reply"), async (c) => {
+  const actor = c.get("actor");
+  const deps = buildDepsFromContext(c);
+  const threadId = c.req.param("threadId");
+
+  const body = await c.req.json<{
+    actionType?: string;
+    targetMessageId?: string | null;
+    targetPostId?: string | null;
+  }>();
+
+  if (body.actionType !== "like" && body.actionType !== "repost") {
+    throw new ValidationError("actionType must be one of: like, repost");
+  }
+
+  const result = await performInboxEngagementAction(deps, {
+    workspaceId: actor.workspaceId,
+    threadId,
+    actionType: body.actionType as InboxEngagementActionType,
+    actorId: actor.id,
+    targetMessageId: body.targetMessageId ?? null,
+    targetPostId: body.targetPostId ?? null,
+  });
+
+  return c.json(
+    {
+      data: {
+        action: serializeEngagementAction(result.action),
+        created: result.created,
+      },
+    },
+    result.created ? 201 : 200,
+  );
 });
 
 // ───────────────────────────────────────────

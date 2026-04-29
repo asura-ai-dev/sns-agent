@@ -8,6 +8,8 @@
 // DB client
 export { getDb, resetDb } from "./client.js";
 export type { DbClient } from "./client.js";
+export { buildD1MigrationBundle } from "./d1-migrations.js";
+export type { D1MigrationSource } from "./d1-migrations.js";
 
 // Schema (テーブル定義)
 export * from "./schema/index.js";
@@ -28,5 +30,15 @@ export {
   DrizzleApprovalRepository,
   DrizzleConversationRepository,
   DrizzleMessageRepository,
+  DrizzleFollowerRepository,
+  DrizzleFollowerSnapshotRepository,
+  DrizzleTagRepository,
+  DrizzleStepEnrollmentRepository,
+  DrizzleStepMessageRepository,
+  DrizzleStepSequenceRepository,
+  DrizzleEngagementGateDeliveryRepository,
+  DrizzleEngagementGateRepository,
+  DrizzleEngagementActionRepository,
+  DrizzleQuoteTweetRepository,
 } from "./repositories/index.js";
 export type { UserRepository, AgentIdentityRepository } from "./repositories/index.js";

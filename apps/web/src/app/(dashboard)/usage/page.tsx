@@ -57,6 +57,8 @@ export default async function UsagePage({ searchParams }: UsagePageProps) {
 
   // Current range (server-resolved by API).
   const reportRes = await fetchUsageReportSafe({ period });
+  const endpointRes = await fetchUsageReportSafe({ period, platform: "x", dimension: "endpoint" });
+  const gateRes = await fetchUsageReportSafe({ period, platform: "x", dimension: "gate" });
 
   // Previous range for delta cards.
   const now = new Date();
@@ -105,22 +107,33 @@ export default async function UsagePage({ searchParams }: UsagePageProps) {
     period,
     platformFilter: "all",
     entries: reportRes.data.entries,
+    endpointEntries: endpointRes.data.entries,
+    gateEntries: gateRes.data.entries,
     totals,
     previousTotals: prevTotals,
     range,
-    isFallback: reportRes.isFallback || prevRes.isFallback,
-    errorMessage: reportRes.errorMessage ?? prevRes.errorMessage,
+    isFallback:
+      reportRes.isFallback || prevRes.isFallback || endpointRes.isFallback || gateRes.isFallback,
+    errorMessage:
+      reportRes.errorMessage ??
+      prevRes.errorMessage ??
+      endpointRes.errorMessage ??
+      gateRes.errorMessage,
+    endpointErrorMessage: endpointRes.errorMessage,
+    gateErrorMessage: gateRes.errorMessage,
   };
 
   const degraded = viewModel.isFallback || budgetRes.isFallback;
   const errorLines = [
     reportRes.errorMessage && `使用量レポート: ${reportRes.errorMessage}`,
+    endpointRes.errorMessage && `エンドポイント別使用量: ${endpointRes.errorMessage}`,
+    gateRes.errorMessage && `ゲート別使用量: ${gateRes.errorMessage}`,
     prevRes.errorMessage && `前期間: ${prevRes.errorMessage}`,
     budgetRes.errorMessage && `予算状況: ${budgetRes.errorMessage}`,
   ].filter(Boolean) as string[];
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-7">
+    <div className="mx-auto w-full min-w-0 max-w-[1440px] space-y-7">
       <UsageMasthead
         now={now}
         rangeFrom={range.from}

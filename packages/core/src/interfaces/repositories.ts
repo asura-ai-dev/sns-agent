@@ -20,6 +20,21 @@ import type {
   Message,
   ThreadStatus,
   SkillPackage,
+  Follower,
+  FollowerSnapshot,
+  Tag,
+  StepEnrollment,
+  StepEnrollmentStatus,
+  StepMessage,
+  StepSequence,
+  StepSequenceStatus,
+  EngagementGate,
+  EngagementGateActionType,
+  EngagementGateDelivery,
+  EngagementGateDeliveryStatus,
+  EngagementGateStatus,
+  EngagementAction,
+  QuoteTweet,
 } from "../domain/entities.js";
 import type { Platform } from "@sns-agent/config";
 
@@ -32,6 +47,286 @@ export interface AccountRepository {
   create(account: Omit<SocialAccount, "id" | "createdAt" | "updatedAt">): Promise<SocialAccount>;
   update(id: string, data: Partial<SocialAccount>): Promise<SocialAccount>;
   delete(id: string): Promise<void>;
+}
+
+// ───────────────────────────────────────────
+// FollowerRepository
+// ───────────────────────────────────────────
+
+export interface FollowerListFilters {
+  socialAccountId?: string;
+  tagId?: string;
+  isFollowed?: boolean;
+  isFollowing?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export type FollowerUpsertInput = Omit<Follower, "id" | "createdAt" | "updatedAt">;
+
+export interface MarkMissingFollowersInput {
+  workspaceId: string;
+  socialAccountId: string;
+  currentExternalUserIds: string[];
+  unfollowedAt: Date;
+}
+
+export interface MarkMissingFollowingInput {
+  workspaceId: string;
+  socialAccountId: string;
+  currentExternalUserIds: string[];
+  updatedAt: Date;
+}
+
+export interface FollowerRepository {
+  findByWorkspace(workspaceId: string, filters?: FollowerListFilters): Promise<Follower[]>;
+  findByAccountAndExternalUser(
+    socialAccountId: string,
+    externalUserId: string,
+  ): Promise<Follower | null>;
+  upsert(follower: FollowerUpsertInput): Promise<Follower>;
+  markMissingFollowersUnfollowed(input: MarkMissingFollowersInput): Promise<number>;
+  markMissingFollowingInactive(input: MarkMissingFollowingInput): Promise<number>;
+}
+
+export type FollowerSnapshotCreateInput = Omit<FollowerSnapshot, "id" | "createdAt" | "updatedAt">;
+
+export interface FollowerSnapshotUpsertResult {
+  snapshot: FollowerSnapshot;
+  created: boolean;
+}
+
+export interface FollowerSnapshotRepository {
+  upsertDailySnapshot(input: FollowerSnapshotCreateInput): Promise<FollowerSnapshotUpsertResult>;
+  findByAccount(
+    workspaceId: string,
+    socialAccountId: string,
+    options?: {
+      fromDate?: string;
+      toDate?: string;
+    },
+  ): Promise<FollowerSnapshot[]>;
+}
+
+// ───────────────────────────────────────────
+// TagRepository
+// ───────────────────────────────────────────
+
+export interface TagListFilters {
+  socialAccountId?: string;
+}
+
+export type TagCreateInput = Omit<Tag, "id" | "createdAt" | "updatedAt">;
+export type TagUpdateInput = Partial<Pick<Tag, "name" | "color">>;
+
+export interface FollowerTagInput {
+  workspaceId: string;
+  socialAccountId: string;
+  followerId: string;
+  tagId: string;
+}
+
+export interface TagRepository {
+  findById(id: string): Promise<Tag | null>;
+  findByWorkspace(workspaceId: string, filters?: TagListFilters): Promise<Tag[]>;
+  create(input: TagCreateInput): Promise<Tag>;
+  update(id: string, data: TagUpdateInput): Promise<Tag>;
+  delete(id: string): Promise<void>;
+  attachToFollower(input: FollowerTagInput): Promise<void>;
+  detachFromFollower(input: FollowerTagInput): Promise<void>;
+}
+
+// ───────────────────────────────────────────
+// StepSequenceRepository
+// ───────────────────────────────────────────
+
+export interface StepSequenceListFilters {
+  socialAccountId?: string;
+  status?: StepSequenceStatus;
+}
+
+export type StepSequenceCreateInput = Omit<StepSequence, "id" | "createdAt" | "updatedAt">;
+export type StepSequenceUpdateInput = Partial<
+  Pick<StepSequence, "name" | "status" | "stealthConfig" | "deliveryBackoffUntil">
+>;
+
+export type StepMessageCreateInput = Omit<StepMessage, "id" | "createdAt" | "updatedAt">;
+
+export type StepEnrollmentCreateInput = Omit<StepEnrollment, "id" | "createdAt" | "updatedAt">;
+export type StepEnrollmentUpdateInput = Partial<
+  Pick<
+    StepEnrollment,
+    | "status"
+    | "currentStepIndex"
+    | "nextStepAt"
+    | "lastDeliveredAt"
+    | "completedAt"
+    | "cancelledAt"
+    | "metadata"
+  >
+>;
+
+export interface FindDueStepEnrollmentsInput {
+  now: Date;
+  limit: number;
+  workspaceId?: string;
+}
+
+export interface StepSequenceRepository {
+  findById(id: string): Promise<StepSequence | null>;
+  findByWorkspace(workspaceId: string, filters?: StepSequenceListFilters): Promise<StepSequence[]>;
+  create(input: StepSequenceCreateInput): Promise<StepSequence>;
+  update(id: string, data: StepSequenceUpdateInput): Promise<StepSequence>;
+  delete(id: string): Promise<void>;
+}
+
+export interface StepMessageRepository {
+  findBySequence(sequenceId: string): Promise<StepMessage[]>;
+  replaceForSequence(
+    sequenceId: string,
+    messages: StepMessageCreateInput[],
+  ): Promise<StepMessage[]>;
+}
+
+export interface StepEnrollmentRepository {
+  findById(id: string): Promise<StepEnrollment | null>;
+  findBySequence(sequenceId: string): Promise<StepEnrollment[]>;
+  findActiveDue(input: FindDueStepEnrollmentsInput): Promise<StepEnrollment[]>;
+  countDeliveredBySequenceSince(sequenceId: string, since: Date): Promise<number>;
+  countDeliveredByAccountSince(socialAccountId: string, since: Date): Promise<number>;
+  create(input: StepEnrollmentCreateInput): Promise<StepEnrollment>;
+  update(id: string, data: StepEnrollmentUpdateInput): Promise<StepEnrollment>;
+}
+
+// ───────────────────────────────────────────
+// EngagementGateRepository
+// ───────────────────────────────────────────
+
+export interface EngagementGateListFilters {
+  socialAccountId?: string;
+  status?: EngagementGateStatus;
+  limit?: number;
+}
+
+export type EngagementGateCreateInput = Omit<EngagementGate, "id" | "createdAt" | "updatedAt">;
+export type EngagementGateUpdateInput = Partial<
+  Pick<
+    EngagementGate,
+    | "name"
+    | "status"
+    | "triggerPostId"
+    | "conditions"
+    | "actionType"
+    | "actionText"
+    | "lineHarnessUrl"
+    | "lineHarnessApiKeyRef"
+    | "lineHarnessTag"
+    | "lineHarnessScenario"
+    | "stealthConfig"
+    | "deliveryBackoffUntil"
+    | "lastReplySinceId"
+  >
+>;
+
+export interface EngagementGateRepository {
+  findById(id: string): Promise<EngagementGate | null>;
+  findByWorkspace(
+    workspaceId: string,
+    filters?: EngagementGateListFilters,
+  ): Promise<EngagementGate[]>;
+  findActiveReplyTriggers(limit: number, workspaceId?: string): Promise<EngagementGate[]>;
+  create(input: EngagementGateCreateInput): Promise<EngagementGate>;
+  update(id: string, data: EngagementGateUpdateInput): Promise<EngagementGate>;
+  delete(id: string): Promise<void>;
+}
+
+export type EngagementGateDeliveryCreateInput = Omit<EngagementGateDelivery, "id" | "createdAt">;
+
+export interface EngagementGateDeliveryCreateResult {
+  delivery: EngagementGateDelivery;
+  created: boolean;
+}
+
+export interface EngagementGateDeliveryConsumeResult {
+  delivery: EngagementGateDelivery;
+  consumed: boolean;
+}
+
+export interface EngagementGateDeliveryRepository {
+  findByGate(gateId: string): Promise<EngagementGateDelivery[]>;
+  findByGateAndUser(gateId: string, externalUserId: string): Promise<EngagementGateDelivery | null>;
+  findByGateAndUsername(gateId: string, username: string): Promise<EngagementGateDelivery | null>;
+  findByGateAndDeliveryToken(
+    gateId: string,
+    deliveryToken: string,
+  ): Promise<EngagementGateDelivery | null>;
+  countByGateSince(gateId: string, since: Date): Promise<number>;
+  countByAccountSince(socialAccountId: string, since: Date): Promise<number>;
+  createOnce(input: EngagementGateDeliveryCreateInput): Promise<EngagementGateDeliveryCreateResult>;
+  consumeToken(
+    gateId: string,
+    deliveryToken: string,
+    consumedAt: Date,
+  ): Promise<EngagementGateDeliveryConsumeResult | null>;
+}
+
+// ───────────────────────────────────────────
+// EngagementActionRepository
+// ───────────────────────────────────────────
+
+export type EngagementActionCreateInput = Omit<EngagementAction, "id" | "createdAt">;
+
+export interface EngagementActionDedupeInput {
+  workspaceId: string;
+  socialAccountId: string;
+  actionType: EngagementAction["actionType"];
+  targetPostId: string;
+}
+
+export interface EngagementActionCreateResult {
+  action: EngagementAction;
+  created: boolean;
+}
+
+export interface EngagementActionRepository {
+  findByThread(threadId: string): Promise<EngagementAction[]>;
+  findByDedupeKey(input: EngagementActionDedupeInput): Promise<EngagementAction | null>;
+  createOnce(input: EngagementActionCreateInput): Promise<EngagementActionCreateResult>;
+}
+
+// ───────────────────────────────────────────
+// QuoteTweetRepository
+// ───────────────────────────────────────────
+
+export interface QuoteTweetListFilters {
+  socialAccountId?: string;
+  sourceTweetId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export type QuoteTweetUpsertInput = Omit<
+  QuoteTweet,
+  "id" | "lastActionType" | "lastActionExternalId" | "lastActionAt" | "createdAt" | "updatedAt"
+>;
+
+export interface QuoteTweetActionRecordInput {
+  actionType: QuoteTweet["lastActionType"] extends infer T ? Exclude<T, null> : never;
+  externalActionId: string | null;
+  actedAt: Date;
+}
+
+export interface QuoteTweetRepository {
+  findById(id: string): Promise<QuoteTweet | null>;
+  findBySourceAndQuote(
+    workspaceId: string,
+    socialAccountId: string,
+    sourceTweetId: string,
+    quoteTweetId: string,
+  ): Promise<QuoteTweet | null>;
+  findByWorkspace(workspaceId: string, filters?: QuoteTweetListFilters): Promise<QuoteTweet[]>;
+  upsert(input: QuoteTweetUpsertInput): Promise<QuoteTweet>;
+  recordAction(id: string, input: QuoteTweetActionRecordInput): Promise<QuoteTweet>;
 }
 
 // ───────────────────────────────────────────
@@ -118,11 +413,16 @@ export interface ScheduledJobRepository {
 // ───────────────────────────────────────────
 export interface UsageAggregation {
   platform: string;
+  endpoint?: string | null;
+  gateId?: string | null;
+  feature?: string | null;
   totalRequests: number;
   successCount: number;
   failureCount: number;
   totalCostUsd: number;
 }
+
+export type UsageAggregationDimension = "platform" | "endpoint" | "gate";
 
 export interface UsageRepository {
   record(usage: Omit<UsageRecord, "id" | "createdAt">): Promise<UsageRecord>;
@@ -132,6 +432,8 @@ export interface UsageRepository {
       platform?: string;
       /** 指定時はこのエンドポイントに限定して集計する（Task 4004 予算 scope=endpoint 用） */
       endpoint?: string;
+      gateId?: string;
+      dimension?: UsageAggregationDimension;
       startDate: Date;
       endDate: Date;
     },

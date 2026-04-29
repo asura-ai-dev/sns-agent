@@ -24,6 +24,7 @@ import type { BudgetStatusDto, UsagePeriod } from "@sns-agent/sdk";
 import { UsageChart } from "./UsageChart";
 import { SummaryFigures } from "./SummaryFigures";
 import { PlatformLedgerTable } from "./PlatformLedgerTable";
+import { UsageDimensionTables } from "./UsageDimensionTables";
 import { BudgetConsumptionRows } from "./BudgetConsumptionRows";
 import { PLATFORM_INK, PLATFORM_LABEL } from "./types";
 import type { PlatformFilter, UsageViewModel } from "./types";
@@ -233,12 +234,36 @@ export function UsagePageView({ viewModel, budgetStatuses, budgetIsFallback }: U
         <PlatformLedgerTable viewModel={viewModel} platformFilter={platformFilter} />
       </div>
 
+      {/* ─────────────── X dimensions ─────────────── */}
+      <div className="rounded-sm border border-base-content/15 bg-base-100 px-4 py-3">
+        <div className="mb-2 flex items-baseline justify-between gap-3">
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-base-content/45">
+              section iv · x dimensions
+            </div>
+            <h3
+              className="mt-0.5 font-display text-base font-semibold text-base-content"
+              style={{ fontFamily: "'Fraunces', serif" }}
+            >
+              X Cost Dimensions
+            </h3>
+          </div>
+        </div>
+        <UsageDimensionTables
+          endpointEntries={viewModel.endpointEntries}
+          gateEntries={viewModel.gateEntries}
+          isLoading={pending}
+          endpointErrorMessage={viewModel.endpointErrorMessage}
+          gateErrorMessage={viewModel.gateErrorMessage}
+        />
+      </div>
+
       {/* ─────────────── Allowances (budget) ─────────────── */}
       <div>
         <div className="mb-2 flex items-baseline justify-between gap-3">
           <div>
             <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-base-content/45">
-              section iv · allowances
+              section v · allowances
             </div>
             <h3
               className="mt-0.5 font-display text-xl font-semibold text-base-content"

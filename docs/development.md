@@ -217,7 +217,24 @@ pnpm --filter @sns-agent/cli exec sns skills list --api-key <YOUR_API_KEY>
 pnpm --filter @sns-agent/cli exec sns skills pack --platform x --provider codex --api-key <YOUR_API_KEY>
 ```
 
-## 6. OAuth プロバイダの設定（任意）
+## 6. MCP server
+
+X Harness parity 用の MCP server は `packages/mcp` にあります。sns-agent API を直接叩かず、`@sns-agent/sdk` の HTTP client contract 経由で tools を実行します。
+
+必要な環境変数:
+
+- `SNS_AGENT_API_URL`: API のベース URL。例: `http://localhost:3001`
+- `SNS_AGENT_API_KEY`: agent identity または user 用 API key
+
+ローカル起動:
+
+```bash
+SNS_AGENT_API_URL=http://localhost:3001 SNS_AGENT_API_KEY=<YOUR_API_KEY> pnpm --filter @sns-agent/mcp exec sns-agent-mcp
+```
+
+MCP tools は posts、DM/inbox、user account identities、followers、tags、engagement gates、campaigns、quote tweets、staff approval/audit workflows、step sequences、usage を公開します。未実装の step sequence API は XHP-014 の予定パス `/api/step-sequences` に向けた documented equivalent 名として `sequences_*` tools を予約しています。
+
+## 7. OAuth プロバイダの設定（任意）
 
 OAuth を使う場合は `.env` に必要な値を設定してから再起動してください。未設定でも Web と API の基本起動は可能です。
 
@@ -247,7 +264,59 @@ OAuth を使う場合は `.env` に必要な値を設定してから再起動し
 - OAuth コールバック関連では `WEB_URL` を `http://localhost:3000` に合わせておくと扱いやすいです
 - プロバイダ設定を変更したら `pnpm dev` を再起動してください
 
-## 7. トラブルシュート
+## 8. Cloudflare Worker / D1 deployment（任意）
+
+XHP-021 の Cloudflare path は、既存の `apps/api` を置き換えません。ローカル開発は引き続き
+`pnpm dev` で Node API + SQLite を起動し、Worker/D1 は明示的に Cloudflare 用の adapter として
+扱います。
+
+構成:
+
+- `apps/api`: 既存の Node Hono API。`better-sqlite3` を使うため Worker runtime へ直接載せません。
+- `apps/worker`: Cloudflare Worker adapter。D1 binding `DB` を受け、Worker/D1 の疎通確認 endpoint を公開します。
+- `apps/worker/migrations/0001_init.sql`: `packages/db/src/migrations/*.sql` から作った D1 用 schema bundle です。
+- `.dev.vars.example`: Worker local dev 用の非 secret サンプルです。必要に応じて `apps/worker/.dev.vars` にコピーします。
+
+Cloudflare 側の初期作成:
+
+```bash
+pnpm --filter @sns-agent/worker build
+pnpm dlx wrangler d1 create sns-agent
+```
+
+`wrangler d1 create` が返す `database_id` を `apps/worker/wrangler.toml` の
+`database_id` に反映してください。ローカル D1 へ schema を適用する場合:
+
+```bash
+pnpm dlx wrangler d1 migrations apply sns-agent --local --config apps/worker/wrangler.toml
+```
+
+Cloudflare 側の D1 へ schema を適用する場合:
+
+```bash
+pnpm dlx wrangler d1 migrations apply sns-agent --remote --config apps/worker/wrangler.toml
+```
+
+Worker をローカル起動する場合:
+
+```bash
+cp .dev.vars.example apps/worker/.dev.vars
+pnpm --filter @sns-agent/worker cf:dev
+```
+
+疎通確認:
+
+```bash
+curl http://localhost:8787/api/health
+curl http://localhost:8787/api/d1/schema-version
+```
+
+D1 schema bundle を更新する場合は、まず通常どおり Drizzle の SQLite migration を
+`packages/db/src/migrations` に追加し、その内容を `apps/worker/migrations/0001_init.sql` に
+反映します。`packages/db` の `buildD1MigrationBundle()` は、Drizzle migration SQL を
+filename order で結合し、Drizzle metadata を含めないための小さな helper です。
+
+## 9. トラブルシュート
 
 ### DB をリセットしたい
 

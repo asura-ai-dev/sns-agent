@@ -147,7 +147,7 @@
     {
       "id": "XHP-003",
       "title": "Implement X post media thread and quote publishing parity",
-      "status": "planned",
+      "status": "verified",
       "priority": "P0",
       "phase": "phase-1",
       "owner_role": "implementer",
@@ -181,7 +181,7 @@
     {
       "id": "XHP-004",
       "title": "Harden scheduled post parity",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-1",
       "owner_role": "implementer",
@@ -213,7 +213,7 @@
     {
       "id": "XHP-005",
       "title": "Implement engagement gate domain API and processor",
-      "status": "planned",
+      "status": "verified",
       "priority": "P0",
       "phase": "phase-2",
       "owner_role": "implementer",
@@ -248,7 +248,7 @@
     {
       "id": "XHP-006",
       "title": "Add gate verify API and LINE Harness handoff",
-      "status": "planned",
+      "status": "verified",
       "priority": "P0",
       "phase": "phase-2",
       "owner_role": "implementer",
@@ -281,7 +281,7 @@
     {
       "id": "XHP-007",
       "title": "Build campaign wizard API and dashboard flow",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-4",
       "owner_role": "implementer",
@@ -312,7 +312,7 @@
     {
       "id": "XHP-008",
       "title": "Implement X reply management",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-3",
       "owner_role": "implementer",
@@ -346,7 +346,7 @@
     {
       "id": "XHP-009",
       "title": "Implement X DM management",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-3",
       "owner_role": "implementer",
@@ -379,7 +379,7 @@
     {
       "id": "XHP-010",
       "title": "Persist and act on quote tweets",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-3",
       "owner_role": "implementer",
@@ -412,7 +412,7 @@
     {
       "id": "XHP-011",
       "title": "Add X follower repository sync and segments",
-      "status": "planned",
+      "status": "verified",
       "priority": "P0",
       "phase": "phase-0",
       "owner_role": "implementer",
@@ -444,7 +444,7 @@
     {
       "id": "XHP-012",
       "title": "Add follower tags",
-      "status": "planned",
+      "status": "verified",
       "priority": "P0",
       "phase": "phase-0",
       "owner_role": "implementer",
@@ -476,7 +476,7 @@
     {
       "id": "XHP-013",
       "title": "Add follower snapshot analytics",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-0",
       "owner_role": "implementer",
@@ -508,7 +508,7 @@
     {
       "id": "XHP-014",
       "title": "Implement step sequences",
-      "status": "planned",
+      "status": "verified",
       "priority": "P2",
       "phase": "phase-3",
       "owner_role": "implementer",
@@ -540,7 +540,7 @@
     {
       "id": "XHP-015",
       "title": "Add X usage analytics dimensions",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-0",
       "owner_role": "implementer",
@@ -572,7 +572,7 @@
     {
       "id": "XHP-016",
       "title": "Review staff and API key parity",
-      "status": "planned",
+      "status": "verified",
       "priority": "P2",
       "phase": "phase-5",
       "owner_role": "implementer",
@@ -604,7 +604,7 @@
     {
       "id": "XHP-017",
       "title": "Add X Harness MCP server package",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-4",
       "owner_role": "implementer",
@@ -635,7 +635,7 @@
     {
       "id": "XHP-018",
       "title": "Extend SDK with X parity resources",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-4",
       "owner_role": "implementer",
@@ -665,7 +665,7 @@
     {
       "id": "XHP-019",
       "title": "Build X-specific dashboard parity shell",
-      "status": "planned",
+      "status": "verified",
       "priority": "P1",
       "phase": "phase-4",
       "owner_role": "implementer",
@@ -697,7 +697,7 @@
     {
       "id": "XHP-020",
       "title": "Add stealth delivery controls",
-      "status": "planned",
+      "status": "verified",
       "priority": "P0",
       "phase": "phase-2",
       "owner_role": "implementer",
@@ -729,7 +729,7 @@
     {
       "id": "XHP-021",
       "title": "Add optional Cloudflare Worker D1 deployment path",
-      "status": "planned",
+      "status": "verified",
       "priority": "P2",
       "phase": "phase-5",
       "owner_role": "implementer",

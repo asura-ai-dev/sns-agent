@@ -1,0 +1,3 @@
+# Cloudflare Worker local development values.
+# Copy to apps/worker/.dev.vars when using `pnpm --filter @sns-agent/worker cf:dev`.
+SNS_AGENT_ENV=local

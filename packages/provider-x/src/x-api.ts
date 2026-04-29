@@ -5,6 +5,7 @@ export interface XUser {
   id: string;
   name?: string;
   username?: string;
+  profile_image_url?: string;
   protected?: boolean;
   verified?: boolean;
   public_metrics?: Record<string, number>;
@@ -17,6 +18,7 @@ export interface XTweet {
   author_id?: string;
   conversation_id?: string;
   created_at?: string;
+  public_metrics?: Record<string, number>;
   referenced_tweets?: Array<{ type?: string; id?: string }>;
   [key: string]: unknown;
 }

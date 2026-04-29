@@ -17,26 +17,65 @@ import type {
   ApiResponse,
   BudgetPolicyDto,
   BudgetStatusDto,
+  CampaignListItemDto,
+  CampaignRecordDto,
+  CaptureFollowerSnapshotDto,
+  CaptureFollowerSnapshotResultDto,
+  CaptureFollowerSnapshotsForWorkspaceResultDto,
+  ConsumeEngagementGateDeliveryTokenDto,
+  ConsumeEngagementGateDeliveryTokenResultDto,
   ConnectAccountInput,
+  CreateCampaignDto,
+  CreateEngagementGateDto,
   CreateBudgetPolicyDto,
   CreatePostInput,
   CreateScheduleInput,
+  CreateStepSequenceDto,
+  CreateTagDto,
+  EnrollStepSequenceDto,
+  EngagementGateDto,
+  FollowerAnalyticsParams,
+  FollowerAnalyticsResultDto,
+  FollowerDto,
+  FollowerTagInput,
+  ListEngagementGatesParams,
+  ListFollowersParams,
   ListPostsParams,
+  ListQuoteTweetsParams,
   ListSchedulesParams,
+  ListStepSequencesParams,
+  ListTagsParams,
+  OffsetApiResponse,
   Post,
+  ProcessEngagementGateRepliesDto,
+  ProcessEngagementGateRepliesResultDto,
+  QuoteTweetActionDto,
+  QuoteTweetActionResultDto,
+  QuoteTweetDto,
   RunDueSchedulesInput,
   RunDueSchedulesResult,
   ScheduledJob,
   SocialAccount,
+  StepSequenceDto,
+  StepSequenceEnrollmentDto,
+  SyncFollowersInput,
+  SyncFollowersResultDto,
+  SyncQuoteTweetsDto,
+  SyncQuoteTweetsResultDto,
+  TagDto,
   UpdateBudgetPolicyDto,
+  UpdateEngagementGateDto,
   UpdatePostInput,
   UpdateScheduleInput,
+  UpdateTagDto,
   UsageRecord,
   UsageReportEntry,
   UsageReportMeta,
   UsageReportParams,
   UsageSummary,
   UsageSummaryReport,
+  VerifyEngagementGateParams,
+  VerifyEngagementGateResultDto,
 } from "./types.js";
 
 // ───────────────────────────────────────────
@@ -52,6 +91,13 @@ export interface SnsAgentClientOptions {
   sessionUserId?: string;
   /** カスタム fetch 実装（テスト用） */
   fetch?: typeof globalThis.fetch;
+}
+
+export type SnsAgentHttpMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+
+export interface SnsAgentRequestOptions {
+  params?: Record<string, string | number | boolean | undefined>;
+  body?: unknown;
 }
 
 // ───────────────────────────────────────────
@@ -135,6 +181,79 @@ export interface BudgetResource {
   status(): Promise<ApiResponse<BudgetStatusDto[]>>;
 }
 
+export interface EngagementGatesResource {
+  list(params?: ListEngagementGatesParams): Promise<ApiResponse<EngagementGateDto[]>>;
+  get(id: string): Promise<ApiResponse<EngagementGateDto>>;
+  create(input: CreateEngagementGateDto): Promise<ApiResponse<EngagementGateDto>>;
+  update(id: string, input: UpdateEngagementGateDto): Promise<ApiResponse<EngagementGateDto>>;
+  delete(id: string): Promise<ApiResponse<{ success: boolean }>>;
+  process(
+    input?: ProcessEngagementGateRepliesDto,
+  ): Promise<ApiResponse<ProcessEngagementGateRepliesResultDto>>;
+  verify(
+    id: string,
+    params: VerifyEngagementGateParams,
+  ): Promise<ApiResponse<VerifyEngagementGateResultDto>>;
+  consumeDeliveryToken(
+    id: string,
+    input: ConsumeEngagementGateDeliveryTokenDto,
+  ): Promise<ApiResponse<ConsumeEngagementGateDeliveryTokenResultDto>>;
+}
+
+export interface FollowersResource {
+  list(params?: ListFollowersParams): Promise<OffsetApiResponse<FollowerDto[]>>;
+  sync(input: SyncFollowersInput): Promise<ApiResponse<SyncFollowersResultDto>>;
+  attachTag(
+    followerId: string,
+    tagId: string,
+    input: FollowerTagInput,
+  ): Promise<ApiResponse<{ success: boolean }>>;
+  detachTag(
+    followerId: string,
+    tagId: string,
+    input: FollowerTagInput,
+  ): Promise<ApiResponse<{ success: boolean }>>;
+}
+
+export interface TagsResource {
+  list(params?: ListTagsParams): Promise<ApiResponse<TagDto[]>>;
+  create(input: CreateTagDto): Promise<ApiResponse<TagDto>>;
+  update(id: string, input: UpdateTagDto): Promise<ApiResponse<TagDto>>;
+  delete(id: string): Promise<ApiResponse<{ success: boolean }>>;
+}
+
+export interface FollowerAnalyticsResource {
+  get(params: FollowerAnalyticsParams): Promise<ApiResponse<FollowerAnalyticsResultDto>>;
+  captureSnapshot(
+    input?: CaptureFollowerSnapshotDto,
+  ): Promise<
+    ApiResponse<CaptureFollowerSnapshotResultDto | CaptureFollowerSnapshotsForWorkspaceResultDto>
+  >;
+}
+
+export interface CampaignsResource {
+  /** Agent usage example: create a draft/publish/schedule campaign from one typed payload. */
+  create(input: CreateCampaignDto): Promise<ApiResponse<CampaignRecordDto>>;
+  list(): Promise<ApiResponse<CampaignListItemDto[]>>;
+}
+
+export interface QuoteTweetsResource {
+  list(params?: ListQuoteTweetsParams): Promise<ApiResponse<QuoteTweetDto[]>>;
+  sync(input: SyncQuoteTweetsDto): Promise<ApiResponse<SyncQuoteTweetsResultDto>>;
+  get(id: string): Promise<ApiResponse<QuoteTweetDto>>;
+  action(id: string, input: QuoteTweetActionDto): Promise<ApiResponse<QuoteTweetActionResultDto>>;
+}
+
+export interface StepSequencesResource {
+  /** Agent/MCP usage example: reserved X step sequence list path with typed query params. */
+  list(params?: ListStepSequencesParams): Promise<ApiResponse<StepSequenceDto[]>>;
+  create(input: CreateStepSequenceDto): Promise<ApiResponse<StepSequenceDto>>;
+  enroll(
+    sequenceId: string,
+    input: EnrollStepSequenceDto,
+  ): Promise<ApiResponse<StepSequenceEnrollmentDto>>;
+}
+
 export interface AgentResource {
   chat(input: AgentChatInput): Promise<ApiResponse<AgentChatResponse>>;
   execute(input: AgentExecuteInput): Promise<ApiResponse<AgentExecuteResponse>>;
@@ -156,6 +275,13 @@ export class SnsAgentClient {
   public readonly schedules: SchedulesResource;
   public readonly usage: UsageResource;
   public readonly budget: BudgetResource;
+  public readonly engagementGates: EngagementGatesResource;
+  public readonly followers: FollowersResource;
+  public readonly tags: TagsResource;
+  public readonly followerAnalytics: FollowerAnalyticsResource;
+  public readonly campaigns: CampaignsResource;
+  public readonly quoteTweets: QuoteTweetsResource;
+  public readonly stepSequences: StepSequencesResource;
   public readonly agent: AgentResource;
 
   constructor(options: SnsAgentClientOptions) {
@@ -170,6 +296,13 @@ export class SnsAgentClient {
     this.schedules = this._buildSchedules();
     this.usage = this._buildUsage();
     this.budget = this._buildBudget();
+    this.engagementGates = this._buildEngagementGates();
+    this.followers = this._buildFollowers();
+    this.tags = this._buildTags();
+    this.followerAnalytics = this._buildFollowerAnalytics();
+    this.campaigns = this._buildCampaigns();
+    this.quoteTweets = this._buildQuoteTweets();
+    this.stepSequences = this._buildStepSequences();
     this.agent = this._buildAgent();
   }
 
@@ -237,6 +370,24 @@ export class SnsAgentClient {
     return this._handleResponse<T>(res);
   }
 
+  async request<T>(
+    method: SnsAgentHttpMethod,
+    path: string,
+    options: SnsAgentRequestOptions = {},
+  ): Promise<T> {
+    const normalizedMethod = method.toUpperCase() as SnsAgentHttpMethod;
+    const url = `${this.baseUrl}${path}${toSearchParams(options.params)}`;
+    const hasBody = options.body !== undefined;
+    const res = await this._fetch(url, {
+      method: normalizedMethod,
+      headers: this._headers({
+        idempotency: normalizedMethod !== "GET",
+      }),
+      body: hasBody ? JSON.stringify(options.body) : undefined,
+    });
+    return this._handleResponse<T>(res);
+  }
+
   // ───────────────────────────────────────
   // 内部ヘルパー
   // ───────────────────────────────────────
@@ -293,7 +444,13 @@ export class SnsAgentClient {
           params as Record<string, string | number | boolean | undefined>,
         ),
       get: (id) => this.get<ApiResponse<Post>>(`/api/posts/${id}`),
-      create: (input) => this.post<ApiResponse<Post>>("/api/posts", input),
+      create: (input) => {
+        const { publish, publishNow, ...body } = input;
+        return this.post<ApiResponse<Post>>("/api/posts", {
+          ...body,
+          publishNow: publishNow ?? publish ?? false,
+        });
+      },
       update: (id, input) => this.patch<ApiResponse<Post>>(`/api/posts/${id}`, input),
       delete: (id) => this.delete<ApiResponse<{ success: boolean }>>(`/api/posts/${id}`),
       publish: (id) => this.post<ApiResponse<Post>>(`/api/posts/${id}/publish`),
@@ -345,11 +502,128 @@ export class SnsAgentClient {
     };
   }
 
+  private _buildEngagementGates(): EngagementGatesResource {
+    return {
+      list: (params) =>
+        this.get<ApiResponse<EngagementGateDto[]>>(
+          "/api/engagement-gates",
+          params as Record<string, string | number | boolean | undefined>,
+        ),
+      get: (id) => this.get<ApiResponse<EngagementGateDto>>(`/api/engagement-gates/${id}`),
+      create: (input) => this.post<ApiResponse<EngagementGateDto>>("/api/engagement-gates", input),
+      update: (id, input) =>
+        this.patch<ApiResponse<EngagementGateDto>>(`/api/engagement-gates/${id}`, input),
+      delete: (id) => this.delete<ApiResponse<{ success: boolean }>>(`/api/engagement-gates/${id}`),
+      process: (input) =>
+        this.post<ApiResponse<ProcessEngagementGateRepliesResultDto>>(
+          "/api/engagement-gates/process",
+          input ?? {},
+        ),
+      verify: (id, params) =>
+        this.get<ApiResponse<VerifyEngagementGateResultDto>>(`/api/engagement-gates/${id}/verify`, {
+          username: params.username,
+        }),
+      consumeDeliveryToken: (id, input) =>
+        this.post<ApiResponse<ConsumeEngagementGateDeliveryTokenResultDto>>(
+          `/api/engagement-gates/${id}/deliveries/consume`,
+          input,
+        ),
+    };
+  }
+
+  private _buildFollowers(): FollowersResource {
+    return {
+      list: (params) =>
+        this.get<OffsetApiResponse<FollowerDto[]>>(
+          "/api/followers",
+          params as Record<string, string | number | boolean | undefined>,
+        ),
+      sync: (input) => this.post<ApiResponse<SyncFollowersResultDto>>("/api/followers/sync", input),
+      attachTag: (followerId, tagId, input) =>
+        this.post<ApiResponse<{ success: boolean }>>(
+          `/api/followers/${followerId}/tags/${tagId}`,
+          input,
+        ),
+      detachTag: (followerId, tagId, input) =>
+        this.request<ApiResponse<{ success: boolean }>>(
+          "DELETE",
+          `/api/followers/${followerId}/tags/${tagId}`,
+          { body: input },
+        ),
+    };
+  }
+
+  private _buildTags(): TagsResource {
+    return {
+      list: (params) =>
+        this.get<ApiResponse<TagDto[]>>(
+          "/api/tags",
+          params as Record<string, string | number | boolean | undefined>,
+        ),
+      create: (input) => this.post<ApiResponse<TagDto>>("/api/tags", input),
+      update: (id, input) => this.patch<ApiResponse<TagDto>>(`/api/tags/${id}`, input),
+      delete: (id) => this.delete<ApiResponse<{ success: boolean }>>(`/api/tags/${id}`),
+    };
+  }
+
+  private _buildFollowerAnalytics(): FollowerAnalyticsResource {
+    return {
+      get: (params) =>
+        this.get<ApiResponse<FollowerAnalyticsResultDto>>("/api/analytics/followers", {
+          socialAccountId: params.socialAccountId,
+          asOfDate: params.asOfDate,
+        }),
+      captureSnapshot: (input) =>
+        this.post<
+          ApiResponse<
+            CaptureFollowerSnapshotResultDto | CaptureFollowerSnapshotsForWorkspaceResultDto
+          >
+        >("/api/analytics/followers/snapshot", input ?? {}),
+    };
+  }
+
+  private _buildCampaigns(): CampaignsResource {
+    return {
+      list: () => this.get<ApiResponse<CampaignListItemDto[]>>("/api/campaigns"),
+      create: (input) => this.post<ApiResponse<CampaignRecordDto>>("/api/campaigns", input),
+    };
+  }
+
+  private _buildQuoteTweets(): QuoteTweetsResource {
+    return {
+      list: (params) =>
+        this.get<ApiResponse<QuoteTweetDto[]>>(
+          "/api/quote-tweets",
+          params as Record<string, string | number | boolean | undefined>,
+        ),
+      sync: (input) =>
+        this.post<ApiResponse<SyncQuoteTweetsResultDto>>("/api/quote-tweets/sync", input),
+      get: (id) => this.get<ApiResponse<QuoteTweetDto>>(`/api/quote-tweets/${id}`),
+      action: (id, input) =>
+        this.post<ApiResponse<QuoteTweetActionResultDto>>(`/api/quote-tweets/${id}/actions`, input),
+    };
+  }
+
+  private _buildStepSequences(): StepSequencesResource {
+    return {
+      list: (params) =>
+        this.get<ApiResponse<StepSequenceDto[]>>(
+          "/api/step-sequences",
+          params as Record<string, string | number | boolean | undefined>,
+        ),
+      create: (input) => this.post<ApiResponse<StepSequenceDto>>("/api/step-sequences", input),
+      enroll: (sequenceId, input) =>
+        this.post<ApiResponse<StepSequenceEnrollmentDto>>(
+          `/api/step-sequences/${sequenceId}/enrollments`,
+          input,
+        ),
+    };
+  }
+
   private _buildAgent(): AgentResource {
     return {
       chat: (input) => this.post<ApiResponse<AgentChatResponse>>("/api/agent/chat", input),
-      execute: (input) =>
-        this.post<ApiResponse<AgentExecuteResponse>>("/api/agent/execute", input),
+      execute: (input) => this.post<ApiResponse<AgentExecuteResponse>>("/api/agent/execute", input),
       history: (params) =>
         this.get<ApiResponse<AgentHistoryEntry[]>>(
           "/api/agent/history",

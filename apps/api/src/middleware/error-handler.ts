@@ -21,6 +21,7 @@ import {
   NotFoundError,
   BudgetExceededError,
   ProviderError,
+  ProviderPermissionError,
   RateLimitError,
 } from "@sns-agent/core";
 
@@ -29,6 +30,7 @@ function getStatusCode(err: DomainError): ContentfulStatusCode {
   if (err instanceof AuthorizationError) return 403;
   if (err instanceof NotFoundError) return 404;
   if (err instanceof BudgetExceededError) return 429;
+  if (err instanceof ProviderPermissionError) return 403;
   if (err instanceof RateLimitError) return 429;
   if (err instanceof ProviderError) return 502;
   return 400;
