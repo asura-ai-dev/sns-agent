@@ -28,9 +28,11 @@ test.describe("Web UI smoke", () => {
     await page.goto("/posts");
     await expect(page.locator("body")).toBeVisible();
     // 投稿一覧テーブル or 空状態の見出しが出る
-    await expect(
-      page.locator("table, [role='table'], text=/投稿|Posts|No posts/i").first(),
-    ).toBeVisible({ timeout: 5000 });
+    const main = page.locator("main");
+    await expect(main.getByRole("heading", { name: "Posts" })).toBeVisible({ timeout: 5000 });
+    await expect(main.getByText(/投稿一覧|PLATFORM|No posts/i).first()).toBeVisible({
+      timeout: 5000,
+    });
   });
 
   test("c. posts create page renders a form", async ({ page }) => {
@@ -46,7 +48,9 @@ test.describe("Web UI smoke", () => {
     await page.goto("/calendar");
     await expect(page.locator("body")).toBeVisible();
     // カレンダーヘッダ（月表示等）または grid
-    await expect(page.locator("text=/月|Calendar|Schedule/i, [role='grid']").first()).toBeVisible({
+    const main = page.locator("main");
+    await expect(main.getByRole("heading", { name: "Calendar" })).toBeVisible({ timeout: 5000 });
+    await expect(main.getByText(/月|Calendar|Schedule/i).first()).toBeVisible({
       timeout: 5000,
     });
   });
@@ -54,5 +58,18 @@ test.describe("Web UI smoke", () => {
   test("e. settings page renders", async ({ page }) => {
     await page.goto("/settings");
     await expect(page.locator("body")).toBeVisible();
+  });
+
+  test("f. usage page does not overflow on mobile width", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/usage?period=weekly");
+    await expect(page.getByRole("heading", { name: "Usage" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "X Cost Dimensions" })).toBeVisible();
+
+    const metrics = await page.evaluate(() => ({
+      innerWidth: window.innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.innerWidth);
   });
 });

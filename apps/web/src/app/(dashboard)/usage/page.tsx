@@ -133,7 +133,7 @@ export default async function UsagePage({ searchParams }: UsagePageProps) {
   ].filter(Boolean) as string[];
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-7">
+    <div className="mx-auto w-full min-w-0 max-w-[1440px] space-y-7">
       <UsageMasthead
         now={now}
         rangeFrom={range.from}

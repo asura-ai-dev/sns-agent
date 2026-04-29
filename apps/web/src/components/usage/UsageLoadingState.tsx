@@ -19,7 +19,11 @@ function SkeletonRule({ wide = false }: { wide?: boolean }) {
 
 export function UsageLoadingState() {
   return (
-    <div className="mx-auto max-w-[1440px] space-y-7" aria-busy="true" aria-live="polite">
+    <div
+      className="mx-auto w-full min-w-0 max-w-[1440px] space-y-7"
+      aria-busy="true"
+      aria-live="polite"
+    >
       <header className="relative">
         <div className="flex flex-wrap items-end justify-between gap-3 pb-3">
           <div className="font-mono text-[10px] uppercase leading-none tracking-[0.22em] text-base-content/55">
