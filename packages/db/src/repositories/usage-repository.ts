@@ -55,7 +55,7 @@ export class DrizzleUsageRepository implements UsageRepository {
 
   async aggregate(
     workspaceId: string,
-    options: { platform?: string; endpoint?: string; startDate: Date; endDate: Date },
+    options: Parameters<UsageRepository["aggregate"]>[1],
   ): Promise<UsageAggregation[]> {
     const conditions = [
       eq(usageRecords.workspaceId, workspaceId),

@@ -115,6 +115,7 @@ export type {
   ScheduledJobRepository,
   UsageRepository,
   UsageAggregation,
+  UsageAggregationDimension,
   BudgetPolicyRepository,
   LlmRouteRepository,
   LlmProviderCredentialRepository,
