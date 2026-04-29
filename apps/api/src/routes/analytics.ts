@@ -47,7 +47,7 @@ analytics.get("/followers", requirePermission("inbox:read"), async (c) => {
   return c.json({ data: result });
 });
 
-analytics.post("/followers/snapshot", requirePermission("inbox:read"), async (c) => {
+analytics.post("/followers/snapshot", requirePermission("inbox:reply"), async (c) => {
   const actor = c.get("actor");
   const body: { socialAccountId?: string; capturedAt?: string } = await c.req
     .json()

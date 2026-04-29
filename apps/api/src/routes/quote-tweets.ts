@@ -85,7 +85,7 @@ quoteTweets.get("/", requirePermission("inbox:read"), async (c) => {
   return c.json({ data: result.data.map(serializeQuoteTweet) });
 });
 
-quoteTweets.post("/sync", requirePermission("inbox:read"), async (c) => {
+quoteTweets.post("/sync", requirePermission("inbox:reply"), async (c) => {
   const actor = c.get("actor");
   const deps = buildDeps(c.get("db"));
   const body = await c.req.json<{

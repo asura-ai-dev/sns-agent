@@ -105,7 +105,9 @@ function mockFollowerRepo(): FollowerRepository & {
   };
 }
 
-function mockProvider(): SocialProvider {
+function mockProvider(
+  overrides: Partial<Pick<SocialProvider, "listFollowers" | "listFollowing">> = {},
+): SocialProvider {
   return {
     platform: "x",
     getCapabilities: () => ({
@@ -151,10 +153,11 @@ function mockProvider(): SocialProvider {
       ],
       nextCursor: null,
     }),
+    ...overrides,
   };
 }
 
-function buildDeps(): FollowerUsecaseDeps & {
+function buildDeps(provider: SocialProvider = mockProvider()): FollowerUsecaseDeps & {
   followerRepo: ReturnType<typeof mockFollowerRepo>;
 } {
   const account = mockAccount();
@@ -162,7 +165,7 @@ function buildDeps(): FollowerUsecaseDeps & {
   return {
     accountRepo: mockAccountRepo(account),
     followerRepo,
-    providers: new Map([["x", mockProvider()]]),
+    providers: new Map([["x", provider]]),
     encryptionKey: TEST_ENCRYPTION_KEY,
   };
 }
@@ -202,6 +205,119 @@ describe("followers usecase", () => {
     );
     expect(deps.followerRepo.missingFollowerCalls).toHaveLength(1);
     expect(deps.followerRepo.missingFollowingCalls).toHaveLength(1);
+  });
+
+  it("marks missing relationships only after collecting all pages from a full sync", async () => {
+    const provider = mockProvider({
+      listFollowers: async (input) => ({
+        profiles:
+          input.cursor === "followers-page-2"
+            ? [
+                {
+                  externalUserId: "u-2",
+                  displayName: "Bob",
+                  username: "bob",
+                  metadata: null,
+                },
+              ]
+            : [
+                {
+                  externalUserId: "u-1",
+                  displayName: "Alice",
+                  username: "alice",
+                  metadata: null,
+                },
+              ],
+        nextCursor: input.cursor === "followers-page-2" ? null : "followers-page-2",
+      }),
+      listFollowing: async (input) => ({
+        profiles:
+          input.cursor === "following-page-2"
+            ? [
+                {
+                  externalUserId: "u-4",
+                  displayName: "Dora",
+                  username: "dora",
+                  metadata: null,
+                },
+              ]
+            : [
+                {
+                  externalUserId: "u-3",
+                  displayName: "Carol",
+                  username: "carol",
+                  metadata: null,
+                },
+              ],
+        nextCursor: input.cursor === "following-page-2" ? null : "following-page-2",
+      }),
+    });
+    const deps = buildDeps(provider);
+
+    const result = await syncFollowersFromProvider(deps, {
+      workspaceId: "ws-1",
+      socialAccountId: "acc-1",
+      limit: 1,
+    });
+
+    expect(result).toMatchObject({
+      followerCount: 2,
+      followingCount: 2,
+      nextFollowersCursor: null,
+      nextFollowingCursor: null,
+    });
+    expect(deps.followerRepo.missingFollowerCalls).toEqual([
+      expect.objectContaining({ currentExternalUserIds: ["u-1", "u-2"] }),
+    ]);
+    expect(deps.followerRepo.missingFollowingCalls).toEqual([
+      expect.objectContaining({ currentExternalUserIds: ["u-3", "u-4"] }),
+    ]);
+  });
+
+  it("does not mark missing relationships when syncing from a partial cursor page", async () => {
+    const provider = mockProvider({
+      listFollowers: async () => ({
+        profiles: [
+          {
+            externalUserId: "u-2",
+            displayName: "Bob",
+            username: "bob",
+            metadata: null,
+          },
+        ],
+        nextCursor: null,
+      }),
+      listFollowing: async () => ({
+        profiles: [
+          {
+            externalUserId: "u-4",
+            displayName: "Dora",
+            username: "dora",
+            metadata: null,
+          },
+        ],
+        nextCursor: null,
+      }),
+    });
+    const deps = buildDeps(provider);
+
+    const result = await syncFollowersFromProvider(deps, {
+      workspaceId: "ws-1",
+      socialAccountId: "acc-1",
+      followersCursor: "followers-page-2",
+      followingCursor: "following-page-2",
+    });
+
+    expect(result).toMatchObject({
+      followerCount: 1,
+      followingCount: 1,
+      nextFollowersCursor: null,
+      nextFollowingCursor: null,
+      markedUnfollowedCount: 0,
+      markedUnfollowingCount: 0,
+    });
+    expect(deps.followerRepo.missingFollowerCalls).toEqual([]);
+    expect(deps.followerRepo.missingFollowingCalls).toEqual([]);
   });
 
   it("lists followers for one account", async () => {

@@ -654,14 +654,14 @@ export interface ListStepSequencesParams {
 export interface StepSequenceStepDto {
   delaySeconds?: number;
   actionType?: string;
-  text?: string | null;
+  contentText?: string | null;
   [key: string]: unknown;
 }
 
 export interface CreateStepSequenceDto {
   socialAccountId: string;
   name: string;
-  steps: StepSequenceStepDto[];
+  messages: StepSequenceStepDto[];
 }
 
 export interface StepSequenceDto {
@@ -669,7 +669,7 @@ export interface StepSequenceDto {
   socialAccountId?: string;
   name?: string;
   status?: string;
-  steps?: StepSequenceStepDto[];
+  messages?: StepSequenceStepDto[];
   [key: string]: unknown;
 }
 

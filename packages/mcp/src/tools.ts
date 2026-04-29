@@ -641,9 +641,9 @@ const TOOL_ROUTES: ToolRoute[] = [
       {
         socialAccountId,
         name: stringProp("Sequence name"),
-        steps: arrayProp("Sequence step definitions"),
+        messages: arrayProp("Sequence message definitions with contentText"),
       },
-      ["socialAccountId", "name", "steps"],
+      ["socialAccountId", "name", "messages"],
     ),
   },
   {
@@ -736,8 +736,7 @@ export function createToolCaller(client: McpApiClient) {
       if (
         typeof value === "string" ||
         typeof value === "number" ||
-        typeof value === "boolean" ||
-        value === undefined
+        typeof value === "boolean"
       ) {
         params[param] = value;
       }

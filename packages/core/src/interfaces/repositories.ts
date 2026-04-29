@@ -169,6 +169,7 @@ export type StepEnrollmentUpdateInput = Partial<
 export interface FindDueStepEnrollmentsInput {
   now: Date;
   limit: number;
+  workspaceId?: string;
 }
 
 export interface StepSequenceRepository {
@@ -233,7 +234,7 @@ export interface EngagementGateRepository {
     workspaceId: string,
     filters?: EngagementGateListFilters,
   ): Promise<EngagementGate[]>;
-  findActiveReplyTriggers(limit: number): Promise<EngagementGate[]>;
+  findActiveReplyTriggers(limit: number, workspaceId?: string): Promise<EngagementGate[]>;
   create(input: EngagementGateCreateInput): Promise<EngagementGate>;
   update(id: string, data: EngagementGateUpdateInput): Promise<EngagementGate>;
   delete(id: string): Promise<void>;

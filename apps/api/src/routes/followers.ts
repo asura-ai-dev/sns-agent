@@ -8,7 +8,11 @@ import {
   type FollowerUsecaseDeps,
   type TagUsecaseDeps,
 } from "@sns-agent/core";
-import { DrizzleAccountRepository, DrizzleFollowerRepository, DrizzleTagRepository } from "@sns-agent/db";
+import {
+  DrizzleAccountRepository,
+  DrizzleFollowerRepository,
+  DrizzleTagRepository,
+} from "@sns-agent/db";
 import { requirePermission } from "../middleware/rbac.js";
 import { getProviderRegistry } from "../providers.js";
 import type { AppVariables } from "../types.js";
@@ -86,7 +90,7 @@ followers.get("/", requirePermission("inbox:read"), async (c) => {
   });
 });
 
-followers.post("/sync", requirePermission("inbox:read"), async (c) => {
+followers.post("/sync", requirePermission("inbox:reply"), async (c) => {
   const actor = c.get("actor");
   const deps = buildDeps(c.get("db"));
   const body = await c.req.json<{

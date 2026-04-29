@@ -106,11 +106,19 @@ export class DrizzleEngagementGateRepository implements EngagementGateRepository
     return rows.map(rowToGate);
   }
 
-  async findActiveReplyTriggers(limit: number): Promise<EngagementGate[]> {
+  async findActiveReplyTriggers(limit: number, workspaceId?: string): Promise<EngagementGate[]> {
+    const conditions = [
+      eq(engagementGates.status, "active"),
+      eq(engagementGates.triggerType, "reply"),
+    ];
+    if (workspaceId) {
+      conditions.push(eq(engagementGates.workspaceId, workspaceId));
+    }
+
     const rows = await this.db
       .select()
       .from(engagementGates)
-      .where(and(eq(engagementGates.status, "active"), eq(engagementGates.triggerType, "reply")))
+      .where(and(...conditions))
       .limit(limit);
     return rows.map(rowToGate);
   }

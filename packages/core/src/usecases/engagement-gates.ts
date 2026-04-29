@@ -71,6 +71,7 @@ export interface UpdateEngagementGateInput {
 }
 
 export interface ProcessEngagementGateRepliesInput {
+  workspaceId?: string;
   limit?: number;
   now?: Date;
   templateSeed?: string;
@@ -402,7 +403,7 @@ export async function processEngagementGateReplies(
 ): Promise<ProcessEngagementGateRepliesResult> {
   const limit = input.limit && input.limit > 0 ? Math.min(input.limit, 100) : 50;
   const now = input.now ?? new Date();
-  const gates = await deps.gateRepo.findActiveReplyTriggers(limit);
+  const gates = await deps.gateRepo.findActiveReplyTriggers(limit, input.workspaceId);
   const accountBackoffs = new Map<string, Date>();
   const summary: ProcessEngagementGateRepliesResult = {
     gatesScanned: gates.length,

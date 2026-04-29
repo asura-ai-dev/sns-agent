@@ -433,7 +433,7 @@ describe("SnsAgentClient X parity resources", () => {
     await client.stepSequences.create({
       socialAccountId: "acct-1",
       name: "Warmup",
-      steps: [{ delaySeconds: 60, actionType: "dm", text: "hello" }],
+      messages: [{ delaySeconds: 60, actionType: "dm", contentText: "hello" }],
     });
     await client.stepSequences.enroll("sequence-1", {
       externalUserId: "x-user-1",
@@ -445,5 +445,13 @@ describe("SnsAgentClient X parity resources", () => {
       "http://api.test/api/step-sequences",
       "http://api.test/api/step-sequences/sequence-1/enrollments",
     ]);
+    expect(fetch.mock.calls[1]?.[1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({
+        socialAccountId: "acct-1",
+        name: "Warmup",
+        messages: [{ delaySeconds: 60, actionType: "dm", contentText: "hello" }],
+      }),
+    });
   });
 });

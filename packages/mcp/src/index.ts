@@ -23,7 +23,7 @@ function errorResponse(id: JsonRpcRequest["id"], code: number, message: string) 
 
 export async function handleJsonRpcMessage(
   request: JsonRpcRequest,
-  callTool = createToolCaller(createClientFromEnv()),
+  callTool?: ReturnType<typeof createToolCaller>,
 ) {
   try {
     if (request.method === "initialize") {
@@ -43,13 +43,14 @@ export async function handleJsonRpcMessage(
       return response(request.id, { tools: X_HARNESS_MCP_TOOLS });
     }
     if (request.method === "tools/call") {
+      const resolvedCallTool = callTool ?? createToolCaller(createClientFromEnv());
       const params = request.params ?? {};
       const name = typeof params.name === "string" ? params.name : "";
       const args =
         params.arguments && typeof params.arguments === "object" && !Array.isArray(params.arguments)
           ? (params.arguments as Record<string, unknown>)
           : {};
-      const result = await callTool(name, args);
+      const result = await resolvedCallTool(name, args);
       return response(request.id, {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       });

@@ -178,10 +178,12 @@ stepSequences.post("/", requirePermission("inbox:reply"), async (c) => {
 });
 
 stepSequences.post("/process", requirePermission("inbox:reply"), async (c) => {
+  const actor = c.get("actor");
   const body: Record<string, unknown> = await c.req
     .json<Record<string, unknown>>()
     .catch(() => ({}));
   const result = await processDueStepSequenceEnrollments(buildDeps(c.get("db")), {
+    workspaceId: actor.workspaceId,
     limit: typeof body.limit === "number" ? body.limit : undefined,
     now: parseDate(body.now, "now"),
     templateSeed: typeof body.templateSeed === "string" ? body.templateSeed : undefined,

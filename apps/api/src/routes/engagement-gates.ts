@@ -207,9 +207,13 @@ engagementGates.post("/", requirePermission("inbox:reply"), async (c) => {
 });
 
 engagementGates.post("/process", requirePermission("inbox:reply"), async (c) => {
+  const actor = c.get("actor");
   const deps = buildDeps(c.get("db"));
   const body = await c.req.json<{ limit?: number }>().catch((): { limit?: number } => ({}));
-  const result = await processEngagementGateReplies(deps, { limit: body.limit });
+  const result = await processEngagementGateReplies(deps, {
+    workspaceId: actor.workspaceId,
+    limit: body.limit,
+  });
   return c.json({ data: result });
 });
 

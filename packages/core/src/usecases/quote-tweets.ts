@@ -88,6 +88,49 @@ function normalizeSourceTweetIds(sourceTweetIds: string[] | undefined): string[]
   return [...ids];
 }
 
+function decodeSourceCursors(
+  cursor: string | null | undefined,
+  sourceTweetIds: string[],
+): Map<string, string> {
+  const cursors = new Map<string, string>();
+  if (!cursor) return cursors;
+  if (sourceTweetIds.length === 0) return cursors;
+  if (sourceTweetIds.length === 1) {
+    cursors.set(sourceTweetIds[0]!, cursor);
+    return cursors;
+  }
+
+  try {
+    const parsed = JSON.parse(cursor) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return cursors;
+    const sources = (parsed as { sources?: unknown }).sources;
+    if (!sources || typeof sources !== "object" || Array.isArray(sources)) return cursors;
+    for (const sourceTweetId of sourceTweetIds) {
+      const value = (sources as Record<string, unknown>)[sourceTweetId];
+      if (typeof value === "string" && value) cursors.set(sourceTweetId, value);
+    }
+  } catch {
+    cursors.set(sourceTweetIds[0]!, cursor);
+  }
+  return cursors;
+}
+
+function encodeSourceCursors(
+  sourceTweetIds: string[],
+  cursors: Map<string, string | null>,
+): string | null {
+  if (sourceTweetIds.length === 1) {
+    return cursors.get(sourceTweetIds[0]!) ?? null;
+  }
+
+  const sources: Record<string, string> = {};
+  for (const sourceTweetId of sourceTweetIds) {
+    const cursor = cursors.get(sourceTweetId);
+    if (cursor) sources[sourceTweetId] = cursor;
+  }
+  return Object.keys(sources).length > 0 ? JSON.stringify({ version: 1, sources }) : null;
+}
+
 async function resolveTrackedSourceTweetIds(
   deps: QuoteTweetUsecaseDeps,
   account: SocialAccount,
@@ -146,19 +189,20 @@ export async function discoverQuoteTweetsForTrackedSources(
   const sourceTweetIds = await resolveTrackedSourceTweetIds(deps, account, input);
   const accountCredentials = decryptCredentials(account.credentialsEncrypted, deps.encryptionKey);
   const now = input.now ?? new Date();
+  const cursors = decodeSourceCursors(input.cursor, sourceTweetIds);
+  const nextCursors = new Map<string, string | null>();
   let quotesScanned = 0;
   let quotesStored = 0;
-  let nextCursor: string | null = null;
 
   for (const sourceTweetId of sourceTweetIds) {
     const listed = await provider.listQuoteTweets({
       accountCredentials,
       sourceTweetId,
       limit: input.limit,
-      cursor: input.cursor ?? null,
+      cursor: cursors.get(sourceTweetId) ?? null,
     });
     quotesScanned += listed.quotes.length;
-    nextCursor = listed.nextCursor;
+    nextCursors.set(sourceTweetId, listed.nextCursor);
 
     for (const quote of listed.quotes) {
       await deps.quoteTweetRepo.upsert({
@@ -187,7 +231,7 @@ export async function discoverQuoteTweetsForTrackedSources(
     sourceTweetsScanned: sourceTweetIds.length,
     quotesScanned,
     quotesStored,
-    nextCursor,
+    nextCursor: encodeSourceCursors(sourceTweetIds, nextCursors),
   };
 }
 

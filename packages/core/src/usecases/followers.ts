@@ -110,6 +110,43 @@ async function upsertProfile(
   });
 }
 
+async function listFollowerPages(
+  list: (input: {
+    accountCredentials: string;
+    limit?: number;
+    cursor?: string | null;
+  }) => Promise<FollowerListResult>,
+  accountCredentials: string,
+  limit: number | undefined,
+  initialCursor: string | null,
+): Promise<{
+  profiles: FollowerProviderProfile[];
+  nextCursor: string | null;
+  completeListing: boolean;
+}> {
+  const profiles: FollowerProviderProfile[] = [];
+  let cursor = initialCursor;
+  const completeListing = !initialCursor;
+
+  while (true) {
+    const page = await list({
+      accountCredentials,
+      limit,
+      cursor,
+    });
+    profiles.push(...page.profiles);
+    cursor = page.nextCursor;
+
+    if (!completeListing || !cursor) {
+      return {
+        profiles,
+        nextCursor: cursor,
+        completeListing: completeListing && !cursor,
+      };
+    }
+  }
+}
+
 export async function listFollowers(
   deps: FollowerUsecaseDeps,
   workspaceId: string,
@@ -152,17 +189,19 @@ export async function syncFollowersFromProvider(
   }
 
   const credentials = decryptCredentials(account.credentialsEncrypted, deps.encryptionKey);
-  const [followers, following]: [FollowerListResult, FollowerListResult] = await Promise.all([
-    provider.listFollowers({
-      accountCredentials: credentials,
-      limit: input.limit,
-      cursor: input.followersCursor ?? null,
-    }),
-    provider.listFollowing({
-      accountCredentials: credentials,
-      limit: input.limit,
-      cursor: input.followingCursor ?? null,
-    }),
+  const [followers, following] = await Promise.all([
+    listFollowerPages(
+      provider.listFollowers.bind(provider),
+      credentials,
+      input.limit,
+      input.followersCursor ?? null,
+    ),
+    listFollowerPages(
+      provider.listFollowing.bind(provider),
+      credentials,
+      input.limit,
+      input.followingCursor ?? null,
+    ),
   ]);
 
   const seenAt = new Date();
@@ -175,7 +214,7 @@ export async function syncFollowersFromProvider(
 
   let markedUnfollowedCount = 0;
   let markedUnfollowingCount = 0;
-  if (!input.followersCursor && !followers.nextCursor) {
+  if (followers.completeListing) {
     markedUnfollowedCount = await deps.followerRepo.markMissingFollowersUnfollowed({
       workspaceId: account.workspaceId,
       socialAccountId: account.id,
@@ -183,7 +222,7 @@ export async function syncFollowersFromProvider(
       unfollowedAt: seenAt,
     });
   }
-  if (!input.followingCursor && !following.nextCursor) {
+  if (following.completeListing) {
     markedUnfollowingCount = await deps.followerRepo.markMissingFollowingInactive({
       workspaceId: account.workspaceId,
       socialAccountId: account.id,

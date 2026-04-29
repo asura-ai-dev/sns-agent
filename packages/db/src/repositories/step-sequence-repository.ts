@@ -194,11 +194,23 @@ export class DrizzleStepEnrollmentRepository implements StepEnrollmentRepository
     return rows.map(rowToEnrollment);
   }
 
-  async findActiveDue(input: { now: Date; limit: number }): Promise<StepEnrollment[]> {
+  async findActiveDue(input: {
+    now: Date;
+    limit: number;
+    workspaceId?: string;
+  }): Promise<StepEnrollment[]> {
+    const conditions = [
+      eq(stepEnrollments.status, "active"),
+      lte(stepEnrollments.nextStepAt, input.now),
+    ];
+    if (input.workspaceId) {
+      conditions.push(eq(stepEnrollments.workspaceId, input.workspaceId));
+    }
+
     const rows = await this.db
       .select()
       .from(stepEnrollments)
-      .where(and(eq(stepEnrollments.status, "active"), lte(stepEnrollments.nextStepAt, input.now)))
+      .where(and(...conditions))
       .limit(input.limit);
     return rows.map(rowToEnrollment);
   }

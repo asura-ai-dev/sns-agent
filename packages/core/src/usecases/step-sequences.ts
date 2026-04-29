@@ -87,6 +87,7 @@ export interface UpdateStepEnrollmentInput {
 }
 
 export interface ProcessDueStepSequenceEnrollmentsInput {
+  workspaceId?: string;
   now?: Date;
   limit?: number;
   templateSeed?: string;
@@ -383,7 +384,11 @@ export async function processDueStepSequenceEnrollments(
 ): Promise<ProcessDueStepSequenceEnrollmentsResult> {
   const now = input.now ?? new Date();
   const limit = input.limit && input.limit > 0 ? Math.min(input.limit, 100) : 50;
-  const due = await deps.enrollmentRepo.findActiveDue({ now, limit });
+  const due = await deps.enrollmentRepo.findActiveDue({
+    now,
+    limit,
+    workspaceId: input.workspaceId,
+  });
   const summary: ProcessDueStepSequenceEnrollmentsResult = {
     enrollmentsScanned: due.length,
     stepsDelivered: 0,

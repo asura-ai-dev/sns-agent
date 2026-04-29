@@ -143,7 +143,9 @@ function mockQuoteRepo(): QuoteTweetRepository & { rows: Map<string, QuoteTweet>
   };
 }
 
-function mockProvider(): SocialProvider {
+function mockProvider(
+  overrides: Partial<Pick<SocialProvider, "listQuoteTweets">> = {},
+): SocialProvider {
   return {
     platform: "x",
     getCapabilities: () => ({
@@ -185,17 +187,20 @@ function mockProvider(): SocialProvider {
       success: true,
       externalActionId: `brand-x:${input.actionType}:${input.targetPostId}`,
     }),
+    ...overrides,
   };
 }
 
-function buildDeps(): QuoteTweetUsecaseDeps & { quoteTweetRepo: ReturnType<typeof mockQuoteRepo> } {
+function buildDeps(
+  provider: SocialProvider = mockProvider(),
+): QuoteTweetUsecaseDeps & { quoteTweetRepo: ReturnType<typeof mockQuoteRepo> } {
   const account = mockAccount();
   const quoteTweetRepo = mockQuoteRepo();
   return {
     accountRepo: mockAccountRepo(account),
     postRepo: mockPostRepo(),
     quoteTweetRepo,
-    providers: new Map([["x", mockProvider()]]),
+    providers: new Map([["x", provider]]),
     encryptionKey: TEST_ENCRYPTION_KEY,
   };
 }
@@ -262,5 +267,92 @@ describe("quote tweets usecase", () => {
     expect(reply.externalActionId).toBe("reply-1");
     expect(like.externalActionId).toBe("brand-x:like:quote-1");
     expect(repost.quote.lastActionType).toBe("repost");
+  });
+
+  it("keeps quote pagination cursors isolated per source tweet", async () => {
+    const calls: Array<{ sourceTweetId: string; cursor: string | null | undefined }> = [];
+    const provider = mockProvider({
+      listQuoteTweets: async (input) => {
+        calls.push({ sourceTweetId: input.sourceTweetId, cursor: input.cursor });
+        return {
+          quotes: [
+            {
+              sourceTweetId: input.sourceTweetId,
+              quoteTweetId: `quote-${input.sourceTweetId}-${input.cursor ?? "first"}`,
+              authorExternalId: "user-1",
+              authorUsername: "alice",
+              authorDisplayName: "Alice",
+              authorProfileImageUrl: null,
+              authorVerified: false,
+              contentText: "nice launch",
+              contentMedia: null,
+              quotedAt: new Date("2026-04-29T00:05:00Z"),
+              metrics: null,
+              providerMetadata: null,
+            },
+          ],
+          nextCursor: input.sourceTweetId === "source-1" && !input.cursor ? "source-1-next" : null,
+        };
+      },
+    });
+    const deps = buildDeps(provider);
+
+    const first = await discoverQuoteTweetsForTrackedSources(deps, {
+      workspaceId: "ws-1",
+      socialAccountId: "acc-1",
+      sourceTweetIds: ["source-1", "source-2"],
+      limit: 10,
+      now: new Date("2026-04-29T00:10:00Z"),
+    });
+    const second = await discoverQuoteTweetsForTrackedSources(deps, {
+      workspaceId: "ws-1",
+      socialAccountId: "acc-1",
+      sourceTweetIds: ["source-1", "source-2"],
+      limit: 10,
+      cursor: first.nextCursor,
+      now: new Date("2026-04-29T00:11:00Z"),
+    });
+
+    expect(first.nextCursor).toEqual(expect.any(String));
+    expect(second.nextCursor).toBeNull();
+    expect(calls).toEqual([
+      { sourceTweetId: "source-1", cursor: null },
+      { sourceTweetId: "source-2", cursor: null },
+      { sourceTweetId: "source-1", cursor: "source-1-next" },
+      { sourceTweetId: "source-2", cursor: null },
+    ]);
+  });
+
+  it("preserves raw cursor behavior for single-source quote sync", async () => {
+    const calls: Array<{ sourceTweetId: string; cursor: string | null | undefined }> = [];
+    const provider = mockProvider({
+      listQuoteTweets: async (input) => {
+        calls.push({ sourceTweetId: input.sourceTweetId, cursor: input.cursor });
+        return {
+          quotes: [],
+          nextCursor: input.cursor ? null : "raw-next-cursor",
+        };
+      },
+    });
+    const deps = buildDeps(provider);
+
+    const first = await discoverQuoteTweetsForTrackedSources(deps, {
+      workspaceId: "ws-1",
+      socialAccountId: "acc-1",
+      sourceTweetIds: ["source-1"],
+    });
+    const second = await discoverQuoteTweetsForTrackedSources(deps, {
+      workspaceId: "ws-1",
+      socialAccountId: "acc-1",
+      sourceTweetIds: ["source-1"],
+      cursor: first.nextCursor,
+    });
+
+    expect(first.nextCursor).toBe("raw-next-cursor");
+    expect(second.nextCursor).toBeNull();
+    expect(calls).toEqual([
+      { sourceTweetId: "source-1", cursor: null },
+      { sourceTweetId: "source-1", cursor: "raw-next-cursor" },
+    ]);
   });
 });

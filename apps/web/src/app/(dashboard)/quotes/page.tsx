@@ -56,6 +56,12 @@ interface ApiError {
 
 type Notice = { kind: "ok" | "error"; message: string } | null;
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+
+function buildQuotesApiUrl(path: `/api/${string}`, apiBase = API_BASE): string {
+  return `${apiBase}${path}`;
+}
+
 function formatDateTime(iso: string | null): string {
   if (!iso) return "-";
   const d = new Date(iso);
@@ -96,6 +102,11 @@ export default function QuotesPage() {
   );
 }
 
+if (process.env.NODE_ENV === "test") {
+  (QuotesPage as typeof QuotesPage & { buildQuotesApiUrl?: typeof buildQuotesApiUrl })
+    .buildQuotesApiUrl = buildQuotesApiUrl;
+}
+
 function QuotesPageContent() {
   const [quotes, setQuotes] = useState<QuoteTweet[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -120,7 +131,9 @@ function QuotesPageContent() {
     setLoading(true);
     setNotice(null);
     try {
-      const res = await fetch("/api/quote-tweets?limit=100", { credentials: "include" });
+      const res = await fetch(buildQuotesApiUrl("/api/quote-tweets?limit=100"), {
+        credentials: "include",
+      });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as ApiError;
         throw new Error(body.error?.message ?? `引用一覧の取得に失敗しました (${res.status})`);
@@ -142,7 +155,9 @@ function QuotesPageContent() {
     setSyncing(true);
     setNotice(null);
     try {
-      const accountsRes = await fetch("/api/accounts", { credentials: "include" });
+      const accountsRes = await fetch(buildQuotesApiUrl("/api/accounts"), {
+        credentials: "include",
+      });
       if (!accountsRes.ok) {
         const body = (await accountsRes.json().catch(() => ({}))) as ApiError;
         throw new Error(
@@ -154,7 +169,7 @@ function QuotesPageContent() {
         (account) => account.platform === "x" && account.status === "active",
       );
       for (const account of xAccounts) {
-        const syncRes = await fetch("/api/quote-tweets/sync", {
+        const syncRes = await fetch(buildQuotesApiUrl("/api/quote-tweets/sync"), {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -188,15 +203,18 @@ function QuotesPageContent() {
     setActing(actionType);
     setNotice(null);
     try {
-      const res = await fetch(`/api/quote-tweets/${encodeURIComponent(selectedQuote.id)}/actions`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          actionType,
-          contentText: actionType === "reply" ? text : undefined,
-        }),
-      });
+      const res = await fetch(
+        buildQuotesApiUrl(`/api/quote-tweets/${encodeURIComponent(selectedQuote.id)}/actions`),
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            actionType,
+            contentText: actionType === "reply" ? text : undefined,
+          }),
+        },
+      );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as ApiError;
         throw new Error(body.error?.message ?? `操作に失敗しました (${res.status})`);

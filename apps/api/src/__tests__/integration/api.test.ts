@@ -250,6 +250,16 @@ describe("a2. followers sync flow", () => {
     );
   });
 
+  it("viewer cannot trigger follower sync", async () => {
+    const sync = await req("POST", "/api/followers/sync", seed.viewerApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 100,
+    });
+
+    expect(sync.status).toBe(403);
+    expect(sync.body.error).toMatchObject({ code: "AUTH_FORBIDDEN" });
+  });
+
   it("creates follower tags and filters followers by tag", async () => {
     const sync = await req("POST", "/api/followers/sync", seed.editorApiKey, {
       socialAccountId: seed.socialAccountId,
@@ -319,6 +329,16 @@ describe("a2. followers sync flow", () => {
 // a3. フォロワー分析
 // ───────────────────────────────────────────
 describe("a3. follower analytics flow", () => {
+  it("viewer cannot capture follower snapshots", async () => {
+    const snapshot = await req("POST", "/api/analytics/followers/snapshot", seed.viewerApiKey, {
+      socialAccountId: seed.socialAccountId,
+      capturedAt: "2026-04-29T00:00:00Z",
+    });
+
+    expect(snapshot.status).toBe(403);
+    expect(snapshot.body.error).toMatchObject({ code: "AUTH_FORBIDDEN" });
+  });
+
   it("GET /api/analytics/followers returns follower snapshot deltas and series", async () => {
     const capturedAt = Math.floor(new Date("2026-04-29T00:00:00Z").getTime() / 1000);
     const insert = ctx.sqlite.prepare(
@@ -383,6 +403,16 @@ describe("a3. follower analytics flow", () => {
 // a2b. Quote tweets
 // ───────────────────────────────────────────
 describe("a2b. quote tweets flow", () => {
+  it("viewer cannot trigger quote tweet sync", async () => {
+    const sync = await req("POST", "/api/quote-tweets/sync", seed.viewerApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 50,
+    });
+
+    expect(sync.status).toBe(403);
+    expect(sync.body.error).toMatchObject({ code: "AUTH_FORBIDDEN" });
+  });
+
   it("syncs quote tweets, lists detail, and triggers engagement actions", async () => {
     const now = Math.floor(Date.now() / 1000);
     ctx.sqlite
@@ -564,6 +594,60 @@ describe("a3. engagement gates flow", () => {
   });
 
   it("processes reply-trigger gates and persists delivery dedupe state", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const credentials = (
+      ctx.sqlite
+        .prepare("SELECT credentials_encrypted FROM social_accounts WHERE id = ?")
+        .get(seed.socialAccountId) as { credentials_encrypted: string }
+    ).credentials_encrypted;
+    ctx.sqlite
+      .prepare("INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)")
+      .run("ws-other-gates", "Other Gates", now, now);
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO social_accounts (id, workspace_id, platform, display_name, external_account_id, credentials_encrypted, token_expires_at, status, capabilities, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "sa-other-gates",
+        "ws-other-gates",
+        "x",
+        "Other X Account",
+        "ext-other-gates",
+        credentials,
+        now + 3600,
+        "active",
+        null,
+        now,
+        now,
+      );
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO engagement_gates (id, workspace_id, social_account_id, platform, name, status, trigger_type, trigger_post_id, conditions, action_type, action_text, line_harness_url, line_harness_api_key_ref, line_harness_tag, line_harness_scenario, stealth_config, delivery_backoff_until, last_reply_since_id, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "gate-other-workspace-process",
+        "ws-other-gates",
+        "sa-other-gates",
+        "x",
+        "Other workspace gate",
+        "active",
+        "reply",
+        "tweet-root-1",
+        null,
+        "verify_only",
+        null,
+        null,
+        null,
+        null,
+        null,
+        JSON.stringify({ jitterMinSeconds: 0, jitterMaxSeconds: 0 }),
+        null,
+        null,
+        "user-other",
+        now,
+        now,
+      );
+
     const created = await req("POST", "/api/engagement-gates", seed.editorApiKey, {
       socialAccountId: seed.socialAccountId,
       name: "Process gate",
@@ -615,6 +699,11 @@ describe("a3. engagement gates flow", () => {
       deliveriesCreated: 0,
       skippedDuplicate: expect.any(Number),
     });
+
+    const otherDeliveries = ctx.sqlite
+      .prepare("SELECT id FROM engagement_gate_deliveries WHERE engagement_gate_id = ?")
+      .all("gate-other-workspace-process");
+    expect(otherDeliveries).toEqual([]);
   });
 
   it("verifies gate eligibility and consumes delivery tokens without leaking LINE secrets", async () => {
@@ -865,6 +954,88 @@ describe("a4. X campaign wizard flow", () => {
 // ───────────────────────────────────────────
 describe("a5. X step sequence flow", () => {
   it("creates a sequence enrolls a user and processes due steps", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const credentials = (
+      ctx.sqlite
+        .prepare("SELECT credentials_encrypted FROM social_accounts WHERE id = ?")
+        .get(seed.socialAccountId) as { credentials_encrypted: string }
+    ).credentials_encrypted;
+    ctx.sqlite
+      .prepare("INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)")
+      .run("ws-other-sequences", "Other Sequences", now, now);
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO social_accounts (id, workspace_id, platform, display_name, external_account_id, credentials_encrypted, token_expires_at, status, capabilities, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "sa-other-sequences",
+        "ws-other-sequences",
+        "x",
+        "Other X Account",
+        "ext-other-sequences",
+        credentials,
+        now + 3600,
+        "active",
+        null,
+        now,
+        now,
+      );
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO step_sequences (id, workspace_id, social_account_id, platform, name, status, stealth_config, delivery_backoff_until, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "seq-other-workspace-process",
+        "ws-other-sequences",
+        "sa-other-sequences",
+        "x",
+        "Other workspace sequence",
+        "active",
+        JSON.stringify({ jitterMinSeconds: 0, jitterMaxSeconds: 0 }),
+        null,
+        "user-other",
+        now,
+        now,
+      );
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO step_messages (id, workspace_id, sequence_id, step_index, delay_seconds, action_type, content_text, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "msg-other-workspace-process",
+        "ws-other-sequences",
+        "seq-other-workspace-process",
+        0,
+        0,
+        "dm",
+        "Other workspace message",
+        now,
+        now,
+      );
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO step_enrollments (id, workspace_id, sequence_id, social_account_id, external_user_id, username, external_thread_id, reply_to_message_id, status, current_step_index, next_step_at, last_delivered_at, completed_at, cancelled_at, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "enroll-other-workspace-process",
+        "ws-other-sequences",
+        "seq-other-workspace-process",
+        "sa-other-sequences",
+        "user-other-seq",
+        "other_seq",
+        "dm:user-other-seq",
+        null,
+        "active",
+        0,
+        Math.floor(new Date("2026-04-28T00:00:00Z").getTime() / 1000),
+        null,
+        null,
+        null,
+        null,
+        now,
+        now,
+      );
+
     const created = await req("POST", "/api/step-sequences", seed.editorApiKey, {
       socialAccountId: seed.socialAccountId,
       name: "Welcome sequence",
@@ -949,6 +1120,19 @@ describe("a5. X step sequence flow", () => {
       current_step_index: 1,
     });
     expect(row?.last_delivered_at).toBeTruthy();
+
+    const otherEnrollment = ctx.sqlite
+      .prepare(
+        "SELECT status, current_step_index, last_delivered_at FROM step_enrollments WHERE id = ?",
+      )
+      .get("enroll-other-workspace-process") as
+      | { status: string; current_step_index: number; last_delivered_at: number | null }
+      | undefined;
+    expect(otherEnrollment).toMatchObject({
+      status: "active",
+      current_step_index: 0,
+      last_delivered_at: null,
+    });
   });
 
   it("does not send cancelled enrollments during sequence processing", async () => {
