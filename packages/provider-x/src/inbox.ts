@@ -9,7 +9,7 @@ import type {
   ThreadProviderMetadata,
   MediaAttachment,
 } from "@sns-agent/core";
-import { ProviderError } from "@sns-agent/core";
+import { ProviderError, ProviderPermissionError } from "@sns-agent/core";
 import { XApiClient } from "./http-client.js";
 import { uploadMediaAttachments } from "./media.js";
 import { requireXAccessTokenCredentials } from "./credentials.js";
@@ -81,6 +81,49 @@ interface XDmEventListResponse {
     media?: XMedia[];
   };
   meta?: { next_token?: string };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
+}
+
+function isXDirectMessagePermissionError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+  if (
+    message.includes("direct message") &&
+    (message.includes("permission") ||
+      message.includes("permitted") ||
+      message.includes("forbidden") ||
+      message.includes("unauthorized"))
+  ) {
+    return true;
+  }
+
+  const details = err instanceof ProviderError ? err.details : null;
+  if (!isRecord(details)) return false;
+  if (details.status === 403 || details.status === 401) {
+    const body = details.body;
+    const bodyText = typeof body === "string" ? body : JSON.stringify(body ?? "");
+    return /direct message|dm\.read|dm\.write/i.test(bodyText);
+  }
+  return false;
+}
+
+function xDirectMessagePermissionMessage(requiredScopes: string[]): string {
+  return `X DM permission required: enable ${requiredScopes.join(
+    " and ",
+  )} scopes in X Developer Portal, reconnect account, and retry.`;
+}
+
+function createXDirectMessagePermissionError(
+  operation: "dm.read" | "dm.send",
+  requiredScopes: string[],
+): ProviderPermissionError {
+  return new ProviderPermissionError(xDirectMessagePermissionMessage(requiredScopes), {
+    provider: "x",
+    operation,
+    requiredScopes,
+  });
 }
 
 async function resolveXUserId(creds: XInboxCredentials, httpClient: XApiClient): Promise<string> {
@@ -392,21 +435,29 @@ async function fetchDmThreads(
   cursor: XCursorState,
   limit: number,
 ): Promise<{ threads: ThreadListResult["threads"]; nextPaginationToken: string | null }> {
-  const res = await httpClient.request<XDmEventListResponse>({
-    method: "GET",
-    path: "/2/dm_events",
-    accessToken: creds.accessToken,
-    query: {
-      max_results: limit,
-      pagination_token: cursor.dmPaginationToken ?? undefined,
-      event_types: "MessageCreate",
-      expansions: "attachments.media_keys,participant_ids,sender_id",
-      "dm_event.fields":
-        "attachments,created_at,dm_conversation_id,id,participant_ids,sender_id,text",
-      "user.fields": "id,name,username",
-      "media.fields": "media_key,preview_image_url,type,url,variants",
-    },
-  });
+  let res;
+  try {
+    res = await httpClient.request<XDmEventListResponse>({
+      method: "GET",
+      path: "/2/dm_events",
+      accessToken: creds.accessToken,
+      query: {
+        max_results: limit,
+        pagination_token: cursor.dmPaginationToken ?? undefined,
+        event_types: "MessageCreate",
+        expansions: "attachments.media_keys,participant_ids,sender_id",
+        "dm_event.fields":
+          "attachments,created_at,dm_conversation_id,id,participant_ids,sender_id,text",
+        "user.fields": "id,name,username",
+        "media.fields": "media_key,preview_image_url,type,url,variants",
+      },
+    });
+  } catch (err) {
+    if (isXDirectMessagePermissionError(err)) {
+      throw createXDirectMessagePermissionError("dm.read", ["dm.read"]);
+    }
+    throw err;
+  }
 
   const events = res.data?.data ?? [];
   const users = new Map((res.data?.includes?.users ?? []).map((user) => [user.id, user]));
@@ -492,20 +543,28 @@ export async function getMessages(
       throw new ProviderError("X DM thread id is invalid");
     }
 
-    const res = await httpClient.request<XDmEventListResponse>({
-      method: "GET",
-      path: `/2/dm_conversations/with/${encodeURIComponent(participantId)}/dm_events`,
-      accessToken: creds.accessToken,
-      query: {
-        max_results: Math.min(input.limit ?? 50, 100),
-        pagination_token: cursor.dmPaginationToken ?? cursor.paginationToken ?? undefined,
-        event_types: "MessageCreate",
-        expansions: "attachments.media_keys,sender_id",
-        "dm_event.fields": "attachments,created_at,dm_conversation_id,id,sender_id,text",
-        "user.fields": "id,name,username",
-        "media.fields": "media_key,preview_image_url,type,url,variants",
-      },
-    });
+    let res;
+    try {
+      res = await httpClient.request<XDmEventListResponse>({
+        method: "GET",
+        path: `/2/dm_conversations/with/${encodeURIComponent(participantId)}/dm_events`,
+        accessToken: creds.accessToken,
+        query: {
+          max_results: Math.min(input.limit ?? 50, 100),
+          pagination_token: cursor.dmPaginationToken ?? cursor.paginationToken ?? undefined,
+          event_types: "MessageCreate",
+          expansions: "attachments.media_keys,sender_id",
+          "dm_event.fields": "attachments,created_at,dm_conversation_id,id,sender_id,text",
+          "user.fields": "id,name,username",
+          "media.fields": "media_key,preview_image_url,type,url,variants",
+        },
+      });
+    } catch (err) {
+      if (isXDirectMessagePermissionError(err)) {
+        throw createXDirectMessagePermissionError("dm.read", ["dm.read"]);
+      }
+      throw err;
+    }
 
     const users = new Map((res.data?.includes?.users ?? []).map((user) => [user.id, user]));
     const mediaMap = new Map(
@@ -712,6 +771,13 @@ export async function sendReply(
       externalMessageId: id,
     };
   } catch (err) {
+    if (isDirectMessage && isXDirectMessagePermissionError(err)) {
+      return {
+        success: false,
+        externalMessageId: null,
+        error: xDirectMessagePermissionMessage(["dm.write", "dm.read"]),
+      };
+    }
     const message = err instanceof Error ? err.message : String(err);
     return {
       success: false,

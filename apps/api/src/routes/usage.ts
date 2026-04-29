@@ -17,6 +17,7 @@ import type { AppVariables } from "../types.js";
 const usage = new Hono<{ Variables: AppVariables }>();
 
 const VALID_PERIODS: UsagePeriod[] = ["daily", "weekly", "monthly"];
+const VALID_DIMENSIONS = ["platform", "endpoint", "gate"] as const;
 
 function buildDeps(db: AppVariables["db"]): UsageUsecaseDeps {
   return {
@@ -39,6 +40,9 @@ usage.get("/", requirePermission("usage:read"), async (c) => {
   const deps = buildDeps(db);
 
   const platformQ = c.req.query("platform");
+  const endpointQ = c.req.query("endpoint");
+  const gateIdQ = c.req.query("gateId");
+  const dimensionQ = c.req.query("dimension");
   const periodQ = c.req.query("period");
   const fromQ = c.req.query("from");
   const toQ = c.req.query("to");
@@ -53,6 +57,11 @@ usage.get("/", requirePermission("usage:read"), async (c) => {
       `Invalid period: ${periodQ}. Must be one of: ${VALID_PERIODS.join(", ")}`,
     );
   }
+  if (dimensionQ && !VALID_DIMENSIONS.includes(dimensionQ as (typeof VALID_DIMENSIONS)[number])) {
+    throw new ValidationError(
+      `Invalid dimension: ${dimensionQ}. Must be one of: ${VALID_DIMENSIONS.join(", ")}`,
+    );
+  }
   const from = parseDateOrUndefined(fromQ);
   const to = parseDateOrUndefined(toQ);
   if (fromQ && !from) {
@@ -64,6 +73,9 @@ usage.get("/", requirePermission("usage:read"), async (c) => {
 
   const report = await getUsageReport(deps, actor.workspaceId, {
     platform: platformQ,
+    endpoint: endpointQ,
+    gateId: gateIdQ,
+    dimension: dimensionQ as (typeof VALID_DIMENSIONS)[number] | undefined,
     period: periodQ as UsagePeriod | undefined,
     from,
     to,
@@ -73,6 +85,9 @@ usage.get("/", requirePermission("usage:read"), async (c) => {
     data: report.data.map((entry) => ({
       period: entry.period,
       platform: entry.platform,
+      endpoint: entry.endpoint,
+      gateId: entry.gateId,
+      feature: entry.feature,
       requestCount: entry.requestCount,
       successCount: entry.successCount,
       failureCount: entry.failureCount,

@@ -56,6 +56,47 @@ export const PERMISSIONS = [
 export type Permission = (typeof PERMISSIONS)[number];
 
 // ───────────────────────────────────────────
+// X Harness parity documentation
+// ───────────────────────────────────────────
+
+/**
+ * X Harness の staff ロールは sns-agent の既存ユーザーロールに 1:1 で対応する。
+ * operator は sns-agent 固有の中間ロール、agent は API key / skill 実行用の actor ロール。
+ */
+export const xHarnessStaffRoleMapping = {
+  owner: "owner",
+  admin: "admin",
+  editor: "editor",
+  viewer: "viewer",
+} as const satisfies Record<"owner" | "admin" | "editor" | "viewer", Exclude<Role, "agent">>;
+
+/**
+ * X Harness の API key scope 相当は、AgentIdentity の role と RBAC permission で表現する。
+ * scope 自体は保存せず、API key 認証で解決した agent identity の rolePermissions を正とする。
+ */
+export const xHarnessApiKeyScopeMapping = {
+  read: {
+    agentIdentityRole: "viewer",
+    permissions: ["account:read", "post:read", "schedule:read", "usage:read", "inbox:read"],
+  },
+  compose: {
+    agentIdentityRole: "operator",
+    permissions: ["post:create", "chat:use"],
+  },
+  engage: {
+    agentIdentityRole: "agent",
+    permissions: ["post:create", "inbox:reply"],
+  },
+  publish: {
+    agentIdentityRole: "editor",
+    permissions: ["post:publish", "schedule:create", "inbox:reply"],
+  },
+} as const satisfies Record<
+  "read" | "compose" | "engage" | "publish",
+  { agentIdentityRole: Role; permissions: readonly Permission[] }
+>;
+
+// ───────────────────────────────────────────
 // Role -> Permission マッピング
 // ───────────────────────────────────────────
 

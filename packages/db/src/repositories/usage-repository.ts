@@ -15,6 +15,9 @@ function rowToEntity(row: typeof usageRecords.$inferSelect): UsageRecord {
     workspaceId: row.workspaceId,
     platform: row.platform,
     endpoint: row.endpoint,
+    gateId: row.gateId,
+    feature: row.feature,
+    metadata: row.metadata as UsageRecord["metadata"],
     actorId: row.actorId,
     actorType: row.actorType as UsageRecord["actorType"],
     requestCount: row.requestCount,
@@ -36,6 +39,9 @@ export class DrizzleUsageRepository implements UsageRepository {
       workspaceId: usage.workspaceId,
       platform: usage.platform,
       endpoint: usage.endpoint,
+      gateId: usage.gateId,
+      feature: usage.feature,
+      metadata: usage.metadata,
       actorId: usage.actorId,
       actorType: usage.actorType,
       requestCount: usage.requestCount,
@@ -49,7 +55,7 @@ export class DrizzleUsageRepository implements UsageRepository {
 
   async aggregate(
     workspaceId: string,
-    options: { platform?: string; endpoint?: string; startDate: Date; endDate: Date },
+    options: Parameters<UsageRepository["aggregate"]>[1],
   ): Promise<UsageAggregation[]> {
     const conditions = [
       eq(usageRecords.workspaceId, workspaceId),
@@ -63,14 +69,66 @@ export class DrizzleUsageRepository implements UsageRepository {
     if (options.endpoint) {
       conditions.push(eq(usageRecords.endpoint, options.endpoint));
     }
+    if (options.gateId) {
+      conditions.push(eq(usageRecords.gateId, options.gateId));
+    }
+
+    const totals = {
+      totalRequests: sql<number>`sum(${usageRecords.requestCount})`,
+      successCount: sql<number>`sum(case when ${usageRecords.success} = 1 then ${usageRecords.requestCount} else 0 end)`,
+      failureCount: sql<number>`sum(case when ${usageRecords.success} = 0 then ${usageRecords.requestCount} else 0 end)`,
+      totalCostUsd: sql<number>`coalesce(sum(${usageRecords.estimatedCostUsd}), 0)`,
+    };
+
+    if (options.dimension === "endpoint") {
+      const rows = await this.db
+        .select({
+          platform: usageRecords.platform,
+          endpoint: usageRecords.endpoint,
+          ...totals,
+        })
+        .from(usageRecords)
+        .where(and(...conditions))
+        .groupBy(usageRecords.platform, usageRecords.endpoint);
+
+      return rows.map((row) => ({
+        platform: row.platform,
+        endpoint: row.endpoint,
+        totalRequests: Number(row.totalRequests) || 0,
+        successCount: Number(row.successCount) || 0,
+        failureCount: Number(row.failureCount) || 0,
+        totalCostUsd: Number(row.totalCostUsd) || 0,
+      }));
+    }
+
+    if (options.dimension === "gate") {
+      conditions.push(sql`${usageRecords.gateId} is not null`);
+      const rows = await this.db
+        .select({
+          platform: usageRecords.platform,
+          gateId: usageRecords.gateId,
+          feature: usageRecords.feature,
+          ...totals,
+        })
+        .from(usageRecords)
+        .where(and(...conditions))
+        .groupBy(usageRecords.platform, usageRecords.gateId, usageRecords.feature);
+
+      return rows.map((row) => ({
+        platform: row.platform,
+        gateId: row.gateId,
+        feature: row.feature,
+        totalRequests: Number(row.totalRequests) || 0,
+        successCount: Number(row.successCount) || 0,
+        failureCount: Number(row.failureCount) || 0,
+        totalCostUsd: Number(row.totalCostUsd) || 0,
+      }));
+    }
 
     const rows = await this.db
       .select({
         platform: usageRecords.platform,
-        totalRequests: sql<number>`sum(${usageRecords.requestCount})`,
-        successCount: sql<number>`sum(case when ${usageRecords.success} = 1 then ${usageRecords.requestCount} else 0 end)`,
-        failureCount: sql<number>`sum(case when ${usageRecords.success} = 0 then ${usageRecords.requestCount} else 0 end)`,
-        totalCostUsd: sql<number>`coalesce(sum(${usageRecords.estimatedCostUsd}), 0)`,
+        ...totals,
       })
       .from(usageRecords)
       .where(and(...conditions))

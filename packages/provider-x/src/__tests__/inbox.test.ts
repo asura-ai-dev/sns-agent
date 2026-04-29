@@ -297,4 +297,71 @@ describe("XProvider inbox", () => {
       attachments: [{ media_id: "media-1" }],
     });
   });
+
+  it("returns an actionable DM permission error when X denies DM send", async () => {
+    const httpClient = new XApiClient({
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            title: "Forbidden",
+            detail: "You are not permitted to send Direct Messages",
+          }),
+          { status: 403 },
+        ),
+    });
+    const provider = new XProvider({ oauth: { clientId: "cid" }, httpClient });
+
+    const result = await provider.sendReply!({
+      accountCredentials: JSON.stringify({ accessToken: "tok", xUserId: "123" }),
+      externalThreadId: "dm:42",
+      contentText: "お問い合わせありがとうございます",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("X DM permission required");
+    expect(result.error).toContain("dm.write");
+    expect(result.error).toContain("reconnect");
+  });
+
+  it("likes and reposts a reply target through X engagement actions", async () => {
+    const calls: Array<{ url: string; body: unknown }> = [];
+    const httpClient = new XApiClient({
+      fetchImpl: async (url: string, init?: RequestInit) => {
+        calls.push({
+          url,
+          body: init?.body ? JSON.parse(String(init.body)) : null,
+        });
+        return new Response(JSON.stringify({ data: { liked: true, retweeted: true } }), {
+          status: 200,
+        });
+      },
+    });
+    const provider = new XProvider({ oauth: { clientId: "cid" }, httpClient });
+
+    const liked = await provider.performEngagementAction!({
+      accountCredentials: JSON.stringify({ accessToken: "tok", xUserId: "123" }),
+      accountExternalId: "123",
+      actionType: "like",
+      targetPostId: "tweet-200",
+    });
+    const reposted = await provider.performEngagementAction!({
+      accountCredentials: JSON.stringify({ accessToken: "tok", xUserId: "123" }),
+      accountExternalId: "123",
+      actionType: "repost",
+      targetPostId: "tweet-200",
+    });
+
+    expect(liked.success).toBe(true);
+    expect(reposted.success).toBe(true);
+    expect(calls).toEqual([
+      expect.objectContaining({
+        url: expect.stringContaining("/2/users/123/likes"),
+        body: { tweet_id: "tweet-200" },
+      }),
+      expect.objectContaining({
+        url: expect.stringContaining("/2/users/123/retweets"),
+        body: { tweet_id: "tweet-200" },
+      }),
+    ]);
+  });
 });

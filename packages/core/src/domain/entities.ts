@@ -72,6 +72,217 @@ export interface SocialAccount {
   updatedAt: Date;
 }
 
+// ───────────────────────────────────────────
+// Follower
+// ───────────────────────────────────────────
+
+export interface Follower {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  platform: Platform;
+  externalUserId: string;
+  displayName: string | null;
+  username: string | null;
+  isFollowing: boolean;
+  isFollowed: boolean;
+  unfollowedAt: Date | null;
+  metadata: Record<string, unknown> | null;
+  lastSeenAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface FollowerSnapshot {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  platform: Platform;
+  snapshotDate: string;
+  followerCount: number;
+  followingCount: number;
+  capturedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Tag {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  name: string;
+  color: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ───────────────────────────────────────────
+// Step Sequence
+// ───────────────────────────────────────────
+
+export type StepSequenceStatus = "active" | "paused";
+export type StepMessageActionType = "mention_post" | "dm";
+export type StepEnrollmentStatus = "active" | "cancelled" | "completed";
+
+export interface StepSequence {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  platform: Platform;
+  name: string;
+  status: StepSequenceStatus;
+  stealthConfig: EngagementGateStealthConfig | null;
+  deliveryBackoffUntil: Date | null;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface StepMessage {
+  id: string;
+  workspaceId: string;
+  sequenceId: string;
+  stepIndex: number;
+  delaySeconds: number;
+  actionType: StepMessageActionType;
+  contentText: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface StepEnrollment {
+  id: string;
+  workspaceId: string;
+  sequenceId: string;
+  socialAccountId: string;
+  externalUserId: string;
+  username: string | null;
+  externalThreadId: string | null;
+  replyToMessageId: string | null;
+  status: StepEnrollmentStatus;
+  currentStepIndex: number;
+  nextStepAt: Date | null;
+  lastDeliveredAt: Date | null;
+  completedAt: Date | null;
+  cancelledAt: Date | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ───────────────────────────────────────────
+// Engagement Gate
+// ───────────────────────────────────────────
+
+export type EngagementGateStatus = "active" | "paused";
+export type EngagementGateTriggerType = "reply";
+export type EngagementGateActionType = "mention_post" | "dm" | "verify_only";
+export type EngagementGateDeliveryStatus = "delivered" | "verified";
+
+export interface EngagementGateConditions {
+  requireLike?: boolean;
+  requireRepost?: boolean;
+  requireFollow?: boolean;
+}
+
+export interface EngagementGateStealthConfig {
+  gateHourlyLimit?: number | null;
+  gateDailyLimit?: number | null;
+  accountHourlyLimit?: number | null;
+  accountDailyLimit?: number | null;
+  jitterMinSeconds?: number | null;
+  jitterMaxSeconds?: number | null;
+  backoffSeconds?: number | null;
+  templateVariants?: string[] | null;
+}
+
+export interface EngagementGate {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  platform: Platform;
+  name: string;
+  status: EngagementGateStatus;
+  triggerType: EngagementGateTriggerType;
+  triggerPostId: string | null;
+  conditions: EngagementGateConditions | null;
+  actionType: EngagementGateActionType;
+  actionText: string | null;
+  lineHarnessUrl: string | null;
+  lineHarnessApiKeyRef: string | null;
+  lineHarnessTag: string | null;
+  lineHarnessScenario: string | null;
+  stealthConfig: EngagementGateStealthConfig | null;
+  deliveryBackoffUntil: Date | null;
+  lastReplySinceId: string | null;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface EngagementGateDelivery {
+  id: string;
+  workspaceId: string;
+  engagementGateId: string;
+  socialAccountId: string;
+  externalUserId: string;
+  externalReplyId: string | null;
+  actionType: EngagementGateActionType;
+  status: EngagementGateDeliveryStatus;
+  responseExternalId: string | null;
+  deliveryToken: string;
+  consumedAt: Date | null;
+  metadata: Record<string, unknown> | null;
+  deliveredAt: Date;
+  createdAt: Date;
+}
+
+export type InboxEngagementActionType = "like" | "repost";
+export type EngagementActionStatus = "applied";
+
+export interface EngagementAction {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  threadId: string;
+  messageId: string | null;
+  actionType: InboxEngagementActionType;
+  targetPostId: string;
+  actorId: string;
+  externalActionId: string | null;
+  status: EngagementActionStatus;
+  metadata: Record<string, unknown> | null;
+  performedAt: Date;
+  createdAt: Date;
+}
+
+export type QuoteTweetActionType = "reply" | "like" | "repost";
+
+export interface QuoteTweet {
+  id: string;
+  workspaceId: string;
+  socialAccountId: string;
+  sourceTweetId: string;
+  quoteTweetId: string;
+  authorExternalId: string;
+  authorUsername: string | null;
+  authorDisplayName: string | null;
+  authorProfileImageUrl: string | null;
+  authorVerified: boolean;
+  contentText: string | null;
+  contentMedia: MediaAttachment[] | null;
+  quotedAt: Date | null;
+  metrics: Record<string, unknown> | null;
+  providerMetadata: Record<string, unknown> | null;
+  lastActionType: QuoteTweetActionType | null;
+  lastActionExternalId: string | null;
+  lastActionAt: Date | null;
+  discoveredAt: Date;
+  lastSeenAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 /** Provider が公開する能力セット */
 export interface ProviderCapabilities {
   textPost: boolean;
@@ -229,6 +440,9 @@ export interface UsageRecord {
   workspaceId: string;
   platform: string;
   endpoint: string;
+  gateId?: string | null;
+  feature?: string | null;
+  metadata?: Record<string, unknown> | null;
   actorId: string | null;
   actorType: ActorType;
   requestCount: number;

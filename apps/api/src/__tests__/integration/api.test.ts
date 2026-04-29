@@ -209,6 +209,976 @@ describe("a. accounts flow", () => {
 });
 
 // ───────────────────────────────────────────
+// a2. フォロワー同期
+// ───────────────────────────────────────────
+describe("a2. followers sync flow", () => {
+  it("POST /api/followers/sync stores X followers and GET /api/followers lists them", async () => {
+    const sync = await req("POST", "/api/followers/sync", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 100,
+    });
+
+    expect(sync.status).toBe(200);
+    expect(sync.body.data).toMatchObject({
+      followerCount: 1,
+      followingCount: 2,
+      nextFollowersCursor: null,
+      nextFollowingCursor: null,
+    });
+
+    const listed = await req(
+      "GET",
+      `/api/followers?socialAccountId=${seed.socialAccountId}`,
+      seed.viewerApiKey,
+    );
+
+    expect(listed.status).toBe(200);
+    const data = listed.body.data as Array<Record<string, unknown>>;
+    expect(data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          externalUserId: "follower-sync-1",
+          isFollowed: true,
+          isFollowing: true,
+        }),
+        expect.objectContaining({
+          externalUserId: "following-sync-1",
+          isFollowed: false,
+          isFollowing: true,
+        }),
+      ]),
+    );
+  });
+
+  it("viewer cannot trigger follower sync", async () => {
+    const sync = await req("POST", "/api/followers/sync", seed.viewerApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 100,
+    });
+
+    expect(sync.status).toBe(403);
+    expect(sync.body.error).toMatchObject({ code: "AUTH_FORBIDDEN" });
+  });
+
+  it("creates follower tags and filters followers by tag", async () => {
+    const sync = await req("POST", "/api/followers/sync", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 100,
+    });
+    expect(sync.status).toBe(200);
+
+    const followers = await req(
+      "GET",
+      `/api/followers?socialAccountId=${seed.socialAccountId}`,
+      seed.viewerApiKey,
+    );
+    expect(followers.status).toBe(200);
+    const follower = (followers.body.data as Array<Record<string, unknown>>).find(
+      (item) => item.externalUserId === "follower-sync-1",
+    );
+    expect(follower?.id).toBeTruthy();
+
+    const createdTag = await req("POST", "/api/tags", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "  vip  ",
+      color: "#eab308",
+    });
+    expect(createdTag.status).toBe(201);
+    expect(createdTag.body.data).toMatchObject({
+      socialAccountId: seed.socialAccountId,
+      name: "vip",
+      color: "#eab308",
+    });
+    const tagId = (createdTag.body.data as { id: string }).id;
+
+    const attached = await req(
+      "POST",
+      `/api/followers/${String(follower?.id)}/tags/${tagId}`,
+      seed.editorApiKey,
+      { socialAccountId: seed.socialAccountId },
+    );
+    expect(attached.status).toBe(200);
+
+    const filtered = await req(
+      "GET",
+      `/api/followers?socialAccountId=${seed.socialAccountId}&tagId=${tagId}`,
+      seed.viewerApiKey,
+    );
+    expect(filtered.status).toBe(200);
+    expect(filtered.body.data).toEqual([expect.objectContaining({ id: follower?.id })]);
+
+    const detached = await req(
+      "DELETE",
+      `/api/followers/${String(follower?.id)}/tags/${tagId}`,
+      seed.editorApiKey,
+      { socialAccountId: seed.socialAccountId },
+    );
+    expect(detached.status).toBe(200);
+
+    const afterDetach = await req(
+      "GET",
+      `/api/followers?socialAccountId=${seed.socialAccountId}&tagId=${tagId}`,
+      seed.viewerApiKey,
+    );
+    expect(afterDetach.status).toBe(200);
+    expect(afterDetach.body.data).toEqual([]);
+  });
+});
+
+// ───────────────────────────────────────────
+// a3. フォロワー分析
+// ───────────────────────────────────────────
+describe("a3. follower analytics flow", () => {
+  it("viewer cannot capture follower snapshots", async () => {
+    const snapshot = await req("POST", "/api/analytics/followers/snapshot", seed.viewerApiKey, {
+      socialAccountId: seed.socialAccountId,
+      capturedAt: "2026-04-29T00:00:00Z",
+    });
+
+    expect(snapshot.status).toBe(403);
+    expect(snapshot.body.error).toMatchObject({ code: "AUTH_FORBIDDEN" });
+  });
+
+  it("GET /api/analytics/followers returns follower snapshot deltas and series", async () => {
+    const capturedAt = Math.floor(new Date("2026-04-29T00:00:00Z").getTime() / 1000);
+    const insert = ctx.sqlite.prepare(
+      "INSERT INTO follower_snapshots (id, workspace_id, social_account_id, platform, snapshot_date, follower_count, following_count, captured_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    );
+    insert.run(
+      "snap-30",
+      seed.workspaceId,
+      seed.socialAccountId,
+      "x",
+      "2026-03-30",
+      80,
+      20,
+      capturedAt,
+      capturedAt,
+      capturedAt,
+    );
+    insert.run(
+      "snap-7",
+      seed.workspaceId,
+      seed.socialAccountId,
+      "x",
+      "2026-04-22",
+      100,
+      25,
+      capturedAt,
+      capturedAt,
+      capturedAt,
+    );
+    insert.run(
+      "snap-current",
+      seed.workspaceId,
+      seed.socialAccountId,
+      "x",
+      "2026-04-29",
+      120,
+      30,
+      capturedAt,
+      capturedAt,
+      capturedAt,
+    );
+
+    const res = await req(
+      "GET",
+      `/api/analytics/followers?socialAccountId=${seed.socialAccountId}&asOfDate=2026-04-29`,
+      seed.viewerApiKey,
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      currentCount: 120,
+      delta7Days: 20,
+      delta30Days: 40,
+    });
+    expect(
+      (res.body.data as { series: Array<{ date: string }> }).series.map((p) => p.date),
+    ).toEqual(["2026-03-30", "2026-04-22", "2026-04-29"]);
+  });
+});
+
+// ───────────────────────────────────────────
+// a2b. Quote tweets
+// ───────────────────────────────────────────
+describe("a2b. quote tweets flow", () => {
+  it("viewer cannot trigger quote tweet sync", async () => {
+    const sync = await req("POST", "/api/quote-tweets/sync", seed.viewerApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 50,
+    });
+
+    expect(sync.status).toBe(403);
+    expect(sync.body.error).toMatchObject({ code: "AUTH_FORBIDDEN" });
+  });
+
+  it("syncs quote tweets, lists detail, and triggers engagement actions", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO posts (id, workspace_id, social_account_id, platform, status, content_text, content_media, provider_metadata, platform_post_id, validation_result, idempotency_key, created_by, created_at, updated_at, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "post-source-1",
+        seed.workspaceId,
+        seed.socialAccountId,
+        "x",
+        "published",
+        "launch source",
+        null,
+        null,
+        "source-post-1",
+        null,
+        null,
+        seed.editorUserId,
+        now,
+        now,
+        now,
+      );
+
+    const sync = await req("POST", "/api/quote-tweets/sync", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 50,
+    });
+    expect(sync.status).toBe(200);
+    expect(sync.body.data).toMatchObject({
+      sourceTweetsScanned: 1,
+      quotesScanned: 1,
+      quotesStored: 1,
+    });
+
+    const listed = await req(
+      "GET",
+      `/api/quote-tweets?socialAccountId=${seed.socialAccountId}`,
+      seed.viewerApiKey,
+    );
+    expect(listed.status).toBe(200);
+    const quotes = listed.body.data as Array<Record<string, unknown>>;
+    expect(quotes).toHaveLength(1);
+    expect(quotes[0]).toMatchObject({
+      socialAccountId: seed.socialAccountId,
+      sourceTweetId: "source-post-1",
+      quoteTweetId: "quote-sync-1",
+      authorUsername: "quote_alice",
+      authorDisplayName: "Quote Alice",
+      authorProfileImageUrl: "https://cdn.example.test/quote-alice.jpg",
+      authorVerified: true,
+    });
+
+    const quoteId = String(quotes[0].id);
+    const detail = await req("GET", `/api/quote-tweets/${quoteId}`, seed.viewerApiKey);
+    expect(detail.status).toBe(200);
+    expect(detail.body.data).toMatchObject({
+      id: quoteId,
+      contentText: "quoting this with a note",
+    });
+
+    const liked = await req("POST", `/api/quote-tweets/${quoteId}/actions`, seed.editorApiKey, {
+      actionType: "like",
+    });
+    expect(liked.status).toBe(201);
+    expect(liked.body.data).toMatchObject({
+      externalActionId: "mock-like-quote-sync-1",
+      quote: {
+        id: quoteId,
+        lastActionType: "like",
+        lastActionExternalId: "mock-like-quote-sync-1",
+      },
+    });
+  });
+});
+
+// ───────────────────────────────────────────
+// a3. Engagement gates
+// ───────────────────────────────────────────
+describe("a3. engagement gates flow", () => {
+  it("supports protected CRUD under /api/engagement-gates", async () => {
+    const created = await req("POST", "/api/engagement-gates", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "  Launch reply gate  ",
+      triggerPostId: "tweet-root-1",
+      conditions: {
+        requireLike: true,
+        requireRepost: false,
+        requireFollow: true,
+      },
+      actionType: "verify_only",
+      actionText: null,
+      stealthConfig: {
+        gateHourlyLimit: 10,
+        gateDailyLimit: 50,
+        accountHourlyLimit: 20,
+        accountDailyLimit: 100,
+        jitterMinSeconds: 30,
+        jitterMaxSeconds: 90,
+        backoffSeconds: 300,
+        templateVariants: ["secret A", "secret B"],
+      },
+    });
+
+    expect(created.status).toBe(201);
+    expect(created.body.data).toMatchObject({
+      socialAccountId: seed.socialAccountId,
+      platform: "x",
+      name: "Launch reply gate",
+      triggerType: "reply",
+      triggerPostId: "tweet-root-1",
+      conditions: {
+        requireLike: true,
+        requireRepost: false,
+        requireFollow: true,
+      },
+      actionType: "verify_only",
+      stealthConfig: {
+        gateHourlyLimit: 10,
+        gateDailyLimit: 50,
+        accountHourlyLimit: 20,
+        accountDailyLimit: 100,
+        jitterMinSeconds: 30,
+        jitterMaxSeconds: 90,
+        backoffSeconds: 300,
+        templateVariants: ["secret A", "secret B"],
+      },
+      deliveryBackoffUntil: null,
+      lastReplySinceId: null,
+    });
+    const gateId = (created.body.data as { id: string }).id;
+
+    const listed = await req(
+      "GET",
+      `/api/engagement-gates?socialAccountId=${seed.socialAccountId}`,
+      seed.viewerApiKey,
+    );
+    expect(listed.status).toBe(200);
+    expect(listed.body.data).toEqual([expect.objectContaining({ id: gateId })]);
+
+    const updated = await req("PATCH", `/api/engagement-gates/${gateId}`, seed.editorApiKey, {
+      status: "paused",
+      actionType: "dm",
+      actionText: "secret",
+      stealthConfig: {
+        gateHourlyLimit: 2,
+        jitterMinSeconds: 0,
+        jitterMaxSeconds: 0,
+        templateVariants: ["dm secret"],
+      },
+    });
+    expect(updated.status).toBe(200);
+    expect(updated.body.data).toMatchObject({
+      id: gateId,
+      status: "paused",
+      actionType: "dm",
+      actionText: "secret",
+      stealthConfig: {
+        gateHourlyLimit: 2,
+        gateDailyLimit: null,
+        accountHourlyLimit: null,
+        accountDailyLimit: null,
+        jitterMinSeconds: 0,
+        jitterMaxSeconds: 0,
+        backoffSeconds: null,
+        templateVariants: ["dm secret"],
+      },
+    });
+
+    const viewerCreate = await req("POST", "/api/engagement-gates", seed.viewerApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "viewer blocked",
+      actionType: "verify_only",
+    });
+    expect(viewerCreate.status).toBe(403);
+
+    const deleted = await req("DELETE", `/api/engagement-gates/${gateId}`, seed.editorApiKey);
+    expect(deleted.status).toBe(200);
+  });
+
+  it("processes reply-trigger gates and persists delivery dedupe state", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const credentials = (
+      ctx.sqlite
+        .prepare("SELECT credentials_encrypted FROM social_accounts WHERE id = ?")
+        .get(seed.socialAccountId) as { credentials_encrypted: string }
+    ).credentials_encrypted;
+    ctx.sqlite
+      .prepare("INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)")
+      .run("ws-other-gates", "Other Gates", now, now);
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO social_accounts (id, workspace_id, platform, display_name, external_account_id, credentials_encrypted, token_expires_at, status, capabilities, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "sa-other-gates",
+        "ws-other-gates",
+        "x",
+        "Other X Account",
+        "ext-other-gates",
+        credentials,
+        now + 3600,
+        "active",
+        null,
+        now,
+        now,
+      );
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO engagement_gates (id, workspace_id, social_account_id, platform, name, status, trigger_type, trigger_post_id, conditions, action_type, action_text, line_harness_url, line_harness_api_key_ref, line_harness_tag, line_harness_scenario, stealth_config, delivery_backoff_until, last_reply_since_id, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "gate-other-workspace-process",
+        "ws-other-gates",
+        "sa-other-gates",
+        "x",
+        "Other workspace gate",
+        "active",
+        "reply",
+        "tweet-root-1",
+        null,
+        "verify_only",
+        null,
+        null,
+        null,
+        null,
+        null,
+        JSON.stringify({ jitterMinSeconds: 0, jitterMaxSeconds: 0 }),
+        null,
+        null,
+        "user-other",
+        now,
+        now,
+      );
+
+    const created = await req("POST", "/api/engagement-gates", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "Process gate",
+      triggerPostId: "tweet-root-1",
+      conditions: {
+        requireLike: true,
+        requireRepost: true,
+        requireFollow: true,
+      },
+      actionType: "verify_only",
+    });
+    expect(created.status).toBe(201);
+    const gateId = (created.body.data as { id: string }).id;
+
+    const processed = await req("POST", "/api/engagement-gates/process", seed.editorApiKey, {
+      limit: 10,
+    });
+    expect(processed.status).toBe(200);
+    expect(processed.body.data).toMatchObject({
+      gatesScanned: expect.any(Number),
+      deliveriesCreated: 1,
+      skippedDuplicate: 0,
+      lastReplySinceIdsUpdated: expect.any(Number),
+    });
+
+    const gateRow = ctx.sqlite
+      .prepare("SELECT last_reply_since_id FROM engagement_gates WHERE id = ?")
+      .get(gateId) as { last_reply_since_id: string | null } | undefined;
+    expect(gateRow?.last_reply_since_id).toBe("tweet-gate-10");
+
+    const deliveries = ctx.sqlite
+      .prepare(
+        "SELECT external_user_id, external_reply_id, status FROM engagement_gate_deliveries WHERE engagement_gate_id = ?",
+      )
+      .all(gateId);
+    expect(deliveries).toEqual([
+      expect.objectContaining({
+        external_user_id: "user-gate-1",
+        external_reply_id: "tweet-gate-10",
+        status: "verified",
+      }),
+    ]);
+
+    const processedAgain = await req("POST", "/api/engagement-gates/process", seed.editorApiKey, {
+      limit: 10,
+    });
+    expect(processedAgain.status).toBe(200);
+    expect(processedAgain.body.data).toMatchObject({
+      deliveriesCreated: 0,
+      skippedDuplicate: expect.any(Number),
+    });
+
+    const otherDeliveries = ctx.sqlite
+      .prepare("SELECT id FROM engagement_gate_deliveries WHERE engagement_gate_id = ?")
+      .all("gate-other-workspace-process");
+    expect(otherDeliveries).toEqual([]);
+  });
+
+  it("verifies gate eligibility and consumes delivery tokens without leaking LINE secrets", async () => {
+    const created = await req("POST", "/api/engagement-gates", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "LINE handoff gate",
+      triggerPostId: "tweet-root-1",
+      conditions: {
+        requireLike: true,
+        requireRepost: true,
+        requireFollow: true,
+      },
+      actionType: "verify_only",
+      lineHarnessUrl: "https://line-harness.example/campaigns/gate",
+      lineHarnessApiKeyRef: "line-harness-prod",
+      lineHarnessApiKey: "super-secret-value",
+      lineHarnessTag: "launch",
+      lineHarnessScenario: "reward-a",
+    });
+
+    expect(created.status).toBe(201);
+    expect(created.body.data).toMatchObject({
+      lineHarnessUrl: "https://line-harness.example/campaigns/gate",
+      lineHarnessApiKeyRef: "line-harness-prod",
+      lineHarnessTag: "launch",
+      lineHarnessScenario: "reward-a",
+    });
+    expect(JSON.stringify(created.body)).not.toContain("super-secret-value");
+    expect(created.body.data).not.toHaveProperty("lineHarnessApiKey");
+
+    const gateId = (created.body.data as { id: string }).id;
+    const verified = await req(
+      "GET",
+      `/api/engagement-gates/${gateId}/verify?username=@gate_user`,
+      seed.viewerApiKey,
+    );
+
+    expect(verified.status).toBe(200);
+    expect(verified.body.data).toMatchObject({
+      gateId,
+      username: "gate_user",
+      eligible: true,
+      conditions: {
+        liked: true,
+        reposted: true,
+        followed: true,
+      },
+      delivery: {
+        consumedAt: null,
+      },
+      lineHarness: {
+        url: "https://line-harness.example/campaigns/gate",
+        apiKeyRef: "line-harness-prod",
+        tag: "launch",
+        scenario: "reward-a",
+      },
+    });
+    const token = (verified.body.data as { delivery?: { token?: string } }).delivery?.token;
+    expect(token).toEqual(expect.any(String));
+    expect(JSON.stringify(verified.body)).not.toContain("super-secret-value");
+    expect(verified.body.data).not.toHaveProperty("lineHarnessApiKey");
+
+    const consumed = await req(
+      "POST",
+      `/api/engagement-gates/${gateId}/deliveries/consume`,
+      seed.editorApiKey,
+      { deliveryToken: token },
+    );
+    expect(consumed.status).toBe(200);
+    expect(consumed.body.data).toMatchObject({
+      consumed: true,
+      delivery: {
+        deliveryToken: token,
+        consumedAt: expect.any(String),
+      },
+    });
+
+    const consumedAgain = await req(
+      "POST",
+      `/api/engagement-gates/${gateId}/deliveries/consume`,
+      seed.editorApiKey,
+      { deliveryToken: token },
+    );
+    expect(consumedAgain.status).toBe(200);
+    expect(consumedAgain.body.data).toMatchObject({
+      consumed: false,
+      delivery: {
+        deliveryToken: token,
+        consumedAt: (consumed.body.data as { delivery: { consumedAt: string } }).delivery
+          .consumedAt,
+      },
+    });
+  });
+});
+
+// ───────────────────────────────────────────
+// a4. X campaign wizard composition
+// ───────────────────────────────────────────
+describe("a4. X campaign wizard flow", () => {
+  it("POST /api/campaigns creates a draft campaign without publishing", async () => {
+    const res = await req("POST", "/api/campaigns", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "Launch reward campaign",
+      mode: "draft",
+      post: {
+        contentText: "Reply to this launch post for the LINE reward.",
+      },
+      conditions: {
+        requireLike: true,
+        requireRepost: false,
+        requireFollow: true,
+      },
+      actionType: "verify_only",
+      lineHarnessUrl: "https://line-harness.example/campaigns/launch",
+      lineHarnessApiKeyRef: "line-harness-prod",
+      lineHarnessApiKey: "do-not-return-this-secret",
+      lineHarnessTag: "launch",
+      lineHarnessScenario: "reward-a",
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({
+      mode: "draft",
+      post: {
+        status: "draft",
+        contentText: "Reply to this launch post for the LINE reward.",
+      },
+      gate: {
+        name: "Launch reward campaign",
+        status: "paused",
+        conditions: {
+          requireLike: true,
+          requireRepost: false,
+          requireFollow: true,
+        },
+        actionType: "verify_only",
+        lineHarnessUrl: "https://line-harness.example/campaigns/launch",
+        lineHarnessApiKeyRef: "line-harness-prod",
+        lineHarnessTag: "launch",
+        lineHarnessScenario: "reward-a",
+      },
+      schedule: null,
+      verifyUrl: expect.stringContaining("/api/engagement-gates/"),
+    });
+    expect(JSON.stringify(res.body)).not.toContain("do-not-return-this-secret");
+
+    const data = res.body.data as {
+      post: { id: string };
+      gate: { id: string; triggerPostId: string | null };
+    };
+    expect(data.gate.triggerPostId).toBe(data.post.id);
+
+    const postRow = ctx.sqlite
+      .prepare("SELECT status FROM posts WHERE id = ?")
+      .get(data.post.id) as { status: string } | undefined;
+    const gateRow = ctx.sqlite
+      .prepare(
+        "SELECT status, trigger_post_id, line_harness_tag FROM engagement_gates WHERE id = ?",
+      )
+      .get(data.gate.id) as
+      | { status: string; trigger_post_id: string | null; line_harness_tag: string | null }
+      | undefined;
+    expect(postRow?.status).toBe("draft");
+    expect(gateRow).toMatchObject({
+      status: "paused",
+      trigger_post_id: data.post.id,
+      line_harness_tag: "launch",
+    });
+  });
+
+  it("POST /api/campaigns publishes or schedules when permissions allow", async () => {
+    const published = await req("POST", "/api/campaigns", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "Publish now campaign",
+      mode: "publish",
+      post: {
+        contentText: "Live campaign post.",
+      },
+      conditions: {
+        requireLike: true,
+        requireRepost: true,
+        requireFollow: false,
+      },
+      actionType: "mention_post",
+      actionText: "Thanks for joining. Verify in LINE.",
+    });
+
+    expect(published.status).toBe(201);
+    expect(published.body.data).toMatchObject({
+      mode: "publish",
+      post: {
+        status: "published",
+        platformPostId: expect.stringMatching(/^mock-post-/),
+      },
+      gate: {
+        status: "active",
+        triggerPostId: expect.stringMatching(/^mock-post-/),
+      },
+    });
+
+    const scheduledAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const scheduled = await req("POST", "/api/campaigns", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "Scheduled campaign",
+      mode: "schedule",
+      scheduledAt,
+      post: {
+        contentText: "Scheduled campaign post.",
+      },
+      conditions: {
+        requireLike: false,
+        requireRepost: false,
+        requireFollow: true,
+      },
+      actionType: "verify_only",
+    });
+
+    expect(scheduled.status).toBe(201);
+    expect(scheduled.body.data).toMatchObject({
+      mode: "schedule",
+      post: {
+        status: "scheduled",
+      },
+      gate: {
+        status: "paused",
+      },
+      schedule: {
+        status: "pending",
+        scheduledAt: expect.any(String),
+      },
+    });
+
+    const denied = await req("POST", "/api/campaigns", seed.agentApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "Denied publish campaign",
+      mode: "publish",
+      post: {
+        contentText: "Agent cannot publish this directly.",
+      },
+      actionType: "verify_only",
+    });
+    expect(denied.status).toBe(403);
+  });
+});
+
+// ───────────────────────────────────────────
+// a5. X step sequence flow
+// ───────────────────────────────────────────
+describe("a5. X step sequence flow", () => {
+  it("creates a sequence enrolls a user and processes due steps", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const credentials = (
+      ctx.sqlite
+        .prepare("SELECT credentials_encrypted FROM social_accounts WHERE id = ?")
+        .get(seed.socialAccountId) as { credentials_encrypted: string }
+    ).credentials_encrypted;
+    ctx.sqlite
+      .prepare("INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)")
+      .run("ws-other-sequences", "Other Sequences", now, now);
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO social_accounts (id, workspace_id, platform, display_name, external_account_id, credentials_encrypted, token_expires_at, status, capabilities, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "sa-other-sequences",
+        "ws-other-sequences",
+        "x",
+        "Other X Account",
+        "ext-other-sequences",
+        credentials,
+        now + 3600,
+        "active",
+        null,
+        now,
+        now,
+      );
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO step_sequences (id, workspace_id, social_account_id, platform, name, status, stealth_config, delivery_backoff_until, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "seq-other-workspace-process",
+        "ws-other-sequences",
+        "sa-other-sequences",
+        "x",
+        "Other workspace sequence",
+        "active",
+        JSON.stringify({ jitterMinSeconds: 0, jitterMaxSeconds: 0 }),
+        null,
+        "user-other",
+        now,
+        now,
+      );
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO step_messages (id, workspace_id, sequence_id, step_index, delay_seconds, action_type, content_text, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "msg-other-workspace-process",
+        "ws-other-sequences",
+        "seq-other-workspace-process",
+        0,
+        0,
+        "dm",
+        "Other workspace message",
+        now,
+        now,
+      );
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO step_enrollments (id, workspace_id, sequence_id, social_account_id, external_user_id, username, external_thread_id, reply_to_message_id, status, current_step_index, next_step_at, last_delivered_at, completed_at, cancelled_at, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "enroll-other-workspace-process",
+        "ws-other-sequences",
+        "seq-other-workspace-process",
+        "sa-other-sequences",
+        "user-other-seq",
+        "other_seq",
+        "dm:user-other-seq",
+        null,
+        "active",
+        0,
+        Math.floor(new Date("2026-04-28T00:00:00Z").getTime() / 1000),
+        null,
+        null,
+        null,
+        null,
+        now,
+        now,
+      );
+
+    const created = await req("POST", "/api/step-sequences", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "Welcome sequence",
+      stealthConfig: {
+        templateVariants: ["welcome A"],
+        jitterMinSeconds: 0,
+        jitterMaxSeconds: 0,
+      },
+      messages: [
+        {
+          delaySeconds: 60,
+          actionType: "dm",
+          contentText: "Welcome to the launch.",
+        },
+        {
+          delaySeconds: 120,
+          actionType: "mention_post",
+          contentText: "Second touch.",
+        },
+      ],
+    });
+
+    expect(created.status).toBe(201);
+    expect(created.body.data).toMatchObject({
+      name: "Welcome sequence",
+      status: "active",
+      messages: [
+        { stepIndex: 0, actionType: "dm", delaySeconds: 60 },
+        { stepIndex: 1, actionType: "mention_post", delaySeconds: 120 },
+      ],
+    });
+    const sequenceId = (created.body.data as { id: string }).id;
+
+    const enrolled = await req(
+      "POST",
+      `/api/step-sequences/${sequenceId}/enrollments`,
+      seed.editorApiKey,
+      {
+        externalUserId: "user-seq-1",
+        username: "seq_user",
+        externalThreadId: "dm:user-seq-1",
+        now: "2026-04-28T00:00:00Z",
+      },
+    );
+
+    expect(enrolled.status).toBe(201);
+    expect(enrolled.body.data).toMatchObject({
+      sequenceId,
+      status: "active",
+      currentStepIndex: 0,
+      nextStepAt: "2026-04-28T00:01:00.000Z",
+    });
+
+    const processed = await req("POST", "/api/step-sequences/process", seed.editorApiKey, {
+      limit: 10,
+      now: "2026-04-28T00:01:00Z",
+      templateSeed: "api-seed",
+    });
+
+    expect(processed.status).toBe(200);
+    expect(processed.body.data).toMatchObject({
+      enrollmentsScanned: 1,
+      stepsDelivered: 1,
+      enrollmentsCompleted: 0,
+    });
+
+    const row = ctx.sqlite
+      .prepare(
+        "SELECT status, current_step_index, next_step_at, last_delivered_at FROM step_enrollments WHERE sequence_id = ?",
+      )
+      .get(sequenceId) as
+      | {
+          status: string;
+          current_step_index: number;
+          next_step_at: number | null;
+          last_delivered_at: number | null;
+        }
+      | undefined;
+
+    expect(row).toMatchObject({
+      status: "active",
+      current_step_index: 1,
+    });
+    expect(row?.last_delivered_at).toBeTruthy();
+
+    const otherEnrollment = ctx.sqlite
+      .prepare(
+        "SELECT status, current_step_index, last_delivered_at FROM step_enrollments WHERE id = ?",
+      )
+      .get("enroll-other-workspace-process") as
+      | { status: string; current_step_index: number; last_delivered_at: number | null }
+      | undefined;
+    expect(otherEnrollment).toMatchObject({
+      status: "active",
+      current_step_index: 0,
+      last_delivered_at: null,
+    });
+  });
+
+  it("does not send cancelled enrollments during sequence processing", async () => {
+    const created = await req("POST", "/api/step-sequences", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      name: "Cancelled sequence",
+      messages: [{ delaySeconds: 0, actionType: "dm", contentText: "Should not send" }],
+    });
+    expect(created.status).toBe(201);
+    const sequenceId = (created.body.data as { id: string }).id;
+
+    const enrolled = await req(
+      "POST",
+      `/api/step-sequences/${sequenceId}/enrollments`,
+      seed.editorApiKey,
+      {
+        externalUserId: "user-cancelled",
+        externalThreadId: "dm:user-cancelled",
+        now: "2026-04-28T00:00:00Z",
+      },
+    );
+    expect(enrolled.status).toBe(201);
+    const enrollmentId = (enrolled.body.data as { id: string }).id;
+
+    const cancelled = await req(
+      "PATCH",
+      `/api/step-sequences/${sequenceId}/enrollments/${enrollmentId}`,
+      seed.editorApiKey,
+      { status: "cancelled" },
+    );
+    expect(cancelled.status).toBe(200);
+
+    const processed = await req("POST", "/api/step-sequences/process", seed.editorApiKey, {
+      limit: 10,
+      now: "2026-04-28T00:00:01Z",
+    });
+
+    expect(processed.status).toBe(200);
+    expect(processed.body.data).toMatchObject({
+      enrollmentsScanned: 0,
+      stepsDelivered: 0,
+    });
+  });
+});
+
+// ───────────────────────────────────────────
 // b. 投稿作成→公開フロー
 // ───────────────────────────────────────────
 describe("b. post draft→publish flow", () => {
@@ -545,6 +1515,59 @@ describe("j. usage records", () => {
     expect(typeof data.totalCost).toBe("number");
     expect(typeof data.totalRequests).toBe("number");
   });
+
+  it("GET /api/usage can aggregate by endpoint and gate dimensions", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    ctx.sqlite
+      .prepare(
+        "INSERT INTO usage_records (id, workspace_id, platform, endpoint, gate_id, feature, metadata, actor_id, actor_type, request_count, success, estimated_cost_usd, recorded_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "usage-xhp015-gate-1",
+        seed.workspaceId,
+        "x",
+        "engagement.gate.deliver",
+        "gate-xhp015",
+        "engagement_gate",
+        JSON.stringify({ source: "integration-test" }),
+        seed.editorUserId,
+        "user",
+        2,
+        1,
+        0.004,
+        now,
+        now,
+      );
+
+    const endpointRes = await req(
+      "GET",
+      "/api/usage?platform=x&dimension=endpoint",
+      seed.adminApiKey,
+    );
+    expect(endpointRes.status).toBe(200);
+    expect(endpointRes.body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          platform: "x",
+          endpoint: "engagement.gate.deliver",
+          requestCount: expect.any(Number),
+        }),
+      ]),
+    );
+
+    const gateRes = await req("GET", "/api/usage?platform=x&dimension=gate", seed.adminApiKey);
+    expect(gateRes.status).toBe(200);
+    expect(gateRes.body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          platform: "x",
+          gateId: "gate-xhp015",
+          feature: "engagement_gate",
+          requestCount: 2,
+        }),
+      ]),
+    );
+  });
 });
 
 // ───────────────────────────────────────────
@@ -613,8 +1636,8 @@ describe("l. x inbox sync", () => {
 
     expect(sync.status).toBe(200);
     expect(sync.body.data).toMatchObject({
-      syncedThreadCount: 1,
-      syncedMessageCount: 2,
+      syncedThreadCount: 2,
+      syncedMessageCount: 4,
     });
 
     const inbox = await req("GET", "/api/inbox?platform=x", seed.editorApiKey);
@@ -681,7 +1704,7 @@ describe("l. x inbox sync", () => {
 
     const usageRows = ctx.sqlite
       .prepare(
-        "SELECT endpoint, success FROM usage_records WHERE workspace_id = ? AND platform = ? ORDER BY created_at DESC LIMIT 10",
+        "SELECT endpoint, success FROM usage_records WHERE workspace_id = ? AND platform = ? ORDER BY created_at DESC",
       )
       .all(seed.workspaceId, "x") as Array<{ endpoint: string; success: number }>;
 
@@ -689,6 +1712,63 @@ describe("l. x inbox sync", () => {
     expect(usageRows.some((row) => row.endpoint === "inbox.getMessages" && row.success === 1)).toBe(
       true,
     );
+  });
+
+  it("syncs X DM conversations into generic threads/messages and returns actionable permission errors", async () => {
+    const sync = await req("POST", "/api/inbox/sync", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 10,
+    });
+    expect(sync.status).toBe(200);
+
+    const inbox = await req("GET", "/api/inbox?platform=x", seed.editorApiKey);
+    expect(inbox.status).toBe(200);
+    const threads = inbox.body.data as Array<Record<string, unknown>>;
+    const dmThread = threads.find((row) => row.externalThreadId === "dm:user-dm-1");
+    expect(dmThread).toMatchObject({
+      channel: "direct",
+      participantExternalId: "user-dm-1",
+    });
+    expect(
+      (dmThread?.providerMetadata as { x?: { entryType?: string } } | null)?.x?.entryType,
+    ).toBe("dm");
+
+    const detail = await req("GET", `/api/inbox/${dmThread?.id}`, seed.editorApiKey);
+    expect(detail.status).toBe(200);
+    const detailData = detail.body.data as {
+      messages: Array<Record<string, unknown>>;
+      context: { entryType: string | null };
+    };
+    expect(detailData.context.entryType).toBe("dm");
+    expect(detailData.messages).toEqual([
+      expect.objectContaining({
+        externalMessageId: "dm-sync-1",
+        direction: "inbound",
+      }),
+      expect.objectContaining({
+        externalMessageId: "dm-sync-2",
+        direction: "outbound",
+      }),
+    ]);
+
+    const permissionFailure = await req(
+      "POST",
+      `/api/inbox/${dmThread?.id}/reply`,
+      seed.editorApiKey,
+      {
+        contentText: "trigger dm permission failure",
+      },
+    );
+    expect(permissionFailure.status).toBe(403);
+    expect(permissionFailure.body.error).toMatchObject({
+      code: "PROVIDER_PERMISSION_REQUIRED",
+      message: expect.stringContaining("X DM permission required"),
+      details: {
+        provider: "x",
+        operation: "dm.send",
+        requiredScopes: ["dm.write", "dm.read"],
+      },
+    });
   });
 });
 
@@ -730,7 +1810,7 @@ describe("m. x reply send", () => {
 
     const usageRows = ctx.sqlite
       .prepare(
-        "SELECT endpoint, success FROM usage_records WHERE workspace_id = ? AND platform = ? ORDER BY created_at DESC LIMIT 10",
+        "SELECT endpoint, success FROM usage_records WHERE workspace_id = ? AND platform = ? ORDER BY created_at DESC",
       )
       .all(seed.workspaceId, "x") as Array<{ endpoint: string; success: number }>;
     expect(usageRows.some((row) => row.endpoint === "inbox.reply" && row.success === 1)).toBe(true);
@@ -800,5 +1880,79 @@ describe("m. x reply send", () => {
       .get(approvalId) as { status: string; payload: string | null };
     expect(approvalRow.status).toBe("approved");
     expect(approvalRow.payload).toContain("AI 返信案です。");
+  });
+});
+
+// ───────────────────────────────────────────
+// n. X reply engagement actions (XHP-008)
+// ───────────────────────────────────────────
+describe("n. x reply engagement actions", () => {
+  it("likes a reply target idempotently and exposes actions in thread detail", async () => {
+    const sync = await req("POST", "/api/inbox/sync", seed.editorApiKey, {
+      socialAccountId: seed.socialAccountId,
+      limit: 10,
+    });
+    expect(sync.status).toBe(200);
+
+    const inbox = await req("GET", "/api/inbox?platform=x", seed.editorApiKey);
+    const thread = (inbox.body.data as Array<Record<string, unknown>>).find(
+      (row) => row.externalThreadId === "conv-sync-1",
+    );
+    expect(thread).toBeDefined();
+
+    const first = await req("POST", `/api/inbox/${thread?.id}/actions`, seed.editorApiKey, {
+      actionType: "like",
+    });
+    expect(first.status).toBe(201);
+    expect(first.body.data).toMatchObject({
+      created: true,
+      action: {
+        actionType: "like",
+        targetPostId: "tweet-sync-2",
+        status: "applied",
+      },
+    });
+
+    const duplicate = await req("POST", `/api/inbox/${thread?.id}/actions`, seed.editorApiKey, {
+      actionType: "like",
+    });
+    expect(duplicate.status).toBe(200);
+    expect(duplicate.body.data).toMatchObject({
+      created: false,
+      action: {
+        actionType: "like",
+        targetPostId: "tweet-sync-2",
+      },
+    });
+
+    const rows = ctx.sqlite
+      .prepare(
+        "SELECT action_type, target_post_id, status FROM engagement_actions WHERE thread_id = ?",
+      )
+      .all(thread?.id) as Array<{
+      action_type: string;
+      target_post_id: string;
+      status: string;
+    }>;
+    expect(rows).toEqual([
+      {
+        action_type: "like",
+        target_post_id: "tweet-sync-2",
+        status: "applied",
+      },
+    ]);
+
+    const detail = await req("GET", `/api/inbox/${thread?.id}`, seed.editorApiKey);
+    expect(detail.status).toBe(200);
+    const detailData = detail.body.data as {
+      engagementActions: Array<Record<string, unknown>>;
+    };
+    expect(detailData.engagementActions).toEqual([
+      expect.objectContaining({
+        actionType: "like",
+        targetPostId: "tweet-sync-2",
+        status: "applied",
+      }),
+    ]);
   });
 });

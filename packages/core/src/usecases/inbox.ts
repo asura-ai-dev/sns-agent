@@ -27,15 +27,23 @@ import type {
   SocialAccount,
   ThreadProviderMetadata,
   ThreadStatus,
+  InboxEngagementActionType,
+  EngagementAction,
 } from "../domain/entities.js";
 import type {
   AccountRepository,
   ConversationRepository,
+  EngagementActionRepository,
   MessageRepository,
   UsageRepository,
 } from "../interfaces/repositories.js";
 import type { SocialProvider } from "../interfaces/social-provider.js";
-import { NotFoundError, ValidationError, ProviderError } from "../errors/domain-error.js";
+import {
+  NotFoundError,
+  ValidationError,
+  ProviderError,
+  ProviderPermissionError,
+} from "../errors/domain-error.js";
 import { decrypt } from "../domain/crypto.js";
 
 // ───────────────────────────────────────────
@@ -45,6 +53,7 @@ import { decrypt } from "../domain/crypto.js";
 export interface InboxUsecaseDeps {
   conversationRepo: ConversationRepository;
   messageRepo: MessageRepository;
+  engagementActionRepo?: EngagementActionRepository;
   accountRepo: AccountRepository;
   usageRepo?: UsageRepository;
   /** platform -> SocialProvider */
@@ -76,6 +85,7 @@ export interface ListThreadsResult {
 export interface GetThreadResult {
   thread: ConversationThread;
   messages: Message[];
+  engagementActions: EngagementAction[];
 }
 
 /**
@@ -143,6 +153,20 @@ export interface SendReplyResult {
   externalMessageId: string | null;
 }
 
+export interface PerformInboxEngagementActionInput {
+  workspaceId: string;
+  threadId: string;
+  actionType: InboxEngagementActionType;
+  actorId: string;
+  targetMessageId?: string | null;
+  targetPostId?: string | null;
+}
+
+export interface PerformInboxEngagementActionResult {
+  action: EngagementAction;
+  created: boolean;
+}
+
 interface StoreThreadMessageInput extends InboundMessageInput {
   direction: Message["direction"];
 }
@@ -183,12 +207,50 @@ async function loadAccount(
   return account;
 }
 
+function getEngagementActionRepo(deps: InboxUsecaseDeps): EngagementActionRepository {
+  if (!deps.engagementActionRepo) {
+    throw new ValidationError("Engagement action repository is required");
+  }
+  return deps.engagementActionRepo;
+}
+
 function decryptCredentials(credentialsEncrypted: string, encryptionKey: string): string {
   try {
     return decrypt(credentialsEncrypted, encryptionKey);
   } catch {
     throw new ProviderError("Failed to decrypt account credentials");
   }
+}
+
+function isXDirectMessageThread(thread: ConversationThread): boolean {
+  return thread.platform === "x" && (thread.externalThreadId ?? "").startsWith("dm:");
+}
+
+function isXDirectMessagePermissionMessage(message: string | null | undefined): boolean {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("x dm permission required") ||
+    (normalized.includes("direct message") &&
+      (normalized.includes("permission") ||
+        normalized.includes("permitted") ||
+        normalized.includes("forbidden") ||
+        normalized.includes("unauthorized"))) ||
+    normalized.includes("dm.write") ||
+    normalized.includes("dm.read")
+  );
+}
+
+function createXDirectMessagePermissionError(message?: string | null): ProviderPermissionError {
+  return new ProviderPermissionError(
+    message ??
+      "X DM permission required: enable dm.write and dm.read scopes in X Developer Portal, reconnect account, and retry.",
+    {
+      provider: "x",
+      operation: "dm.send",
+      requiredScopes: ["dm.write", "dm.read"],
+    },
+  );
 }
 
 function mergeInitiatedBy(
@@ -399,9 +461,12 @@ export async function getThread(
   const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 500) : 200;
   const offset = options?.offset && options.offset >= 0 ? options.offset : 0;
 
-  const messages = await deps.messageRepo.findByThread(threadId, { limit, offset });
+  const [messages, engagementActions] = await Promise.all([
+    deps.messageRepo.findByThread(threadId, { limit, offset }),
+    deps.engagementActionRepo?.findByThread(threadId) ?? Promise.resolve([]),
+  ]);
 
-  return { thread, messages };
+  return { thread, messages, engagementActions };
 }
 
 // ───────────────────────────────────────────
@@ -611,6 +676,9 @@ export async function sendReply(
       replyToMessageId,
     });
     if (!result.success) {
+      if (isXDirectMessageThread(thread) && isXDirectMessagePermissionMessage(result.error)) {
+        throw createXDirectMessagePermissionError(result.error);
+      }
       throw new ProviderError(`sendReply failed: ${result.error ?? "unknown error"}`);
     }
     externalMessageId = result.externalMessageId;
@@ -629,7 +697,14 @@ export async function sendReply(
       actorId: input.actorId,
       success: false,
     });
+    if (err instanceof ProviderPermissionError) throw err;
     if (err instanceof ProviderError) throw err;
+    if (
+      isXDirectMessageThread(thread) &&
+      isXDirectMessagePermissionMessage(err instanceof Error ? err.message : String(err))
+    ) {
+      throw createXDirectMessagePermissionError(err instanceof Error ? err.message : String(err));
+    }
     throw new ProviderError(
       `sendReply failed: ${err instanceof Error ? err.message : String(err)}`,
     );
@@ -655,4 +730,124 @@ export async function sendReply(
   });
 
   return { message, externalMessageId };
+}
+
+async function resolveEngagementTargetPostId(
+  deps: InboxUsecaseDeps,
+  thread: ConversationThread,
+  input: Pick<PerformInboxEngagementActionInput, "targetMessageId" | "targetPostId">,
+): Promise<{ targetPostId: string; messageId: string | null }> {
+  const explicitPostId = input.targetPostId?.trim();
+  if (explicitPostId) {
+    return { targetPostId: explicitPostId, messageId: null };
+  }
+
+  if (input.targetMessageId?.trim()) {
+    const messages = await deps.messageRepo.findByThread(thread.id, { limit: 500, offset: 0 });
+    const message = messages.find(
+      (row) =>
+        row.id === input.targetMessageId ||
+        (row.externalMessageId !== null && row.externalMessageId === input.targetMessageId),
+    );
+    if (!message) {
+      throw new NotFoundError("Message", input.targetMessageId);
+    }
+    const postId = message.providerMetadata?.x?.postId ?? message.externalMessageId;
+    if (!postId) {
+      throw new ValidationError("Message has no X post id");
+    }
+    return { targetPostId: postId, messageId: message.id };
+  }
+
+  const focusPostId = thread.providerMetadata?.x?.focusPostId;
+  if (focusPostId) {
+    return { targetPostId: focusPostId, messageId: null };
+  }
+
+  throw new ValidationError("targetPostId or X focusPostId is required");
+}
+
+export async function performInboxEngagementAction(
+  deps: InboxUsecaseDeps,
+  input: PerformInboxEngagementActionInput,
+): Promise<PerformInboxEngagementActionResult> {
+  const actionRepo = getEngagementActionRepo(deps);
+  const thread = await loadOwnedThread(deps, input.workspaceId, input.threadId);
+  const account = await loadAccount(deps, input.workspaceId, thread.socialAccountId);
+
+  if (account.status !== "active") {
+    throw new ValidationError(
+      `SocialAccount ${account.id} is not active (status=${account.status})`,
+    );
+  }
+
+  const { targetPostId, messageId } = await resolveEngagementTargetPostId(deps, thread, input);
+  const existing = await actionRepo.findByDedupeKey({
+    workspaceId: input.workspaceId,
+    socialAccountId: account.id,
+    actionType: input.actionType,
+    targetPostId,
+  });
+  if (existing) {
+    return { action: existing, created: false };
+  }
+
+  const provider = getProvider(deps, thread.platform);
+  if (!provider.performEngagementAction) {
+    throw new ProviderError(
+      `Provider for platform ${thread.platform} does not support engagement actions`,
+    );
+  }
+
+  const credentials = decryptCredentials(account.credentialsEncrypted, deps.encryptionKey);
+  let externalActionId: string | null = null;
+  try {
+    const result = await provider.performEngagementAction({
+      accountCredentials: credentials,
+      accountExternalId: account.externalAccountId,
+      actionType: input.actionType,
+      targetPostId,
+    });
+    if (!result.success) {
+      throw new ProviderError(
+        `performEngagementAction failed: ${result.error ?? "unknown error"}`,
+      );
+    }
+    externalActionId = result.externalActionId;
+    await recordProviderUsage(deps, {
+      workspaceId: input.workspaceId,
+      platform: thread.platform,
+      endpoint: `inbox.action.${input.actionType}`,
+      actorId: input.actorId,
+      success: true,
+    });
+  } catch (err) {
+    await recordProviderUsage(deps, {
+      workspaceId: input.workspaceId,
+      platform: thread.platform,
+      endpoint: `inbox.action.${input.actionType}`,
+      actorId: input.actorId,
+      success: false,
+    });
+    if (err instanceof ProviderError) throw err;
+    throw new ProviderError(
+      `performEngagementAction failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  const created = await actionRepo.createOnce({
+    workspaceId: input.workspaceId,
+    socialAccountId: account.id,
+    threadId: thread.id,
+    messageId,
+    actionType: input.actionType,
+    targetPostId,
+    actorId: input.actorId,
+    externalActionId,
+    status: "applied",
+    metadata: null,
+    performedAt: new Date(),
+  });
+
+  return created;
 }

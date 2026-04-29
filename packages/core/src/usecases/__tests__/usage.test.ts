@@ -41,12 +41,23 @@ function createMockUsageRepo(initial: UsageRecord[] = []): UsageRepository & {
           r.workspaceId === workspaceId &&
           r.recordedAt >= options.startDate &&
           r.recordedAt < options.endDate &&
-          (!options.platform || r.platform === options.platform),
+          (!options.platform || r.platform === options.platform) &&
+          (!options.endpoint || r.endpoint === options.endpoint) &&
+          (!(options as { gateId?: string }).gateId ||
+            (r as UsageRecord & { gateId?: string | null }).gateId ===
+              (options as { gateId?: string }).gateId),
       );
-      const byPlatform = new Map<string, UsageAggregation>();
+      const dimension = (options as { dimension?: "platform" | "endpoint" | "gate" }).dimension;
+      const byDimension = new Map<string, UsageAggregation>();
       for (const r of filtered) {
-        const prev = byPlatform.get(r.platform) ?? {
+        const gateId = (r as UsageRecord & { gateId?: string | null }).gateId ?? null;
+        const dimensionValue =
+          dimension === "endpoint" ? r.endpoint : dimension === "gate" ? gateId : r.platform;
+        if (!dimensionValue) continue;
+        const prev = byDimension.get(dimensionValue) ?? {
           platform: r.platform,
+          ...(dimension === "endpoint" ? { endpoint: dimensionValue } : {}),
+          ...(dimension === "gate" ? { gateId: dimensionValue } : {}),
           totalRequests: 0,
           successCount: 0,
           failureCount: 0,
@@ -56,9 +67,9 @@ function createMockUsageRepo(initial: UsageRecord[] = []): UsageRepository & {
         if (r.success) prev.successCount += r.requestCount;
         else prev.failureCount += r.requestCount;
         prev.totalCostUsd += r.estimatedCostUsd ?? 0;
-        byPlatform.set(r.platform, prev);
+        byDimension.set(dimensionValue, prev);
       }
-      return Array.from(byPlatform.values());
+      return Array.from(byDimension.values());
     },
   };
 }
@@ -88,6 +99,31 @@ describe("recordUsage", () => {
     expect(rec.platform).toBe("x");
     expect(rec.success).toBe(true);
     expect(repo.records).toHaveLength(1);
+  });
+
+  it("should preserve optional X usage dimension metadata", async () => {
+    const repo = createMockUsageRepo();
+    const deps = createDeps(repo);
+    const rec = await recordUsage(deps, {
+      workspaceId: "ws-1",
+      platform: "x",
+      endpoint: "engagement.gate.deliver",
+      actorId: "user-1",
+      actorType: "user",
+      success: true,
+      estimatedCostUsd: 0.002,
+      gateId: "gate-1",
+      feature: "engagement_gate",
+    } as Parameters<typeof recordUsage>[1] & { gateId: string; feature: string });
+
+    expect(rec).toMatchObject({
+      gateId: "gate-1",
+      feature: "engagement_gate",
+    });
+    expect(repo.records[0]).toMatchObject({
+      gateId: "gate-1",
+      feature: "engagement_gate",
+    });
   });
 
   it("should reject missing workspaceId", async () => {
@@ -200,6 +236,129 @@ describe("getUsageReport", () => {
     });
     const platforms = new Set(report.data.map((d) => d.platform));
     expect(platforms).toEqual(new Set(["x"]));
+  });
+
+  it("should aggregate daily usage by endpoint dimension", async () => {
+    const repo = createMockUsageRepo();
+    const deps = createDeps(repo);
+    await recordUsage(deps, {
+      workspaceId: "ws-1",
+      platform: "x",
+      endpoint: "inbox.reply",
+      actorId: null,
+      actorType: "user",
+      success: true,
+      estimatedCostUsd: 0.001,
+      recordedAt: new Date("2026-03-14T10:00:00.000Z"),
+    });
+    await recordUsage(deps, {
+      workspaceId: "ws-1",
+      platform: "x",
+      endpoint: "inbox.reply",
+      actorId: null,
+      actorType: "user",
+      success: false,
+      estimatedCostUsd: 0.001,
+      recordedAt: new Date("2026-03-14T11:00:00.000Z"),
+    });
+    await recordUsage(deps, {
+      workspaceId: "ws-1",
+      platform: "x",
+      endpoint: "inbox.list",
+      actorId: null,
+      actorType: "user",
+      success: true,
+      estimatedCostUsd: 0.0005,
+      recordedAt: new Date("2026-03-14T12:00:00.000Z"),
+    });
+
+    const report = await getUsageReport(deps, "ws-1", {
+      period: "daily",
+      platform: "x",
+      from: new Date("2026-03-14T00:00:00.000Z"),
+      to: new Date("2026-03-15T00:00:00.000Z"),
+      dimension: "endpoint",
+    } as Parameters<typeof getUsageReport>[2] & { dimension: "endpoint" });
+
+    const replyEntry = report.data.find(
+      (d) =>
+        d.period === "2026-03-14" &&
+        d.platform === "x" &&
+        (d as typeof d & { endpoint?: string }).endpoint === "inbox.reply",
+    );
+    expect(replyEntry).toMatchObject({
+      endpoint: "inbox.reply",
+      requestCount: 2,
+      successCount: 1,
+      failureCount: 1,
+      successRate: 0.5,
+    });
+    expect(
+      report.data.some((d) => (d as typeof d & { endpoint?: string }).endpoint === "inbox.list"),
+    ).toBe(true);
+  });
+
+  it("should aggregate daily usage by gate dimension", async () => {
+    const repo = createMockUsageRepo([
+      {
+        id: "usage-1",
+        workspaceId: "ws-1",
+        platform: "x",
+        endpoint: "engagement.gate.deliver",
+        actorId: null,
+        actorType: "agent",
+        requestCount: 2,
+        success: true,
+        estimatedCostUsd: 0.004,
+        recordedAt: new Date("2026-03-14T10:00:00.000Z"),
+        createdAt: new Date("2026-03-14T10:00:00.000Z"),
+        gateId: "gate-1",
+        feature: "engagement_gate",
+      } as UsageRecord & { gateId: string; feature: string },
+      {
+        id: "usage-2",
+        workspaceId: "ws-1",
+        platform: "x",
+        endpoint: "engagement.gate.deliver",
+        actorId: null,
+        actorType: "agent",
+        requestCount: 1,
+        success: false,
+        estimatedCostUsd: 0.002,
+        recordedAt: new Date("2026-03-14T11:00:00.000Z"),
+        createdAt: new Date("2026-03-14T11:00:00.000Z"),
+        gateId: "gate-2",
+        feature: "engagement_gate",
+      } as UsageRecord & { gateId: string; feature: string },
+    ]);
+    const deps = createDeps(repo);
+
+    const report = await getUsageReport(deps, "ws-1", {
+      period: "daily",
+      platform: "x",
+      from: new Date("2026-03-14T00:00:00.000Z"),
+      to: new Date("2026-03-15T00:00:00.000Z"),
+      dimension: "gate",
+    } as Parameters<typeof getUsageReport>[2] & { dimension: "gate" });
+
+    expect(report.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          period: "2026-03-14",
+          platform: "x",
+          gateId: "gate-1",
+          requestCount: 2,
+          successCount: 2,
+        }),
+        expect.objectContaining({
+          period: "2026-03-14",
+          platform: "x",
+          gateId: "gate-2",
+          requestCount: 1,
+          failureCount: 1,
+        }),
+      ]),
+    );
   });
 
   it("should support monthly period", async () => {

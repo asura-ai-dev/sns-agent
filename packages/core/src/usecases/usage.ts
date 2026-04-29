@@ -6,7 +6,11 @@
  * spec.md AC-9 (CLI usage report)、AC-14 (Web UI 使用量画面) に準拠。
  */
 import type { ActorType, UsageRecord } from "../domain/entities.js";
-import type { UsageRepository, UsageAggregation } from "../interfaces/repositories.js";
+import type {
+  UsageRepository,
+  UsageAggregation,
+  UsageAggregationDimension,
+} from "../interfaces/repositories.js";
 import { ValidationError } from "../errors/domain-error.js";
 
 // ───────────────────────────────────────────
@@ -29,6 +33,12 @@ export interface RecordUsageInput {
   platform: string;
   /** エンドポイント識別子 (例: 'tweet.create', 'gpt-4o') */
   endpoint: string;
+  /** Engagement gate 由来の usage なら gate id */
+  gateId?: string | null;
+  /** caller-provided feature label such as engagement_gate */
+  feature?: string | null;
+  /** Provider or feature-specific metadata */
+  metadata?: Record<string, unknown> | null;
   actorId: string | null;
   actorType: ActorType;
   success: boolean;
@@ -42,6 +52,9 @@ export interface RecordUsageInput {
 
 export interface UsageReportFilters {
   platform?: string;
+  endpoint?: string;
+  gateId?: string;
+  dimension?: UsageAggregationDimension;
   period?: UsagePeriod;
   from?: Date;
   to?: Date;
@@ -50,6 +63,9 @@ export interface UsageReportFilters {
 export interface UsageReportEntry {
   period: string;
   platform: string;
+  endpoint?: string | null;
+  gateId?: string | null;
+  feature?: string | null;
   requestCount: number;
   successCount: number;
   failureCount: number;
@@ -181,6 +197,9 @@ export async function recordUsage(
     workspaceId: input.workspaceId,
     platform: input.platform,
     endpoint: input.endpoint,
+    gateId: input.gateId ?? null,
+    feature: input.feature ?? null,
+    metadata: input.metadata ?? null,
     actorId: input.actorId,
     actorType: input.actorType,
     requestCount: input.requestCount ?? 1,
@@ -217,6 +236,9 @@ export async function getUsageReport(
   for (const bucket of buckets) {
     const aggregations = await deps.usageRepo.aggregate(workspaceId, {
       platform: filters.platform,
+      endpoint: filters.endpoint,
+      gateId: filters.gateId,
+      dimension: filters.dimension,
       startDate: bucket.start,
       endDate: bucket.end,
     });
@@ -226,6 +248,9 @@ export async function getUsageReport(
       entries.push({
         period: bucket.key,
         platform: agg.platform,
+        endpoint: agg.endpoint ?? undefined,
+        gateId: agg.gateId ?? undefined,
+        feature: agg.feature ?? undefined,
         requestCount: total,
         successCount: agg.successCount,
         failureCount: agg.failureCount,

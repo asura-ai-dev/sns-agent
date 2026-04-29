@@ -40,6 +40,12 @@ import type {
   MessageListResult,
   SendReplyInput,
   SendReplyResult,
+  PerformEngagementActionInput,
+  EngagementActionResult,
+  ListFollowersInput,
+  FollowerListResult,
+  ListQuoteTweetsInput,
+  QuoteTweetListResult,
 } from "@sns-agent/core";
 import type { Platform } from "@sns-agent/config";
 import { setProviderRegistry, resetProviderRegistry } from "../../providers.js";
@@ -178,11 +184,76 @@ export function createMockXProvider(): SocialProvider {
               },
             },
           },
+          {
+            externalThreadId: "dm:user-dm-1",
+            participantName: "Dora DM",
+            participantExternalId: "user-dm-1",
+            channel: "direct",
+            initiatedBy: "external",
+            lastMessageAt: new Date("2026-04-10T11:05:00Z"),
+            providerMetadata: {
+              x: {
+                entryType: "dm",
+                conversationId: "ext-mock-1-user-dm-1",
+                rootPostId: null,
+                focusPostId: "dm-sync-2",
+                replyToPostId: null,
+                authorXUserId: "user-dm-1",
+                authorUsername: "dora",
+              },
+            },
+          },
         ],
         nextCursor: '{"sinceId":"tweet-sync-2"}',
       };
     },
-    async getMessages(_input: GetMessagesInput): Promise<MessageListResult> {
+    async getMessages(input: GetMessagesInput): Promise<MessageListResult> {
+      if (input.externalThreadId === "dm:user-dm-1") {
+        return {
+          messages: [
+            {
+              externalMessageId: "dm-sync-1",
+              direction: "inbound",
+              contentText: "DMで相談したいです",
+              contentMedia: null,
+              authorExternalId: "user-dm-1",
+              authorDisplayName: "Dora DM",
+              sentAt: new Date("2026-04-10T11:00:00Z"),
+              providerMetadata: {
+                x: {
+                  entryType: "dm",
+                  conversationId: "ext-mock-1-user-dm-1",
+                  postId: "dm-sync-1",
+                  replyToPostId: null,
+                  authorUsername: "dora",
+                  mentionedXUserIds: [],
+                },
+              },
+            },
+            {
+              externalMessageId: "dm-sync-2",
+              direction: "outbound",
+              contentText: "DMありがとうございます",
+              contentMedia: null,
+              authorExternalId: "ext-mock-1",
+              authorDisplayName: "Mock X Account",
+              sentAt: new Date("2026-04-10T11:05:00Z"),
+              providerMetadata: {
+                x: {
+                  entryType: "dm",
+                  conversationId: "ext-mock-1-user-dm-1",
+                  postId: "dm-sync-2",
+                  replyToPostId: null,
+                  authorUsername: "brand",
+                  mentionedXUserIds: [],
+                },
+              },
+            },
+          ],
+          nextCursor: null,
+        };
+      }
+
       return {
         messages: [
           {
@@ -227,10 +298,106 @@ export function createMockXProvider(): SocialProvider {
         nextCursor: null,
       };
     },
-    async sendReply(_input: SendReplyInput): Promise<SendReplyResult> {
+    async sendReply(input: SendReplyInput): Promise<SendReplyResult> {
+      if (
+        input.externalThreadId.startsWith("dm:") &&
+        input.contentText === "trigger dm permission failure"
+      ) {
+        return {
+          success: false,
+          externalMessageId: null,
+          error:
+            "X DM permission required: enable dm.write and dm.read scopes in X Developer Portal, reconnect account, and retry.",
+        };
+      }
+
       return {
         success: true,
         externalMessageId: `mock-reply-${randomUUID()}`,
+      };
+    },
+    async performEngagementAction(
+      input: PerformEngagementActionInput,
+    ): Promise<EngagementActionResult> {
+      return {
+        success: true,
+        externalActionId: `mock-${input.actionType}-${input.targetPostId}`,
+      };
+    },
+    async listQuoteTweets(_input: ListQuoteTweetsInput): Promise<QuoteTweetListResult> {
+      return {
+        quotes: [
+          {
+            sourceTweetId: "source-post-1",
+            quoteTweetId: "quote-sync-1",
+            authorExternalId: "quote-user-1",
+            authorUsername: "quote_alice",
+            authorDisplayName: "Quote Alice",
+            authorProfileImageUrl: "https://cdn.example.test/quote-alice.jpg",
+            authorVerified: true,
+            contentText: "quoting this with a note",
+            contentMedia: null,
+            quotedAt: new Date("2026-04-29T00:05:00Z"),
+            metrics: { like_count: 4, retweet_count: 1 },
+            providerMetadata: { test: true },
+          },
+        ],
+        nextCursor: null,
+      };
+    },
+    async listFollowers(_input: ListFollowersInput): Promise<FollowerListResult> {
+      return {
+        profiles: [
+          {
+            externalUserId: "follower-sync-1",
+            displayName: "Follower One",
+            username: "follower_one",
+            metadata: { verified: true },
+          },
+        ],
+        nextCursor: null,
+      };
+    },
+    async listFollowing(_input: ListFollowersInput): Promise<FollowerListResult> {
+      return {
+        profiles: [
+          {
+            externalUserId: "follower-sync-1",
+            displayName: "Follower One",
+            username: "follower_one",
+            metadata: { verified: true },
+          },
+          {
+            externalUserId: "following-sync-1",
+            displayName: "Following One",
+            username: "following_one",
+            metadata: null,
+          },
+        ],
+        nextCursor: null,
+      };
+    },
+    async listEngagementReplies() {
+      return {
+        replies: [
+          {
+            externalReplyId: "tweet-gate-10",
+            externalUserId: "user-gate-1",
+            username: "gate_user",
+            text: "@mock count me in",
+            createdAt: new Date("2026-04-28T00:10:00Z"),
+            conversationId: "tweet-root-1",
+            inReplyToPostId: "tweet-root-1",
+          },
+        ],
+        nextSinceId: "tweet-gate-10",
+      };
+    },
+    async checkEngagementConditions() {
+      return {
+        liked: true,
+        reposted: true,
+        followed: true,
       };
     },
   };

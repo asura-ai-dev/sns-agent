@@ -1,7 +1,13 @@
 /**
  * policies/ バレルエクスポート
  */
-export { PERMISSIONS, rolePermissions, checkPermission } from "./rbac.js";
+export {
+  PERMISSIONS,
+  rolePermissions,
+  checkPermission,
+  xHarnessStaffRoleMapping,
+  xHarnessApiKeyScopeMapping,
+} from "./rbac.js";
 export type { Permission } from "./rbac.js";
 
 export { requiresApproval, DEFAULT_APPROVAL_POLICY } from "./approval.js";

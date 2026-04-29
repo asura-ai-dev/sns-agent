@@ -29,6 +29,13 @@ import {
   approvals,
   webhooks,
   inbox,
+  followers,
+  analytics,
+  tags,
+  stepSequences,
+  engagementGates,
+  quoteTweets,
+  campaigns,
 } from "./routes/index.js";
 
 const app = new Hono<{ Variables: AppVariables }>();
@@ -68,12 +75,26 @@ app.use("/api/agent/*", authMiddleware);
 app.use("/api/audit/*", authMiddleware);
 app.use("/api/approvals/*", authMiddleware);
 app.use("/api/inbox/*", authMiddleware);
+app.use("/api/followers/*", authMiddleware);
+app.use("/api/analytics/*", authMiddleware);
+app.use("/api/tags/*", authMiddleware);
+app.use("/api/step-sequences/*", authMiddleware);
+app.use("/api/engagement-gates/*", authMiddleware);
+app.use("/api/quote-tweets/*", authMiddleware);
+app.use("/api/campaigns/*", authMiddleware);
 
 // 自動使用量記録ミドルウェア（認証後に適用。usageRepo を context に注入する）
 app.use("/api/posts/*", usageRecorderMiddleware);
 app.use("/api/schedules/*", usageRecorderMiddleware);
 app.use("/api/usage/*", usageRecorderMiddleware);
 app.use("/api/inbox/*", usageRecorderMiddleware);
+app.use("/api/followers/*", usageRecorderMiddleware);
+app.use("/api/analytics/*", usageRecorderMiddleware);
+app.use("/api/tags/*", usageRecorderMiddleware);
+app.use("/api/step-sequences/*", usageRecorderMiddleware);
+app.use("/api/engagement-gates/*", usageRecorderMiddleware);
+app.use("/api/quote-tweets/*", usageRecorderMiddleware);
+app.use("/api/campaigns/*", usageRecorderMiddleware);
 
 // 自動監査記録ミドルウェア（認証後・書き込み系エンドポイントで適用）
 // POST / PATCH / PUT / DELETE の完了後に audit_logs テーブルへ追記する
@@ -86,6 +107,13 @@ app.use("/api/skills/*", auditMiddleware);
 app.use("/api/agent/*", auditMiddleware);
 app.use("/api/approvals/*", auditMiddleware);
 app.use("/api/inbox/*", auditMiddleware);
+app.use("/api/followers/*", auditMiddleware);
+app.use("/api/analytics/*", auditMiddleware);
+app.use("/api/tags/*", auditMiddleware);
+app.use("/api/step-sequences/*", auditMiddleware);
+app.use("/api/engagement-gates/*", auditMiddleware);
+app.use("/api/quote-tweets/*", auditMiddleware);
+app.use("/api/campaigns/*", auditMiddleware);
 
 // エラーハンドラ
 app.onError(errorHandler);
@@ -110,6 +138,13 @@ app.route("/api/audit", audit);
 app.route("/api/approvals", approvals);
 app.route("/api/webhooks", webhooks);
 app.route("/api/inbox", inbox);
+app.route("/api/followers", followers);
+app.route("/api/analytics", analytics);
+app.route("/api/tags", tags);
+app.route("/api/step-sequences", stepSequences);
+app.route("/api/engagement-gates", engagementGates);
+app.route("/api/quote-tweets", quoteTweets);
+app.route("/api/campaigns", campaigns);
 
 // --- 404 ハンドラ ---
 app.notFound((c) => {

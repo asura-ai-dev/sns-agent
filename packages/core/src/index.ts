@@ -11,6 +11,28 @@ export type {
   User,
   AgentIdentity,
   SocialAccount,
+  Follower,
+  FollowerSnapshot,
+  Tag,
+  StepSequence,
+  StepSequenceStatus,
+  StepMessage,
+  StepMessageActionType,
+  StepEnrollment,
+  StepEnrollmentStatus,
+  EngagementGate,
+  EngagementGateActionType,
+  EngagementGateConditions,
+  EngagementGateStealthConfig,
+  EngagementGateDelivery,
+  EngagementGateDeliveryStatus,
+  EngagementGateStatus,
+  EngagementGateTriggerType,
+  EngagementAction,
+  InboxEngagementActionType,
+  EngagementActionStatus,
+  QuoteTweet,
+  QuoteTweetActionType,
   ProviderCapabilities,
   MediaAttachment,
   PostProviderMetadata,
@@ -49,12 +71,51 @@ export { encrypt, decrypt } from "./domain/index.js";
 // Interfaces
 export type {
   AccountRepository,
+  FollowerRepository,
+  FollowerListFilters,
+  FollowerUpsertInput,
+  MarkMissingFollowersInput,
+  MarkMissingFollowingInput,
+  FollowerSnapshotRepository,
+  FollowerSnapshotCreateInput,
+  FollowerSnapshotUpsertResult,
+  TagRepository,
+  TagListFilters,
+  TagCreateInput,
+  TagUpdateInput,
+  FollowerTagInput,
+  StepSequenceRepository,
+  StepSequenceListFilters,
+  StepSequenceCreateInput,
+  StepSequenceUpdateInput,
+  StepMessageRepository,
+  StepMessageCreateInput,
+  StepEnrollmentRepository,
+  StepEnrollmentCreateInput,
+  StepEnrollmentUpdateInput,
+  FindDueStepEnrollmentsInput,
+  EngagementGateRepository,
+  EngagementGateListFilters,
+  EngagementGateCreateInput,
+  EngagementGateUpdateInput,
+  EngagementGateDeliveryRepository,
+  EngagementGateDeliveryCreateInput,
+  EngagementGateDeliveryCreateResult,
+  EngagementActionRepository,
+  EngagementActionCreateInput,
+  EngagementActionCreateResult,
+  EngagementActionDedupeInput,
+  QuoteTweetRepository,
+  QuoteTweetListFilters,
+  QuoteTweetUpsertInput,
+  QuoteTweetActionRecordInput,
   PostRepository,
   PostListFilters,
   PostOrderBy,
   ScheduledJobRepository,
   UsageRepository,
   UsageAggregation,
+  UsageAggregationDimension,
   BudgetPolicyRepository,
   LlmRouteRepository,
   LlmProviderCredentialRepository,
@@ -87,6 +148,20 @@ export type {
   WebhookResult,
   WebhookEvent,
   RefreshResult,
+  ListFollowersInput,
+  FollowerProviderProfile,
+  FollowerListResult,
+  EngagementReply,
+  ListEngagementRepliesInput,
+  EngagementReplyListResult,
+  CheckEngagementConditionsInput,
+  EngagementConditionResult,
+  EngagementActionType,
+  PerformEngagementActionInput,
+  EngagementActionResult,
+  QuoteTweetProviderItem,
+  ListQuoteTweetsInput,
+  QuoteTweetListResult,
   JobQueue,
 } from "./interfaces/index.js";
 export { ProviderRegistry } from "./interfaces/index.js";
@@ -121,6 +196,113 @@ export {
   checkTokenExpiry,
 } from "./usecases/account.js";
 export type { AccountSummary, AccountUsecaseDeps, OAuthStatePayload } from "./usecases/account.js";
+
+export { listFollowers, syncFollowersFromProvider } from "./usecases/followers.js";
+export type {
+  FollowerUsecaseDeps,
+  ListFollowersResult,
+  SyncFollowersFromProviderInput,
+  SyncFollowersFromProviderResult,
+} from "./usecases/followers.js";
+
+export {
+  captureFollowerSnapshot,
+  captureFollowerSnapshotsForWorkspace,
+  getFollowerAnalytics,
+} from "./usecases/follower-analytics.js";
+export type {
+  CaptureFollowerSnapshotsForWorkspaceInput,
+  CaptureFollowerSnapshotsForWorkspaceResult,
+  CaptureFollowerSnapshotInput,
+  CaptureFollowerSnapshotResult,
+  FollowerAnalyticsPoint,
+  FollowerAnalyticsResult,
+  FollowerAnalyticsUsecaseDeps,
+  GetFollowerAnalyticsInput,
+} from "./usecases/follower-analytics.js";
+
+export {
+  attachFollowerTag,
+  createTag,
+  deleteTag,
+  detachFollowerTag,
+  listTags,
+  updateTag,
+} from "./usecases/tags.js";
+export type {
+  CreateTagInput,
+  FollowerTagUsecaseInput,
+  TagUsecaseDeps,
+  UpdateTagInput,
+} from "./usecases/tags.js";
+
+export {
+  createStepSequence,
+  deleteStepSequence,
+  enrollStepSequenceUser,
+  getStepSequence,
+  listStepSequences,
+  processDueStepSequenceEnrollments,
+  updateStepEnrollment,
+  updateStepSequence,
+} from "./usecases/step-sequences.js";
+export type {
+  CreateStepSequenceInput,
+  EnrollStepSequenceUserInput,
+  ProcessDueStepSequenceEnrollmentsInput,
+  ProcessDueStepSequenceEnrollmentsResult,
+  StepMessageInput,
+  StepSequenceRecord,
+  StepSequenceUsecaseDeps,
+  UpdateStepEnrollmentInput,
+  UpdateStepSequenceInput,
+} from "./usecases/step-sequences.js";
+
+export {
+  consumeEngagementGateDeliveryToken,
+  createEngagementGate,
+  deleteEngagementGate,
+  getEngagementGate,
+  listEngagementGates,
+  processEngagementGateReplies,
+  updateEngagementGate,
+  verifyEngagementGate,
+} from "./usecases/engagement-gates.js";
+export type {
+  ConsumeEngagementGateDeliveryTokenInput,
+  ConsumeEngagementGateDeliveryTokenResult,
+  CreateEngagementGateInput,
+  EngagementGateUsecaseDeps,
+  ProcessEngagementGateRepliesInput,
+  ProcessEngagementGateRepliesResult,
+  UpdateEngagementGateInput,
+  VerifyEngagementGateInput,
+  VerifyEngagementGateResult,
+} from "./usecases/engagement-gates.js";
+
+export { createCampaign, listCampaigns } from "./usecases/campaigns.js";
+export type {
+  CampaignListItem,
+  CampaignMode,
+  CampaignRecord,
+  CampaignUsecaseDeps,
+  CreateCampaignInput,
+} from "./usecases/campaigns.js";
+
+export {
+  discoverQuoteTweetsForTrackedSources,
+  getQuoteTweet,
+  listQuoteTweets,
+  performQuoteTweetAction,
+} from "./usecases/quote-tweets.js";
+export type {
+  DiscoverQuoteTweetsInput,
+  DiscoverQuoteTweetsResult,
+  ListQuoteTweetsResult,
+  PerformQuoteTweetActionInput,
+  PerformQuoteTweetActionResult,
+  QuoteTweetUsecaseDeps,
+} from "./usecases/quote-tweets.js";
 
 export {
   createPost,
@@ -191,6 +373,7 @@ export {
   processInboundMessage,
   syncInboxFromProvider,
   sendReply as sendInboxReply,
+  performInboxEngagementAction,
 } from "./usecases/inbox.js";
 export type {
   InboxUsecaseDeps,
@@ -203,6 +386,8 @@ export type {
   SyncInboxFromProviderResult,
   SendReplyInput as InboxSendReplyInput,
   SendReplyResult as InboxSendReplyResult,
+  PerformInboxEngagementActionInput,
+  PerformInboxEngagementActionResult,
 } from "./usecases/inbox.js";
 
 export {
@@ -308,6 +493,7 @@ export {
   NotFoundError,
   BudgetExceededError,
   ProviderError,
+  ProviderPermissionError,
   RateLimitError,
   LlmError,
 } from "./errors/index.js";

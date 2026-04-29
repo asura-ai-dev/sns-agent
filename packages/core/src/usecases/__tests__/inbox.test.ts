@@ -9,11 +9,13 @@ import type {
   Message,
   SocialAccount,
   ThreadStatus,
+  EngagementAction,
 } from "../../domain/entities.js";
 import type {
   AccountRepository,
   ConversationRepository,
   ConversationFilterOptions,
+  EngagementActionRepository,
   MessageRepository,
   UsageRepository,
 } from "../../interfaces/repositories.js";
@@ -25,6 +27,7 @@ import {
   processInboundMessage,
   sendReply,
   syncInboxFromProvider,
+  performInboxEngagementAction,
   type InboxUsecaseDeps,
 } from "../inbox.js";
 import { NotFoundError, ProviderError, ValidationError } from "../../errors/domain-error.js";
@@ -180,6 +183,35 @@ function mockUsageRepo(): UsageRepository & { records: Array<Record<string, unkn
   };
 }
 
+function mockEngagementActionRepo(): EngagementActionRepository & {
+  rows: Map<string, EngagementAction>;
+} {
+  const rows = new Map<string, EngagementAction>();
+  let seq = 0;
+  return {
+    rows,
+    findByThread: async (threadId) =>
+      [...rows.values()].filter((action) => action.threadId === threadId),
+    findByDedupeKey: async (input) =>
+      rows.get(
+        `${input.workspaceId}:${input.socialAccountId}:${input.actionType}:${input.targetPostId}`,
+      ) ?? null,
+    createOnce: async (input) => {
+      const key = `${input.workspaceId}:${input.socialAccountId}:${input.actionType}:${input.targetPostId}`;
+      const existing = rows.get(key);
+      if (existing) return { action: existing, created: false };
+      seq += 1;
+      const action: EngagementAction = {
+        ...input,
+        id: `act-${seq}`,
+        createdAt: new Date("2026-04-10T10:00:00Z"),
+      };
+      rows.set(key, action);
+      return { action, created: true };
+    },
+  };
+}
+
 function mockProvider(): SocialProvider {
   return {
     platform: "x",
@@ -205,6 +237,10 @@ function mockProvider(): SocialProvider {
     sendReply: vi.fn(async () => ({
       success: true,
       externalMessageId: "ext-msg-1",
+    })),
+    performEngagementAction: vi.fn(async (input) => ({
+      success: true,
+      externalActionId: `ext-${input.actionType}-${input.targetPostId}`,
     })),
   };
 }
@@ -614,6 +650,70 @@ describe("sendReply", () => {
     );
   });
 
+  it("maps X DM permission failures to an actionable provider permission error", async () => {
+    const usageRepo = mockUsageRepo();
+    const thread: ConversationThread = {
+      id: "th-1",
+      workspaceId: "ws-1",
+      socialAccountId: "acc-1",
+      platform: "x",
+      externalThreadId: "dm:42",
+      participantName: "Alice",
+      participantExternalId: "user-42",
+      channel: "direct",
+      initiatedBy: "external",
+      lastMessageAt: new Date(),
+      providerMetadata: {
+        x: {
+          entryType: "dm",
+          conversationId: "123-42",
+          rootPostId: null,
+          focusPostId: "dm-99",
+          replyToPostId: null,
+          authorXUserId: "user-42",
+          authorUsername: "alice",
+        },
+      },
+      status: "open",
+      createdAt: new Date(),
+    };
+    const provider = {
+      ...mockProvider(),
+      sendReply: vi.fn(async () => ({
+        success: false,
+        externalMessageId: null,
+        error:
+          "X DM permission required: enable dm.write and dm.read scopes in X Developer Portal, reconnect account, and retry.",
+      })),
+    };
+    const deps = buildDeps({
+      conversationRepo: mockConversationRepo([thread]),
+      usageRepo,
+      providers: new Map([["x", provider]]),
+    });
+
+    await expect(
+      sendReply(deps, {
+        workspaceId: "ws-1",
+        threadId: "th-1",
+        contentText: "hello",
+        actorId: "user-1",
+      }),
+    ).rejects.toMatchObject({
+      code: "PROVIDER_PERMISSION_REQUIRED",
+      details: {
+        provider: "x",
+        operation: "dm.send",
+        requiredScopes: ["dm.write", "dm.read"],
+      },
+    });
+    expect(usageRepo.records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ endpoint: "inbox.reply", success: false }),
+      ]),
+    );
+  });
+
   it("rejects when both contentText and contentMedia are empty", async () => {
     const deps = buildDeps({
       conversationRepo: mockConversationRepo([
@@ -676,6 +776,62 @@ describe("sendReply", () => {
         actorId: "u1",
       }),
     ).rejects.toBeInstanceOf(ProviderError);
+  });
+});
+
+describe("performInboxEngagementAction", () => {
+  it("likes a reply target once and returns the stored action on duplicate calls", async () => {
+    const thread: ConversationThread = {
+      id: "th-1",
+      workspaceId: "ws-1",
+      socialAccountId: "acc-1",
+      platform: "x",
+      externalThreadId: "conv-1",
+      participantName: "Alice",
+      participantExternalId: "user-42",
+      channel: "public",
+      initiatedBy: "external",
+      lastMessageAt: new Date(),
+      providerMetadata: {
+        x: {
+          entryType: "reply",
+          conversationId: "conv-1",
+          rootPostId: "tweet-root",
+          focusPostId: "tweet-200",
+          replyToPostId: "tweet-root",
+          authorXUserId: "user-42",
+          authorUsername: "alice",
+        },
+      },
+      status: "open",
+      createdAt: new Date(),
+    };
+    const provider = mockProvider();
+    const engagementActionRepo = mockEngagementActionRepo();
+    const deps = buildDeps({
+      conversationRepo: mockConversationRepo([thread]),
+      engagementActionRepo,
+      providers: new Map([["x", provider]]),
+    });
+
+    const first = await performInboxEngagementAction(deps, {
+      workspaceId: "ws-1",
+      threadId: "th-1",
+      actionType: "like",
+      actorId: "user-1",
+    });
+    const second = await performInboxEngagementAction(deps, {
+      workspaceId: "ws-1",
+      threadId: "th-1",
+      actionType: "like",
+      actorId: "user-1",
+    });
+
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(false);
+    expect(first.action.targetPostId).toBe("tweet-200");
+    expect(second.action.id).toBe(first.action.id);
+    expect(provider.performEngagementAction).toHaveBeenCalledTimes(1);
   });
 });
 

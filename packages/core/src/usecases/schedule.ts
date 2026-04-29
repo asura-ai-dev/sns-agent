@@ -196,6 +196,21 @@ function normalizeErrorMessage(message: string): string {
   return message.replace(/^Failed to publish post:\s*/i, "").trim();
 }
 
+function formatPersistedFailureState(args: {
+  state: "retryable" | "terminal";
+  errorMessage: string;
+  exhausted?: boolean;
+}): string {
+  const normalized = normalizeErrorMessage(args.errorMessage) || args.errorMessage;
+  if (args.state === "retryable") {
+    return `retryable:${normalized}`;
+  }
+  if (args.exhausted) {
+    return `terminal:retry_exhausted:${normalized}`;
+  }
+  return `terminal:${normalized}`;
+}
+
 function isPermanentProviderError(err: ProviderError): boolean {
   const raw = `${err.message} ${JSON.stringify(err.details ?? {})}`.toLowerCase();
   const patterns = [
@@ -397,8 +412,7 @@ function mapExecutionLog(log: {
     nextRetryAt: parseDateLike(result.nextRetryAt),
     notificationTarget: notificationRaw
       ? {
-          type:
-            notificationRaw.type === "post_creator" ? "post_creator" : "workspace_admin",
+          type: notificationRaw.type === "post_creator" ? "post_creator" : "workspace_admin",
           actorId: asText(notificationRaw.actorId),
           label: asText(notificationRaw.label) ?? "ワークスペース運用担当 / admin",
           reason: asText(notificationRaw.reason) ?? "",
@@ -567,6 +581,9 @@ export async function cancelSchedule(
   }
   if (job.status === "running" || job.status === "locked") {
     throw new ValidationError(`Cannot cancel a ${job.status} job; wait for completion or retry`);
+  }
+  if (job.status === "failed" && job.lastError === "canceled_by_user") {
+    return job;
   }
 
   // 投稿を draft に戻す
@@ -789,7 +806,10 @@ export async function executeJob(
 
       const retrying = await deps.scheduledJobRepo.update(jobId, {
         status: "retrying",
-        lastError: errorMessage,
+        lastError: formatPersistedFailureState({
+          state: "retryable",
+          errorMessage,
+        }),
         nextRetryAt,
         lockedAt: null,
       });
@@ -812,7 +832,11 @@ export async function executeJob(
     // 最終失敗
     const failed = await deps.scheduledJobRepo.update(jobId, {
       status: "failed",
-      lastError: errorMessage,
+      lastError: formatPersistedFailureState({
+        state: "terminal",
+        errorMessage,
+        exhausted: classification.retryable,
+      }),
       completedAt: nowFn(deps),
       lockedAt: null,
       nextRetryAt: null,

@@ -169,6 +169,106 @@ export interface RefreshResult {
   error?: string;
 }
 
+export interface ListFollowersInput {
+  accountCredentials: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface FollowerProviderProfile {
+  externalUserId: string;
+  displayName: string | null;
+  username: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface FollowerListResult {
+  profiles: FollowerProviderProfile[];
+  nextCursor: string | null;
+}
+
+export interface EngagementReply {
+  externalReplyId: string;
+  externalUserId: string;
+  username: string | null;
+  text: string | null;
+  createdAt: Date | null;
+  conversationId?: string | null;
+  inReplyToPostId?: string | null;
+}
+
+export interface ListEngagementRepliesInput {
+  accountCredentials: string;
+  accountExternalId: string;
+  triggerPostId: string | null;
+  sinceId?: string | null;
+  limit?: number;
+}
+
+export interface EngagementReplyListResult {
+  replies: EngagementReply[];
+  nextSinceId: string | null;
+}
+
+export interface CheckEngagementConditionsInput {
+  accountCredentials: string;
+  triggerPostId: string | null;
+  externalUserId: string;
+  conditions: {
+    requireLike?: boolean;
+    requireRepost?: boolean;
+    requireFollow?: boolean;
+  };
+}
+
+export interface EngagementConditionResult {
+  liked: boolean;
+  reposted: boolean;
+  followed: boolean;
+}
+
+export type EngagementActionType = "like" | "repost";
+
+export interface PerformEngagementActionInput {
+  accountCredentials: string;
+  accountExternalId: string;
+  actionType: EngagementActionType;
+  targetPostId: string;
+}
+
+export interface EngagementActionResult {
+  success: boolean;
+  externalActionId: string | null;
+  error?: string;
+}
+
+export interface QuoteTweetProviderItem {
+  sourceTweetId: string;
+  quoteTweetId: string;
+  authorExternalId: string;
+  authorUsername: string | null;
+  authorDisplayName: string | null;
+  authorProfileImageUrl: string | null;
+  authorVerified: boolean;
+  contentText: string | null;
+  contentMedia: MediaAttachment[] | null;
+  quotedAt: Date | null;
+  metrics: Record<string, unknown> | null;
+  providerMetadata: Record<string, unknown> | null;
+}
+
+export interface ListQuoteTweetsInput {
+  accountCredentials: string;
+  sourceTweetId: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface QuoteTweetListResult {
+  quotes: QuoteTweetProviderItem[];
+  nextCursor: string | null;
+}
+
 // ───────────────────────────────────────────
 // SocialProvider インターフェース
 // ───────────────────────────────────────────
@@ -200,4 +300,24 @@ export interface SocialProvider {
 
   /** トークン更新（対応プロバイダのみ） */
   refreshToken?(accountId: string): Promise<RefreshResult>;
+
+  /** フォロワー一覧取得（対応プロバイダのみ） */
+  listFollowers?(input: ListFollowersInput): Promise<FollowerListResult>;
+
+  /** フォロー中一覧取得（対応プロバイダのみ） */
+  listFollowing?(input: ListFollowersInput): Promise<FollowerListResult>;
+
+  /** Engagement gate 用の reply-trigger 取得（対応プロバイダのみ） */
+  listEngagementReplies?(input: ListEngagementRepliesInput): Promise<EngagementReplyListResult>;
+
+  /** Engagement gate 用の like/repost/follow 条件確認（対応プロバイダのみ） */
+  checkEngagementConditions?(
+    input: CheckEngagementConditionsInput,
+  ): Promise<EngagementConditionResult>;
+
+  /** Inbox reply 管理用の like/repost 操作（対応プロバイダのみ） */
+  performEngagementAction?(input: PerformEngagementActionInput): Promise<EngagementActionResult>;
+
+  /** Tracked source tweet の quote tweets 取得（対応プロバイダのみ） */
+  listQuoteTweets?(input: ListQuoteTweetsInput): Promise<QuoteTweetListResult>;
 }
