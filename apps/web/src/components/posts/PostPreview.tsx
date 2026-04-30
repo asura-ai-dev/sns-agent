@@ -17,6 +17,7 @@ interface PostPreviewProps {
   text: string;
   media: MediaAttachment[];
   providerMetadata?: PostProviderMetadata | null;
+  textLimit?: number;
 }
 
 export function PostPreview({
@@ -25,6 +26,7 @@ export function PostPreview({
   text,
   media,
   providerMetadata,
+  textLimit,
 }: PostPreviewProps) {
   if (!platform || !account) {
     return (
@@ -38,7 +40,7 @@ export function PostPreview({
   }
 
   const visual = PLATFORM_VISUALS[platform];
-  const limit = PLATFORM_LIMITS[platform].textLimit;
+  const limit = textLimit ?? PLATFORM_LIMITS[platform].textLimit;
   const length = text.length;
   const over = length > limit;
   const quotePostId = providerMetadata?.x?.quotePostId?.trim() ?? "";

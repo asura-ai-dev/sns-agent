@@ -16,10 +16,13 @@ export interface PlatformLimit {
   mediaNote: string;
 }
 
+export const X_TEXT_LIMIT_BASIC = 280;
+export const X_TEXT_LIMIT_PREMIUM = 25000;
+
 export const PLATFORM_LIMITS: Record<Platform, PlatformLimit> = {
   x: {
     label: "X",
-    textLimit: 280,
+    textLimit: X_TEXT_LIMIT_BASIC,
     textLimitNote: "Basic 280 文字 / Premium 25,000 文字",
     mediaNote: "画像 最大 4 枚 (5MB) / 動画 1 本 (512MB)",
   },

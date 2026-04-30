@@ -11,6 +11,8 @@ import { PostForm } from "@/components/posts/PostForm";
 import { MASTHEAD_TITLES, SECTION_KICKERS } from "@/lib/i18n/labels";
 
 export default function NewPostPage() {
+  const xPremium = process.env.X_PREMIUM === "true";
+
   return (
     <div className="space-y-6">
       <div>
@@ -36,7 +38,7 @@ export default function NewPostPage() {
           </div>
         }
       >
-        <PostForm />
+        <PostForm xPremium={xPremium} />
       </Suspense>
     </div>
   );

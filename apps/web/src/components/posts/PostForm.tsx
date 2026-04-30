@@ -32,7 +32,12 @@ import { toDatetimeLocalValue } from "@/components/calendar/dateUtils";
 import { COMMON_ACTIONS, SECTION_KICKERS } from "@/lib/i18n/labels";
 import { CharacterCounter } from "./CharacterCounter";
 import { PostPreview } from "./PostPreview";
-import { PLATFORM_LIMITS, getCounterZone } from "./platformLimits";
+import {
+  PLATFORM_LIMITS,
+  X_TEXT_LIMIT_BASIC,
+  X_TEXT_LIMIT_PREMIUM,
+  getCounterZone,
+} from "./platformLimits";
 import { createPostApi, createScheduleApi, fetchConnectedAccounts, type ApiFailure } from "./api";
 import type { MediaAttachment, Platform, PostProviderMetadata, PostSocialAccount } from "./types";
 
@@ -56,6 +61,7 @@ function validate(
   xMode: XComposerMode,
   quotePostId: string,
   threadSegments: string[],
+  xTextLimit: number,
 ): ValidationReport {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -65,12 +71,13 @@ function validate(
   if (!account) {
     errors.push("SNS アカウントを選択してください");
   } else {
-    const limit = PLATFORM_LIMITS[account.platform].textLimit;
-    if (text.length > limit) {
+    const limit = getTextLimit(account.platform, xTextLimit);
+    const textLength = Array.from(text).length;
+    if (textLength > limit) {
       errors.push(
-        `本文が上限 ${limit.toLocaleString()} 文字を超えています（現在 ${text.length.toLocaleString()} 文字）`,
+        `本文が上限 ${limit.toLocaleString()} 文字を超えています（現在 ${textLength.toLocaleString()} 文字）`,
       );
-    } else if (text.length >= limit * 0.95 && text.length <= limit) {
+    } else if (textLength >= limit * 0.95 && textLength <= limit) {
       warnings.push("上限に近付いています");
     }
 
@@ -91,7 +98,7 @@ function validate(
           errors.push("空のスレッド行があります。不要な行は削除してください");
         }
         normalizedSegments.forEach((segment, index) => {
-          if (segment.length > limit) {
+          if (Array.from(segment).length > limit) {
             errors.push(
               `スレッド ${index + 2} 件目が上限 ${limit.toLocaleString()} 文字を超えています`,
             );
@@ -111,6 +118,26 @@ function validate(
   const canDraft = !!account && hasContent && errors.every((e) => !e.includes("上限"));
 
   return { canDraft, canPublish, errors, warnings };
+}
+
+function getTextLimit(platform: Platform, xTextLimit: number): number {
+  return platform === "x" ? xTextLimit : PLATFORM_LIMITS[platform].textLimit;
+}
+
+function getXTextLimitFromPremium(isPremium: boolean): number {
+  return isPremium ? X_TEXT_LIMIT_PREMIUM : X_TEXT_LIMIT_BASIC;
+}
+
+function getTextLimitNote(platform: Platform, xTextLimit: number): string {
+  if (platform === "x") {
+    return xTextLimit > X_TEXT_LIMIT_BASIC
+      ? `Premium ${xTextLimit.toLocaleString()} 文字`
+      : "Basic 280 文字 / Premium 25,000 文字";
+  }
+  return (
+    PLATFORM_LIMITS[platform].textLimitNote ??
+    `上限 ${getTextLimit(platform, xTextLimit).toLocaleString()} 文字`
+  );
 }
 
 function normalizeScheduledAtInput(value: string | null): string {
@@ -180,7 +207,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 // PostForm
 // ───────────────────────────────────────────
 
-export function PostForm() {
+export function PostForm({ xPremium = false }: { xPremium?: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -233,16 +260,18 @@ export function PostForm() {
     [accounts, selectedAccountId],
   );
   const platform: Platform | null = selectedAccount?.platform ?? null;
-  const limit = platform ? PLATFORM_LIMITS[platform].textLimit : 280;
-  const zone = getCounterZone(text.length, limit);
+  const xTextLimit = getXTextLimitFromPremium(xPremium);
+  const limit = platform ? getTextLimit(platform, xTextLimit) : X_TEXT_LIMIT_BASIC;
+  const textLength = Array.from(text).length;
+  const zone = getCounterZone(textLength, limit);
   const providerMetadata = useMemo(
     () => buildProviderMetadata(platform, xMode, quotePostId, threadSegments),
     [platform, xMode, quotePostId, threadSegments],
   );
 
   const report = useMemo(
-    () => validate(selectedAccount, text, media, xMode, quotePostId, threadSegments),
-    [selectedAccount, text, media, xMode, quotePostId, threadSegments],
+    () => validate(selectedAccount, text, media, xMode, quotePostId, threadSegments, xTextLimit),
+    [selectedAccount, text, media, xMode, quotePostId, threadSegments, xTextLimit],
   );
   const scheduleValidation = useMemo(
     () => getScheduleValidationMessage(scheduledAt),
@@ -364,7 +393,9 @@ export function PostForm() {
             >
               本文
             </label>
-            {platform && <CharacterCounter length={text.length} platform={platform} compact />}
+            {platform && (
+              <CharacterCounter length={textLength} platform={platform} compact textLimit={limit} />
+            )}
           </div>
           <div
             className={[
@@ -392,8 +423,7 @@ export function PostForm() {
           </div>
           {platform && (
             <p className="mt-2 text-[0.65rem] uppercase tracking-wider text-base-content/40">
-              {PLATFORM_LIMITS[platform].textLimitNote ??
-                `上限 ${PLATFORM_LIMITS[platform].textLimit.toLocaleString()} 文字`}
+              {getTextLimitNote(platform, xTextLimit)}
               {" · "}
               {PLATFORM_LIMITS[platform].mediaNote}
             </p>
@@ -714,6 +744,7 @@ export function PostForm() {
           text={text}
           media={media}
           providerMetadata={providerMetadata}
+          textLimit={limit}
         />
       </aside>
     </div>
