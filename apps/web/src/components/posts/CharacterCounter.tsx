@@ -13,6 +13,7 @@ interface CharacterCounterProps {
   length: number;
   platform: Platform;
   compact?: boolean;
+  textLimit?: number;
 }
 
 const ZONE_COLOR: Record<ReturnType<typeof getCounterZone>, string> = {
@@ -22,8 +23,13 @@ const ZONE_COLOR: Record<ReturnType<typeof getCounterZone>, string> = {
   over: "oklch(62.56% 0.193 23.03)", // error
 };
 
-export function CharacterCounter({ length, platform, compact = false }: CharacterCounterProps) {
-  const limit = PLATFORM_LIMITS[platform].textLimit;
+export function CharacterCounter({
+  length,
+  platform,
+  compact = false,
+  textLimit,
+}: CharacterCounterProps) {
+  const limit = textLimit ?? PLATFORM_LIMITS[platform].textLimit;
   const zone = getCounterZone(length, limit);
   const remaining = limit - length;
   const ratio = Math.min(length / limit, 1.2); // over は 20% 分はみ出し表現
